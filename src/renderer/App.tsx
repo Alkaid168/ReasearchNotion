@@ -2,6 +2,7 @@ import { useState, type JSX } from 'react'
 import { ArrowUp, BookOpen, GitCompare, Lightbulb, ListChecks, Quote } from 'lucide-react'
 import { AppShell, type AppTab } from './components/AppShell'
 import { EmptyState } from './components/EmptyState'
+import { KnowledgePage } from './pages/KnowledgePage'
 import { SettingsPage } from './pages/SettingsPage'
 
 export function App(): JSX.Element {
@@ -10,9 +11,7 @@ export function App(): JSX.Element {
   return (
     <AppShell activeTab={activeTab} onTabChange={setActiveTab}>
       {activeTab === 'chat' ? <ChatLanding /> : null}
-      {activeTab === 'knowledge' ? (
-        <EmptyState title="知识库" description="这里将管理按文件夹分类的 PDF 和 Markdown 论文，并打开阅读器。" />
-      ) : null}
+      {activeTab === 'knowledge' ? <KnowledgePage /> : null}
       {activeTab === 'reports' ? (
         <EmptyState title="阅读报告" description="后续可以把论文卡片、问答记录和综述提纲整理成报告。" />
       ) : null}

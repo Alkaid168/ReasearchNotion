@@ -19,8 +19,8 @@ function createApiMock(): DesktopApi {
       save: vi.fn().mockImplementation(async (settings: AppSettings) => settings),
       testConnection: vi.fn().mockResolvedValue({ ok: true, message: '连接配置有效。' })
     },
-    folders: { list: vi.fn(), create: vi.fn() },
-    papers: { list: vi.fn(), import: vi.fn(), read: vi.fn() },
+    folders: { list: vi.fn().mockResolvedValue([]), create: vi.fn() },
+    papers: { list: vi.fn().mockResolvedValue([]), import: vi.fn(), read: vi.fn() },
     conversations: { list: vi.fn(), create: vi.fn(), sendMessage: vi.fn() }
   }
 }
@@ -45,7 +45,7 @@ describe('App shell', () => {
     fireEvent.click(screen.getByRole('tab', { name: '知识库' }))
 
     expect(screen.getByRole('tab', { name: '知识库' })).toHaveAttribute('aria-selected', 'true')
-    expect(screen.getByRole('heading', { name: '知识库' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '我的论文库' })).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('tab', { name: '设置' }))
 
