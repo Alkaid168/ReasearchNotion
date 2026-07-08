@@ -8,7 +8,7 @@ import { registerIpc } from './ipc'
 import { createElectronSecretBox } from './settings/secretBox'
 import { createSettingsService } from './settings/settingsService'
 import { importAndIndexPaper } from './workflows/importAndIndexPaper'
-import type { AppSettings } from '../shared/types'
+import type { AppSettings, ChatContext } from '../shared/types'
 
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
@@ -48,6 +48,24 @@ void app.whenReady().then(() => {
       appApiKey: settings.difyAppApiKey,
       knowledgeApiKey: settings.difyKnowledgeApiKey
     })
+  }
+
+  function contextInputs(context: ChatContext): Record<string, string> {
+    if (context.type === 'folder') {
+      return {
+        contextType: 'folder',
+        folderId: context.folderId,
+        contextLabel: context.folderName
+      }
+    }
+    if (context.type === 'paper') {
+      return {
+        contextType: 'paper',
+        paperId: context.paperId,
+        contextLabel: context.paperTitle
+      }
+    }
+    return { contextType: 'free' }
   }
 
   registerIpc({
@@ -106,6 +124,35 @@ void app.whenReady().then(() => {
           paper,
           markdownText: await readPaperMarkdown(paper)
         }
+      }
+    },
+    conversations: {
+      list: async () => repos.conversations.list(),
+      create: async (input) => repos.conversations.create(input),
+      sendMessage: async (conversationId, content) => {
+        const conversation = repos.conversations.getById(conversationId)
+        if (!conversation) throw new Error('对话不存在。')
+
+        repos.messages.create({
+          conversationId,
+          role: 'user',
+          content,
+          citations: []
+        })
+
+        const settings = await settingsService.get()
+        const result = await createConfiguredDifyClient(settings).sendChatMessage({
+          query: content,
+          user: 'local-user',
+          inputs: contextInputs(conversation.context)
+        })
+
+        return repos.messages.create({
+          conversationId,
+          role: 'assistant',
+          content: result.answer,
+          citations: result.citations
+        })
       }
     }
   })

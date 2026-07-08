@@ -61,4 +61,29 @@ describe('repositories', () => {
     expect(rows[0].indexStatus).toBe('indexed')
     expect(rows[0].card?.keywords).toEqual(['RAG', 'retrieval'])
   })
+
+  it('creates conversations and stores messages with citations', () => {
+    const db = createDatabase(path.join(tempDir, 'chat.sqlite'))
+    databases.push(db)
+    const repos = createRepositories(db)
+
+    const conversation = repos.conversations.create({
+      title: 'RAG 创新点',
+      folderId: null,
+      context: { type: 'paper', paperId: 'paper-1', paperTitle: 'RAG Survey' }
+    })
+    repos.messages.create({
+      conversationId: conversation.id,
+      role: 'assistant',
+      content: '这篇论文提出了检索增强生成。',
+      citations: [{ paperId: 'paper-1', paperTitle: 'RAG Survey', snippet: 'retrieval augmented generation', score: 0.91 }]
+    })
+
+    expect(repos.conversations.list()[0]).toMatchObject({
+      title: 'RAG 创新点',
+      context: { type: 'paper', paperId: 'paper-1', paperTitle: 'RAG Survey' }
+    })
+    expect(repos.conversations.getById(conversation.id)?.id).toBe(conversation.id)
+    expect(repos.messages.listByConversation(conversation.id)[0].citations[0].paperTitle).toBe('RAG Survey')
+  })
 })

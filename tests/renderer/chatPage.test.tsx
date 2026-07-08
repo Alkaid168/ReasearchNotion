@@ -21,7 +21,7 @@ function createApiMock(): DesktopApi {
     },
     folders: { list: vi.fn().mockResolvedValue([]), create: vi.fn() },
     papers: { list: vi.fn().mockResolvedValue([]), import: vi.fn(), read: vi.fn() },
-    conversations: { list: vi.fn(), create: vi.fn(), sendMessage: vi.fn() }
+    conversations: { list: vi.fn().mockResolvedValue([]), create: vi.fn(), sendMessage: vi.fn() }
   }
 }
 

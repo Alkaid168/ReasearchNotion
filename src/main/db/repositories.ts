@@ -1,6 +1,6 @@
 import crypto from 'node:crypto'
 import type Database from 'better-sqlite3'
-import type { FileType, Folder, IndexStatus, Paper, PaperCard } from '../../shared/types'
+import type { Citation, ChatContext, Conversation, FileType, Folder, IndexStatus, Message, Paper, PaperCard } from '../../shared/types'
 
 function now(): string {
   return new Date().toISOString()
@@ -13,6 +13,8 @@ function id(prefix: string): string {
 type CreateFolderInput = { name: string; parentId: string | null }
 type CreatePaperInput = { folderId: string; title: string; fileType: FileType; filePath: string }
 type PaperCardInput = Omit<PaperCard, 'id' | 'updatedAt' | 'readingStatus'> & { readingStatus?: PaperCard['readingStatus'] }
+type CreateConversationInput = Pick<Conversation, 'title' | 'folderId' | 'context'>
+type CreateMessageInput = Pick<Message, 'conversationId' | 'role' | 'content' | 'citations'>
 
 export function createRepositories(db: Database.Database) {
   function getFolder(folderId: string): Folder | null {
@@ -55,6 +57,31 @@ export function createRepositories(db: Database.Database) {
       ...row,
       contributions: JSON.parse(row.contributionsJson) as string[],
       keywords: JSON.parse(row.keywordsJson) as string[]
+    }
+  }
+
+  function mapConversation(row: Omit<Conversation, 'context'> & { contextJson: string }): Conversation {
+    return {
+      ...row,
+      context: JSON.parse(row.contextJson) as ChatContext
+    }
+  }
+
+  function getConversation(conversationId: string): Conversation | null {
+    const row = db
+      .prepare(
+        `SELECT id, title, folder_id as folderId, context_json as contextJson,
+                created_at as createdAt, updated_at as updatedAt
+         FROM conversations WHERE id = ?`
+      )
+      .get(conversationId) as (Omit<Conversation, 'context'> & { contextJson: string }) | undefined
+    return row ? mapConversation(row) : null
+  }
+
+  function mapMessage(row: Omit<Message, 'citations'> & { citationsJson: string }): Message {
+    return {
+      ...row,
+      citations: JSON.parse(row.citationsJson) as Citation[]
     }
   }
 
@@ -179,6 +206,72 @@ export function createRepositories(db: Database.Database) {
           keywordsJson: JSON.stringify(row.keywords)
         })
         return row
+      }
+    },
+    conversations: {
+      create(input: CreateConversationInput): Conversation {
+        const timestamp = now()
+        const row: Conversation = {
+          id: id('conversation'),
+          title: input.title,
+          folderId: input.folderId,
+          context: input.context,
+          createdAt: timestamp,
+          updatedAt: timestamp
+        }
+        db.prepare(
+          `INSERT INTO conversations (id, title, folder_id, context_json, created_at, updated_at)
+           VALUES (@id, @title, @folderId, @contextJson, @createdAt, @updatedAt)`
+        ).run({
+          ...row,
+          contextJson: JSON.stringify(row.context)
+        })
+        return row
+      },
+      list(): Conversation[] {
+        const rows = db
+          .prepare(
+            `SELECT id, title, folder_id as folderId, context_json as contextJson,
+                    created_at as createdAt, updated_at as updatedAt
+             FROM conversations ORDER BY updated_at DESC`
+          )
+          .all() as Array<Omit<Conversation, 'context'> & { contextJson: string }>
+        return rows.map(mapConversation)
+      },
+      getById(conversationId: string): Conversation | null {
+        return getConversation(conversationId)
+      }
+    },
+    messages: {
+      create(input: CreateMessageInput): Message {
+        const timestamp = now()
+        const row: Message = {
+          id: id('message'),
+          conversationId: input.conversationId,
+          role: input.role,
+          content: input.content,
+          citations: input.citations,
+          createdAt: timestamp
+        }
+        db.prepare(
+          `INSERT INTO messages (id, conversation_id, role, content, citations_json, created_at)
+           VALUES (@id, @conversationId, @role, @content, @citationsJson, @createdAt)`
+        ).run({
+          ...row,
+          citationsJson: JSON.stringify(row.citations)
+        })
+        db.prepare(`UPDATE conversations SET updated_at = ? WHERE id = ?`).run(timestamp, input.conversationId)
+        return row
+      },
+      listByConversation(conversationId: string): Message[] {
+        const rows = db
+          .prepare(
+            `SELECT id, conversation_id as conversationId, role, content,
+                    citations_json as citationsJson, created_at as createdAt
+             FROM messages WHERE conversation_id = ? ORDER BY created_at ASC`
+          )
+          .all(conversationId) as Array<Omit<Message, 'citations'> & { citationsJson: string }>
+        return rows.map(mapMessage)
       }
     }
   }

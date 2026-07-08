@@ -16,7 +16,7 @@ export type IpcServices = {
     import(folderId: string): Promise<Paper>
     read(paperId: string): Promise<{ paper: Paper; markdownText: string | null }>
   }
-  conversations?: {
+  conversations: {
     list(): Promise<Conversation[]>
     create(input: Pick<Conversation, 'title' | 'folderId' | 'context'>): Promise<Conversation>
     sendMessage(conversationId: string, content: string): Promise<Message>
@@ -34,4 +34,11 @@ export function registerIpc(services: IpcServices): void {
   ipcMain.handle('papers:list', (_event, input: { folderId: string }) => services.papers.list(input.folderId))
   ipcMain.handle('papers:import', (_event, input: { folderId: string }) => services.papers.import(input.folderId))
   ipcMain.handle('papers:read', (_event, input: { paperId: string }) => services.papers.read(input.paperId))
+  ipcMain.handle('conversations:list', () => services.conversations.list())
+  ipcMain.handle('conversations:create', (_event, input: Pick<Conversation, 'title' | 'folderId' | 'context'>) =>
+    services.conversations.create(input)
+  )
+  ipcMain.handle('conversations:sendMessage', (_event, input: { conversationId: string; content: string }) =>
+    services.conversations.sendMessage(input.conversationId, input.content)
+  )
 }
