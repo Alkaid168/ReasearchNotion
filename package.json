@@ -5,12 +5,12 @@
   "type": "module",
   "main": "dist/main/main.js",
   "scripts": {
-    "dev": "pnpm rebuild:native && electron-vite dev",
+    "dev": "electron-rebuild -f -w better-sqlite3 && electron-vite dev",
     "build": "tsc -p tsconfig.json && electron-vite build",
-    "test": "pnpm rebuild:node && vitest run",
-    "test:watch": "pnpm rebuild:node && vitest",
+    "test": "node scripts/rebuild-node.cjs && vitest run",
+    "test:watch": "node scripts/rebuild-node.cjs && vitest",
     "lint:types": "tsc -p tsconfig.json --noEmit",
-    "rebuild:node": "pnpm rebuild better-sqlite3",
+    "rebuild:node": "node scripts/rebuild-node.cjs",
     "rebuild:native": "electron-rebuild -f -w better-sqlite3"
   },
   "dependencies": {

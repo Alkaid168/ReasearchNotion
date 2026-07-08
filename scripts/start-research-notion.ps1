@@ -37,9 +37,15 @@ if (-not (Test-Path (Join-Path $projectRoot 'node_modules'))) {
   }
 }
 
+Write-Host 'Rebuilding native modules for Electron...' -ForegroundColor Yellow
+& $pnpm exec electron-rebuild -f -w better-sqlite3
+if ($LASTEXITCODE -ne 0) {
+  exit $LASTEXITCODE
+}
+
 Write-Host 'Starting ResearchNotion...' -ForegroundColor Green
 Write-Host 'Close the Electron window or press Ctrl+C in this terminal to stop it.'
 Write-Host ''
 
-& $pnpm dev
+& $pnpm exec electron-vite dev
 exit $LASTEXITCODE
