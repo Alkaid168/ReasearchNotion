@@ -1,13 +1,61 @@
-import type { JSX } from 'react'
+import { useState, type JSX } from 'react'
+import { ArrowUp, BookOpen, GitCompare, Lightbulb, ListChecks, Quote } from 'lucide-react'
+import { AppShell, type AppTab } from './components/AppShell'
+import { EmptyState } from './components/EmptyState'
 
 export function App(): JSX.Element {
+  const [activeTab, setActiveTab] = useState<AppTab>('chat')
+
   return (
-    <main className="app-root">
-      <section className="empty-page">
-        <div className="empty-avatar">R</div>
-        <h1>今天研究点什么？</h1>
-        <p>ResearchNotion MVP shell is running.</p>
-      </section>
+    <AppShell activeTab={activeTab} onTabChange={setActiveTab}>
+      {activeTab === 'chat' ? <ChatLanding /> : null}
+      {activeTab === 'knowledge' ? (
+        <EmptyState title="知识库" description="这里将管理按文件夹分类的 PDF 和 Markdown 论文，并打开阅读器。" />
+      ) : null}
+      {activeTab === 'reports' ? (
+        <EmptyState title="阅读报告" description="后续可以把论文卡片、问答记录和综述提纲整理成报告。" />
+      ) : null}
+      {activeTab === 'settings' ? (
+        <EmptyState title="连接 Dify" description="在这里填写本地 Dify 地址、App API Key 和 Knowledge API Key。" />
+      ) : null}
+    </AppShell>
+  )
+}
+
+function ChatLanding(): JSX.Element {
+  return (
+    <main className="chat-hero">
+      <div className="empty-avatar">R</div>
+      <h1>今天研究点什么？</h1>
+      <div className="composer" aria-label="研究问答输入区">
+        <div className="composer-notice">选择论文库后，回答会优先引用你上传的资料。</div>
+        <textarea placeholder="询问论文、比较方法、提取创新点、解释术语..." />
+        <div className="quick-actions">
+          <button type="button">
+            <BookOpen size={15} aria-hidden="true" />
+            摘要
+          </button>
+          <button type="button">
+            <Quote size={15} aria-hidden="true" />
+            术语解释
+          </button>
+          <button type="button">
+            <Lightbulb size={15} aria-hidden="true" />
+            创新点
+          </button>
+          <button type="button">
+            <GitCompare size={15} aria-hidden="true" />
+            方法对比
+          </button>
+          <button type="button">
+            <ListChecks size={15} aria-hidden="true" />
+            综述提纲
+          </button>
+          <button className="send-button" type="button" aria-label="发送">
+            <ArrowUp size={17} aria-hidden="true" />
+          </button>
+        </div>
+      </div>
     </main>
   )
 }
