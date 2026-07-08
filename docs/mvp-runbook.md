@@ -15,6 +15,8 @@ pnpm install
 pnpm dev
 ```
 
+`better-sqlite3` is a native dependency. `pnpm dev` rebuilds it for Electron, while `pnpm test` rebuilds it for Node.js before running Vitest.
+
 ## Configure
 
 Open Settings and fill:

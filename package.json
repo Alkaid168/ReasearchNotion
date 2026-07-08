@@ -5,11 +5,13 @@
   "type": "module",
   "main": "dist/main/main.js",
   "scripts": {
-    "dev": "electron-vite dev",
+    "dev": "pnpm rebuild:native && electron-vite dev",
     "build": "tsc -p tsconfig.json && electron-vite build",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "lint:types": "tsc -p tsconfig.json --noEmit"
+    "test": "pnpm rebuild:node && vitest run",
+    "test:watch": "pnpm rebuild:node && vitest",
+    "lint:types": "tsc -p tsconfig.json --noEmit",
+    "rebuild:node": "pnpm rebuild better-sqlite3",
+    "rebuild:native": "electron-rebuild -f -w better-sqlite3"
   },
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.1",
@@ -24,6 +26,7 @@
   },
   "devDependencies": {
     "@electron-toolkit/tsconfig": "^1.0.1",
+    "@electron/rebuild": "^4.1.0",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.1.0",
     "@types/better-sqlite3": "^7.6.12",

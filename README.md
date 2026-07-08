@@ -30,6 +30,8 @@ pnpm dev
 
 首次运行后，在设置页填写本地 Dify 地址、Dify App API Key 和 Dify Knowledge API Key。MVP 中的大模型 Provider API Key 仍在 Dify 控制台配置。
 
+`pnpm dev` 会先为 Electron 重建 `better-sqlite3`。如果之后要跑单元测试，直接运行 `pnpm test`，测试脚本会切回 Node.js ABI。
+
 ## 验证命令
 
 ```bash
