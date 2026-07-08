@@ -23,6 +23,14 @@ ReasearchNotion 是一个面向科研论文管理与问答的本地桌面软件�
 
 ## 本地运行
 
+Windows 上可以直接双击：
+
+```text
+start-research-notion.bat
+```
+
+或在终端运行：
+
 ```bash
 pnpm install
 pnpm dev

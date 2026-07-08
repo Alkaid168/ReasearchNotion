@@ -10,6 +10,14 @@
 
 ## Run
 
+On Windows, double-click:
+
+```text
+start-research-notion.bat
+```
+
+Or run from a terminal:
+
 ```bash
 pnpm install
 pnpm dev
