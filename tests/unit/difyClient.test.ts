@@ -56,4 +56,34 @@ describe('Dify client', () => {
       })
     )
   })
+
+  it('uploads documents to a dataset with the knowledge key', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ document: { id: 'doc-1' } })
+    })
+    const client = createDifyClient({
+      baseUrl: 'http://localhost:8080/',
+      appApiKey: 'app-key',
+      knowledgeApiKey: 'knowledge-key',
+      fetchImpl: fetchMock
+    })
+
+    await expect(
+      client.uploadDocumentByFile({
+        datasetId: 'dataset-1',
+        file: new Blob(['# RAG Survey']),
+        filename: 'rag.md'
+      })
+    ).resolves.toEqual({ documentId: 'doc-1' })
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:8080/v1/datasets/dataset-1/document/create-by-file',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({ Authorization: 'Bearer knowledge-key' }),
+        body: expect.any(FormData)
+      })
+    )
+  })
 })

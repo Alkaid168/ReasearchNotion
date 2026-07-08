@@ -58,6 +58,32 @@ export function createDifyClient(options: DifyClientOptions) {
       const json = (await readJson(response)) as Record<string, unknown>
       return { id: String(json.id), name: String(json.name ?? name) }
     },
+    async uploadDocumentByFile(input: {
+      datasetId: string
+      file: Blob
+      filename: string
+    }): Promise<{ documentId: string }> {
+      const form = new FormData()
+      form.append(
+        'data',
+        JSON.stringify({
+          indexing_technique: 'high_quality',
+          process_rule: { mode: 'automatic' }
+        })
+      )
+      form.append('file', input.file, input.filename)
+
+      const response = await fetchImpl(`${baseUrl}/v1/datasets/${input.datasetId}/document/create-by-file`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${options.knowledgeApiKey}`
+        },
+        body: form
+      })
+      const json = (await readJson(response)) as Record<string, unknown>
+      const document = json.document as Record<string, unknown> | undefined
+      return { documentId: String(document?.id ?? json.id) }
+    },
     async sendChatMessage(input: SendChatInput): Promise<SendChatResult> {
       const response = await fetchImpl(`${baseUrl}/v1/chat-messages`, {
         method: 'POST',

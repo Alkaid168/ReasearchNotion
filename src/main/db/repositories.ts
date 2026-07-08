@@ -15,6 +15,29 @@ type CreatePaperInput = { folderId: string; title: string; fileType: FileType; f
 type PaperCardInput = Omit<PaperCard, 'id' | 'updatedAt' | 'readingStatus'> & { readingStatus?: PaperCard['readingStatus'] }
 
 export function createRepositories(db: Database.Database) {
+  function getFolder(folderId: string): Folder | null {
+    const row = db
+      .prepare(
+        `SELECT id, name, parent_id as parentId, dify_dataset_id as difyDatasetId,
+                created_at as createdAt, updated_at as updatedAt
+         FROM folders WHERE id = ?`
+      )
+      .get(folderId) as Folder | undefined
+    return row ?? null
+  }
+
+  function getPaper(paperId: string): Paper | null {
+    const row = db
+      .prepare(
+        `SELECT id, folder_id as folderId, title, file_type as fileType, file_path as filePath,
+                dify_document_id as difyDocumentId, index_status as indexStatus,
+                created_at as createdAt, updated_at as updatedAt
+         FROM papers WHERE id = ?`
+      )
+      .get(paperId) as Paper | undefined
+    return row ?? null
+  }
+
   function getCard(paperId: string): PaperCard | null {
     const row = db
       .prepare(
@@ -62,6 +85,9 @@ export function createRepositories(db: Database.Database) {
           )
           .all() as Folder[]
       },
+      getById(folderId: string): Folder | null {
+        return getFolder(folderId)
+      },
       setDifyDatasetId(folderId: string, datasetId: string): void {
         db.prepare(`UPDATE folders SET dify_dataset_id = ?, updated_at = ? WHERE id = ?`).run(datasetId, now(), folderId)
       }
@@ -93,6 +119,12 @@ export function createRepositories(db: Database.Database) {
           now(),
           paperId
         )
+      },
+      updateFilePath(paperId: string, filePath: string): void {
+        db.prepare(`UPDATE papers SET file_path = ?, updated_at = ? WHERE id = ?`).run(filePath, now(), paperId)
+      },
+      getById(paperId: string): Paper | null {
+        return getPaper(paperId)
       },
       listByFolder(folderId: string): Array<Paper & { card: PaperCard | null }> {
         const papers = db
