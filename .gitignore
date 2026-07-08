@@ -1,0 +1,29 @@
+# Local assistant/tooling state
+.agents/
+.codex/
+.superpowers/
+
+# Course notification materials kept outside the public source repo
+教学通知/
+
+# Dependencies and build output
+node_modules/
+dist/
+build/
+out/
+
+# Local runtime data
+.env
+.env.*
+*.local
+data/
+storage/
+uploads/
+logs/
+*.log
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
