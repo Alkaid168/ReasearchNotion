@@ -1,5 +1,9 @@
 import { app, BrowserWindow } from 'electron'
 import path from 'node:path'
+import { createDatabase } from './db/database'
+import { registerIpc } from './ipc'
+import { createElectronSecretBox } from './settings/secretBox'
+import { createSettingsService } from './settings/settingsService'
 
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
@@ -25,6 +29,22 @@ function createWindow(): void {
 }
 
 void app.whenReady().then(() => {
+  const db = createDatabase(path.join(app.getPath('userData'), 'research-notion.sqlite'))
+  const settingsService = createSettingsService(db, createElectronSecretBox())
+
+  registerIpc({
+    settings: {
+      get: () => settingsService.get(),
+      save: (settings) => settingsService.save(settings),
+      testConnection: async (settings) => {
+        if (!settings.difyBaseUrl || !settings.difyAppApiKey || !settings.difyKnowledgeApiKey) {
+          return { ok: false, message: '请填写 Dify 地址、App API Key 和 Knowledge API Key。' }
+        }
+        return { ok: true, message: '配置格式完整。下一步将连接 Dify API。' }
+      }
+    }
+  })
+
   createWindow()
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
