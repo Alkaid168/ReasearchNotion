@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.1",
-    "better-sqlite3": "^11.8.1",
+    "better-sqlite3": "^12.11.1",
     "electron-store": "^10.0.1",
     "lucide-react": "^0.468.0",
     "pdfjs-dist": "^4.10.38",
