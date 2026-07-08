@@ -2,6 +2,7 @@ import { useState, type JSX } from 'react'
 import { ArrowUp, BookOpen, GitCompare, Lightbulb, ListChecks, Quote } from 'lucide-react'
 import { AppShell, type AppTab } from './components/AppShell'
 import { EmptyState } from './components/EmptyState'
+import { SettingsPage } from './pages/SettingsPage'
 
 export function App(): JSX.Element {
   const [activeTab, setActiveTab] = useState<AppTab>('chat')
@@ -15,9 +16,7 @@ export function App(): JSX.Element {
       {activeTab === 'reports' ? (
         <EmptyState title="阅读报告" description="后续可以把论文卡片、问答记录和综述提纲整理成报告。" />
       ) : null}
-      {activeTab === 'settings' ? (
-        <EmptyState title="连接 Dify" description="在这里填写本地 Dify 地址、App API Key 和 Knowledge API Key。" />
-      ) : null}
+      {activeTab === 'settings' ? <SettingsPage /> : null}
     </AppShell>
   )
 }
