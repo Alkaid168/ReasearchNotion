@@ -2,6 +2,7 @@
 .agents/
 .codex/
 .superpowers/
+.worktrees/
 
 # Course notification materials kept outside the public source repo
 教学通知/
