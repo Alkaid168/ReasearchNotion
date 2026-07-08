@@ -3,6 +3,7 @@ import path from 'node:path'
 import type { FileType, Paper } from '../../shared/types'
 import { copyPaperToStorage } from '../files/storage'
 import type { createRepositories } from '../db/repositories'
+import { generatePaperCard } from './generatePaperCard'
 
 type ImportWorkflowInput = {
   folderId: string
@@ -12,6 +13,7 @@ type ImportWorkflowInput = {
   repos: ReturnType<typeof createRepositories>
   dify: {
     uploadDocumentByFile(input: { datasetId: string; file: Blob; filename: string }): Promise<{ documentId: string }>
+    sendChatMessage(input: { query: string; user: string; inputs: Record<string, string> }): Promise<{ answer: string }>
   }
 }
 
@@ -49,6 +51,26 @@ export async function importAndIndexPaper(input: ImportWorkflowInput): Promise<P
       filename: path.basename(storedPath)
     })
     input.repos.papers.setIndexStatus(paper.id, 'indexed', result.documentId)
+    try {
+      const card = await generatePaperCard({
+        paperId: paper.id,
+        title: paper.title,
+        dify: input.dify
+      })
+      input.repos.paperCards.upsert(card)
+    } catch {
+      input.repos.paperCards.upsert({
+        paperId: paper.id,
+        authors: '',
+        year: '',
+        oneSentenceSummary: '论文已入库，卡片生成失败，可稍后重试。',
+        researchProblem: '',
+        methodSummary: '',
+        contributions: [],
+        keywords: []
+      })
+    }
+
     return input.repos.papers.getById(paper.id) ?? {
       ...paper,
       filePath: storedPath,

@@ -29,6 +29,17 @@ describe('import and index paper workflow', () => {
     const repos = createRepositories(db)
     const folder = repos.folders.create({ name: '毕业设计', parentId: null })
     const uploadDocumentByFile = vi.fn().mockResolvedValue({ documentId: 'doc-1' })
+    const sendChatMessage = vi.fn().mockResolvedValue({
+      answer: JSON.stringify({
+        authors: 'Lewis et al.',
+        year: '2020',
+        oneSentenceSummary: 'RAG combines retrieval and generation.',
+        researchProblem: 'Knowledge-intensive generation',
+        methodSummary: 'Retrieve passages before generation.',
+        contributions: ['Introduces RAG'],
+        keywords: ['RAG']
+      })
+    })
 
     const paper = await importAndIndexPaper({
       folderId: folder.id,
@@ -36,7 +47,7 @@ describe('import and index paper workflow', () => {
       sourcePath,
       userDataDir: tempDir,
       repos,
-      dify: { uploadDocumentByFile }
+      dify: { uploadDocumentByFile, sendChatMessage }
     })
 
     expect(paper).toMatchObject({
@@ -50,6 +61,7 @@ describe('import and index paper workflow', () => {
     expect(existsSync(paper.filePath)).toBe(true)
     expect(readFileSync(paper.filePath, 'utf8')).toContain('Retrieval augmented generation.')
     expect(repos.papers.getById(paper.id)?.filePath).toBe(paper.filePath)
+    expect(repos.papers.getCard(paper.id)?.oneSentenceSummary).toBe('RAG combines retrieval and generation.')
     expect(uploadDocumentByFile).toHaveBeenCalledWith(
       expect.objectContaining({
         datasetId: 'dataset-1',
@@ -73,8 +85,31 @@ describe('import and index paper workflow', () => {
         sourcePath,
         userDataDir: tempDir,
         repos,
-        dify: { uploadDocumentByFile: vi.fn() }
+        dify: { uploadDocumentByFile: vi.fn(), sendChatMessage: vi.fn() }
       })
     ).rejects.toThrow('MVP 仅支持 PDF 和 Markdown 文件。')
+  })
+
+  it('stores a fallback card when card JSON parsing fails', async () => {
+    const sourcePath = path.join(tempDir, 'Broken Card.md')
+    writeFileSync(sourcePath, '# Broken Card', 'utf8')
+    const db = createDatabase(path.join(tempDir, 'fallback.sqlite'))
+    databases.push(db)
+    const repos = createRepositories(db)
+    const folder = repos.folders.create({ name: '创新实训', parentId: null })
+
+    const paper = await importAndIndexPaper({
+      folderId: folder.id,
+      folderDatasetId: 'dataset-1',
+      sourcePath,
+      userDataDir: tempDir,
+      repos,
+      dify: {
+        uploadDocumentByFile: vi.fn().mockResolvedValue({ documentId: 'doc-1' }),
+        sendChatMessage: vi.fn().mockResolvedValue({ answer: 'not json' })
+      }
+    })
+
+    expect(repos.papers.getCard(paper.id)?.oneSentenceSummary).toBe('论文已入库，卡片生成失败，可稍后重试。')
   })
 })
