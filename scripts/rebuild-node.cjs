@@ -34,4 +34,8 @@ function runPnpm(args) {
   return 1
 }
 
-process.exit(runPnpm(['rebuild', 'better-sqlite3']))
+module.exports = { rebuildNative: () => runPnpm(['rebuild', 'better-sqlite3']) }
+
+if (require.main === module) {
+  process.exit(runPnpm(['rebuild', 'better-sqlite3']))
+}

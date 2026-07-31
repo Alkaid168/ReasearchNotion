@@ -7,8 +7,8 @@
   "scripts": {
     "dev": "electron-rebuild -f -w better-sqlite3 && electron-vite dev",
     "build": "tsc -p tsconfig.json && electron-vite build && node scripts/copy-pdf-standard-fonts.mjs",
-    "test": "node scripts/rebuild-node.cjs && vitest run",
-    "test:watch": "node scripts/rebuild-node.cjs && vitest",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "lint:types": "tsc -p tsconfig.json --noEmit",
     "rebuild:node": "node scripts/rebuild-node.cjs",
     "rebuild:native": "electron-rebuild -f -w better-sqlite3",

@@ -17,8 +17,7 @@ ReasearchNotion 是一个面向科研论文管理与问答的本地桌面软件�
 
 ## 设计文档
 
-- [ResearchNotion MVP Design](docs/superpowers/specs/2026-07-08-research-notion-design.md)
-- [ResearchNotion MVP Implementation Plan](docs/superpowers/plans/2026-07-08-research-notion-mvp.md)
+- [ResearchNotion 技术说明与答辩学习手册](docs/research-notion-technical-guide.md)
 - [MVP Runbook](docs/mvp-runbook.md)
 - [Dify 科研学术问答智能体配置](docs/dify-research-agent.md)
 - [Dify Workflow 搭建说明](docs/dify-workflow-build-guide.md)

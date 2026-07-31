@@ -14,6 +14,7 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: ['tests/setup.ts'],
+    globalSetup: ['tests/rebuild-native-global-setup.cjs'],
     // Renderer tests temporarily replace browser globals such as navigator.clipboard.
     // Keep files isolated in time so those mocks cannot race across test files.
     fileParallelism: false,
