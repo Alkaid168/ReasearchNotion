@@ -1,4 +1,4 @@
-import { defineConfig } from 'vitest/config'
+import { configDefaults, defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 import path from 'node:path'
 
@@ -17,6 +17,7 @@ export default defineConfig({
     // Renderer tests temporarily replace browser globals such as navigator.clipboard.
     // Keep files isolated in time so those mocks cannot race across test files.
     fileParallelism: false,
+    exclude: [...configDefaults.exclude, '**/.worktrees/**'],
     poolOptions: {
       threads: {
         singleThread: true

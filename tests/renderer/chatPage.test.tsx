@@ -347,12 +347,16 @@ describe('App shell', () => {
     const createdConversation: Conversation = { ...outsideConversation, id: 'conversation-copy', title: 'Copy answer' }
     api.conversations.create = vi.fn().mockResolvedValue(createdConversation)
     api.conversations.sendMessage = vi.fn().mockResolvedValue({ ...assistantReply, conversationId: createdConversation.id })
+    api.messages.list = vi.fn().mockImplementation(async (conversationId: string) =>
+      conversationId === createdConversation.id ? [{ ...assistantReply, conversationId }] : []
+    )
     window.researchNotion = api
     const writeText = vi.fn().mockResolvedValue(undefined)
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true,
       value: { writeText }
     })
+    expect(navigator.clipboard?.writeText).toBe(writeText)
 
     render(<App />)
 
@@ -360,7 +364,11 @@ describe('App shell', () => {
       target: { value: 'Copy answer' }
     })
     fireEvent.click(screen.getByRole('button', { name: '发送' }))
-    fireEvent.click(await screen.findByRole('button', { name: '复制回答' }))
+    await screen.findByText(assistantReply.content)
+    const copyButton = await screen.findByRole('button', { name: '复制回答' })
+    await act(async () => {
+      fireEvent.click(copyButton)
+    })
 
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(assistantReply.content))
     expect(await screen.findByText('回答已复制')).toBeInTheDocument()

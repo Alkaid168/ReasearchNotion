@@ -2,8 +2,9 @@ import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 
-const css = readFileSync(path.resolve(process.cwd(), 'src/renderer/styles/app.css'), 'utf8')
-const tokens = readFileSync(path.resolve(process.cwd(), 'src/renderer/styles/tokens.css'), 'utf8')
+const normalizeLineEndings = (text) => text.replace(/\r\n/g, '\n')
+const css = normalizeLineEndings(readFileSync(path.resolve(process.cwd(), 'src/renderer/styles/app.css'), 'utf8'))
+const tokens = normalizeLineEndings(readFileSync(path.resolve(process.cwd(), 'src/renderer/styles/tokens.css'), 'utf8'))
 
 describe('desktop UX accessibility styles', () => {
   it('keeps keyboard focus visible and respects reduced motion', () => {
