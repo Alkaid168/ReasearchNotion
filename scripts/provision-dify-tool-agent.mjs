@@ -197,6 +197,7 @@ with flask_app.app_context():
                 icon_background="#EAF2FF",
             ),
             account,
+            session=db.session,
         )
         action = "created"
 
@@ -274,8 +275,8 @@ with flask_app.app_context():
     config["chat_prompt_config"] = {}
     config["completion_prompt_config"] = {}
 
-    validated = AppModelConfigService.validate_configuration(tenant_id=tenant_id, config=config, app_mode=AppMode.AGENT_CHAT)
-    AgentChatAppConfigManager.get_app_config(app, AppModelConfig(app_id=app.id).from_model_config_dict(validated))
+    validated = AppModelConfigService.validate_configuration(tenant_id=tenant_id, config=config, app_mode=AppMode.AGENT_CHAT, session=db.session)
+    AgentChatAppConfigManager.get_app_config(app, AppModelConfig(app_id=app.id).from_model_config_dict(validated), annotation_reply=None)
 
     for tool_config in agent_tools:
         ToolManager.get_agent_tool_runtime(
