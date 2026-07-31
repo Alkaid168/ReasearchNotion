@@ -11,6 +11,13 @@ export type Folder = {
   updatedAt: string
 }
 
+export type ConversationFolder = {
+  id: string
+  name: string
+  createdAt: string
+  updatedAt: string
+}
+
 export type Paper = {
   id: string
   folderId: string
@@ -37,6 +44,19 @@ export type PaperCard = {
   updatedAt: string
 }
 
+export type PaperOutlineItem = {
+  level: number
+  heading: string
+  pageNumber: number
+  preview: string
+}
+
+export type PaperSearchResult = {
+  pageNumber: number
+  snippet: string
+  score: number
+}
+
 export type ChatContext =
   | { type: 'free' }
   | { type: 'folder'; folderId: string; folderName: string }
@@ -46,6 +66,8 @@ export type Conversation = {
   id: string
   title: string
   folderId: string | null
+  conversationFolderId: string | null
+  difyConversationId: string | null
   context: ChatContext
   createdAt: string
   updatedAt: string
@@ -56,6 +78,10 @@ export type Citation = {
   paperTitle: string
   snippet: string
   score: number | null
+  sourceDocumentId?: string | null
+  pageNumber?: number | null
+  section?: string | null
+  evidenceType?: 'retrieval' | 'tool' | 'metadata'
 }
 
 export type Message = {
@@ -73,3 +99,13 @@ export type AppSettings = {
   difyKnowledgeApiKey: string
   defaultFolderId: string | null
 }
+
+export type ReadingState = {
+  activeFolderId: string | null
+  activePaperId: string | null
+  currentPage: number
+  selectedText: string | null
+  updatedAt: string
+}
+
+export type ReadingStateUpdate = Partial<Pick<ReadingState, 'activeFolderId' | 'activePaperId' | 'currentPage' | 'selectedText'>>

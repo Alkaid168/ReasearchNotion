@@ -1,4 +1,5 @@
 import type { PaperCard } from '../../shared/types'
+import { buildPaperCardAgentInputs, buildPaperCardAgentQuery } from '../dify/researchAgent'
 
 type GeneratePaperCardInput = {
   paperId: string
@@ -17,9 +18,14 @@ function parseList(value: unknown): string[] {
 }
 
 function parseJsonAnswer(answer: string): Record<string, unknown> {
-  const trimmed = answer.trim()
+  const trimmed = answer.replace(/<think>[\s\S]*?<\/think>/gi, '').trim()
   const fenced = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i)
-  return JSON.parse(fenced?.[1] ?? trimmed) as Record<string, unknown>
+  if (fenced) return JSON.parse(fenced[1]) as Record<string, unknown>
+
+  const jsonStart = trimmed.indexOf('{')
+  const jsonEnd = trimmed.lastIndexOf('}')
+  const json = jsonStart >= 0 && jsonEnd > jsonStart ? trimmed.slice(jsonStart, jsonEnd + 1) : trimmed
+  return JSON.parse(json) as Record<string, unknown>
 }
 
 export async function generatePaperCard(
@@ -27,11 +33,8 @@ export async function generatePaperCard(
 ): Promise<Omit<PaperCard, 'id' | 'updatedAt' | 'readingStatus'>> {
   const result = await input.dify.sendChatMessage({
     user: 'local-user',
-    query: `请为论文《${input.title}》生成论文卡片。只返回 JSON，字段包括 authors, year, oneSentenceSummary, researchProblem, methodSummary, contributions, keywords。`,
-    inputs: {
-      task: 'paper_card',
-      paperId: input.paperId
-    }
+    query: buildPaperCardAgentQuery(input.paperId, input.title),
+    inputs: buildPaperCardAgentInputs(input.paperId)
   })
 
   const parsed = parseJsonAnswer(result.answer)

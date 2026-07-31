@@ -1,16 +1,34 @@
 import { app, BrowserWindow, dialog } from 'electron'
+import fs from 'node:fs/promises'
 import path from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { createDatabase } from './db/database'
 import { createRepositories } from './db/repositories'
+import { createOpenApiToolService } from './agentTools/openApiService'
+import { createReadingStateStore } from './agentTools/readingState'
+import { createAgentToolHandlers } from './agentTools/toolHandlers'
+import { resolveToolServiceToken } from './agentTools/toolServiceAuth'
+import { extractOutline, readPaperPages, searchPages } from './agentTools/paperText'
 import { createDifyClient } from './dify/client'
-import { readPaperMarkdown } from './files/importPaper'
+import { conversationExportFilename, formatConversationMarkdown } from './conversations/exportMarkdown'
+import { mapCitationsToLocalPapers, mergeCitationsWithToolInvocations } from './dify/citations'
+import { DifyApiError } from './dify/errors'
+import { readingStatePatchForConversationContext } from './dify/conversationRuntime'
+import { buildResearchAgentInputs, buildResearchAgentQuery, formatConversationHistory } from './dify/researchAgent'
+import { readPaperMarkdown, readPaperPlainText } from './files/importPaper'
 import { registerIpc } from './ipc'
 import { createElectronSecretBox } from './settings/secretBox'
 import { createSettingsService } from './settings/settingsService'
-import { importAndIndexPaper } from './workflows/importAndIndexPaper'
-import type { AppSettings, ChatContext } from '../shared/types'
+import { ensureFolderDataset } from './workflows/ensureFolderDataset'
+import { importAndIndexPaper, reindexPaper } from './workflows/importAndIndexPaper'
+import type { AppSettings, ChatContext, Paper } from '../shared/types'
+
+const isolatedUserDataDir = process.env.RESEARCH_NOTION_USER_DATA_DIR?.trim()
+if (isolatedUserDataDir) app.setPath('userData', isolatedUserDataDir)
+if (process.platform === 'win32') app.setAppUserModelId('com.researchnotion.desktop')
 
 function createWindow(): void {
+  const appIconPath = path.join(process.cwd(), 'resources', 'research-notion.ico')
   const mainWindow = new BrowserWindow({
     width: 1360,
     height: 860,
@@ -18,6 +36,8 @@ function createWindow(): void {
     minHeight: 720,
     title: 'ResearchNotion',
     backgroundColor: '#fbfaf8',
+    icon: appIconPath,
+    autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.mjs'),
       sandbox: false,
@@ -33,11 +53,25 @@ function createWindow(): void {
   }
 }
 
-void app.whenReady().then(() => {
-  const db = createDatabase(path.join(app.getPath('userData'), 'research-notion.sqlite'))
-  const repos = createRepositories(db)
-  const settingsService = createSettingsService(db, createElectronSecretBox())
+void app.whenReady().then(async () => {
   const userDataDir = app.getPath('userData')
+  const databasePath = path.join(userDataDir, 'research-notion.sqlite')
+  const db = createDatabase(databasePath)
+  const repos = createRepositories(db)
+  const readingState = createReadingStateStore()
+  const toolServiceToken = await resolveToolServiceToken(userDataDir)
+  const agentToolService = createOpenApiToolService({
+    tools: createAgentToolHandlers({ repos, readingState }),
+    readingState,
+    authToken: toolServiceToken
+  })
+  const settingsService = createSettingsService(db, createElectronSecretBox())
+  const activeSendControllers = new Map<string, AbortController>()
+
+  await agentToolService.start()
+  app.on('before-quit', () => {
+    void agentToolService.stop()
+  })
 
   function createConfiguredDifyClient(settings: AppSettings) {
     if (!settings.difyBaseUrl || !settings.difyAppApiKey || !settings.difyKnowledgeApiKey) {
@@ -50,25 +84,118 @@ void app.whenReady().then(() => {
     })
   }
 
-  function contextInputs(context: ChatContext): Record<string, string> {
-    if (context.type === 'folder') {
-      return {
-        contextType: 'folder',
-        folderId: context.folderId,
-        contextLabel: context.folderName
-      }
+  function buildContextInventory(conversationContext: ChatContext): string | null {
+    const describePaper = (paper: ReturnType<typeof repos.papers.listAll>[number], index: number) => {
+      const card = paper.card
+      const meta = [card?.authors, card?.year].filter(Boolean).join(' · ')
+      const details = [
+        `paperId=${paper.id}`,
+        `folderId=${paper.folderId}`,
+        `type=${paper.fileType}`,
+        `index=${paper.indexStatus}`
+      ].join('；')
+      const lines = [`${index + 1}. ${paper.title}${meta ? `（${meta}）` : ''}`, `   ${details}`]
+      if (card?.oneSentenceSummary) lines.push(`   摘要：${card.oneSentenceSummary}`)
+      if (card?.researchProblem) lines.push(`   研究问题：${card.researchProblem}`)
+      if (card?.methodSummary) lines.push(`   方法：${card.methodSummary}`)
+      if (card?.contributions.length) lines.push(`   贡献：${card.contributions.join('；')}`)
+      if (card?.keywords.length) lines.push(`   关键词：${card.keywords.join('、')}`)
+      return lines.join('\n')
     }
-    if (context.type === 'paper') {
-      return {
-        contextType: 'paper',
-        paperId: context.paperId,
-        contextLabel: context.paperTitle
-      }
+
+    if (conversationContext.type === 'folder') {
+      const papers = repos.papers.listByFolder(conversationContext.folderId)
+      if (papers.length === 0) return null
+      return papers.slice(0, 20).map(describePaper).join('\n')
     }
-    return { contextType: 'free' }
+
+    if (conversationContext.type === 'paper') {
+      const paper = repos.papers.getById(conversationContext.paperId)
+      const card = paper ? repos.papers.getCard(paper.id) : null
+      if (!paper) return null
+      return [
+        `论文：${paper.title}`,
+        `paperId：${paper.id}`,
+        `folderId：${paper.folderId}`,
+        `文件类型/索引状态：${paper.fileType} / ${paper.indexStatus}`,
+        card?.authors || card?.year ? `作者/年份：${[card?.authors, card?.year].filter(Boolean).join(' · ')}` : null,
+        card?.oneSentenceSummary ? `摘要：${card.oneSentenceSummary}` : null,
+        card?.researchProblem ? `研究问题：${card.researchProblem}` : null,
+        card?.methodSummary ? `方法：${card.methodSummary}` : null,
+        card?.contributions.length ? `贡献：${card.contributions.join('；')}` : null,
+        card?.keywords.length ? `关键词：${card.keywords.join('、')}` : null
+      ]
+        .filter((part): part is string => Boolean(part))
+        .join('\n')
+    }
+
+    const papers = repos.papers.listAll()
+    if (papers.length === 0) return null
+    return ['未限定资料，以下是全部本地论文，可用 paperId 精确读取：', papers.slice(0, 20).map(describePaper).join('\n')].join('\n')
+  }
+
+  async function importPaperFromPath(folderId: string, sourcePath: string) {
+    const settings = await settingsService.get()
+    const hasDifyConfig = Boolean(settings.difyBaseUrl && settings.difyAppApiKey && settings.difyKnowledgeApiKey)
+    if (!hasDifyConfig) {
+      return importAndIndexPaper({ folderId, sourcePath, userDataDir, repos })
+    }
+
+    const dify = createConfiguredDifyClient(settings)
+    let datasetId: string | null = null
+    try {
+      const dataset = await ensureFolderDataset({ folderId, repos, dify })
+      datasetId = dataset.datasetId
+    } catch {
+      datasetId = null
+    }
+
+    return importAndIndexPaper({
+      folderId,
+      folderDatasetId: datasetId,
+      sourcePath,
+      userDataDir,
+      repos,
+      dify
+    })
   }
 
   registerIpc({
+    app: {
+      getEnvironmentStatus: async () => {
+        const settings = await settingsService.get()
+        const counts = repos.stats.getEnvironmentCounts()
+        const agentToolStatus = agentToolService.getStatus()
+        const difyConfigured = Boolean(settings.difyBaseUrl && settings.difyAppApiKey && settings.difyKnowledgeApiKey)
+        let difyAppName: string | null = null
+        let difyAppMode: string | null = null
+
+        if (difyConfigured) {
+          try {
+            const appInfo = await createConfiguredDifyClient(settings).getAppInfo()
+            difyAppName = appInfo.name
+            difyAppMode = appInfo.mode
+          } catch {
+            difyAppName = null
+            difyAppMode = null
+          }
+        }
+
+        return {
+          appVersion: app.getVersion(),
+          electronVersion: process.versions.electron ?? '',
+          nodeVersion: process.versions.node,
+          userDataDir,
+          databasePath,
+          difyConfigured,
+          difyAppName,
+          difyAppMode,
+          agentToolServiceUrl: agentToolStatus.baseUrl,
+          agentToolOperationCount: agentToolStatus.operationCount,
+          ...counts
+        }
+      }
+    },
     settings: {
       get: () => settingsService.get(),
       save: (settings) => settingsService.save(settings),
@@ -76,7 +203,30 @@ void app.whenReady().then(() => {
         if (!settings.difyBaseUrl || !settings.difyAppApiKey || !settings.difyKnowledgeApiKey) {
           return { ok: false, message: '请填写 Dify 地址、App API Key 和 Knowledge API Key。' }
         }
-        return { ok: true, message: '配置格式完整。下一步将连接 Dify API。' }
+        try {
+          const check = await createConfiguredDifyClient(settings).testConnection()
+          if (check.missingInputs.length > 0) {
+            return {
+              ok: false,
+              message: `Dify App 缺少变量：${check.missingInputs.join('、')}。请按文档配置科研问答智能体。`
+            }
+          }
+          if (!check.retrieverResourceEnabled) {
+            return {
+              ok: false,
+              message: 'Dify App 未开启引用与归因返回，请开启 retriever_resource 后再测试。'
+            }
+          }
+          return { ok: true, message: 'Dify 连接正常，App 与知识库 API Key 均可用。' }
+        } catch (error) {
+          if (error instanceof DifyApiError) {
+            return {
+              ok: false,
+              message: `Dify 返回 ${error.status}，请检查服务地址和 API Key。`
+            }
+          }
+          return { ok: false, message: '无法连接 Dify，请确认本地 Dify 正在运行。' }
+        }
       }
     },
     folders: {
@@ -90,70 +240,212 @@ void app.whenReady().then(() => {
         const dataset = await createConfiguredDifyClient(settings).createDataset(name)
         repos.folders.setDifyDatasetId(folder.id, dataset.id)
         return repos.folders.getById(folder.id) ?? { ...folder, difyDatasetId: dataset.id }
+      },
+      rename: async (folderId, name) => repos.folders.rename(folderId, name),
+      delete: async (folderId) => {
+        const folder = repos.folders.getById(folderId)
+        if (!folder) throw new Error('论文库不存在。')
+        if (folder.difyDatasetId) {
+          const settings = await settingsService.get()
+          await createConfiguredDifyClient(settings).deleteDataset(folder.difyDatasetId)
+        } else if (repos.papers.listByFolder(folderId).some((paper) => Boolean(paper.difyDocumentId))) {
+          throw new Error('该论文库仍关联 Dify 文档，但缺少 Dify 知识库标识。请先恢复 Dify 设置后再删除。')
+        }
+        const deleted = repos.folders.delete(folderId)
+        await Promise.all(deleted.papers.map((paper) => fs.rm(paper.filePath, { force: true })))
+        return deleted.folder
       }
+    },
+    conversationFolders: {
+      list: async () => repos.conversationFolders.list(),
+      create: async (name) => repos.conversationFolders.create(name),
+      rename: async (folderId, name) => repos.conversationFolders.rename(folderId, name),
+      reorder: async (folderIds) => repos.conversationFolders.reorder(folderIds)
+    },
+    reading: {
+      updateState: async (input) => readingState.update(input)
     },
     papers: {
       list: async (folderId) => repos.papers.listByFolder(folderId),
       import: async (folderId) => {
         const result = await dialog.showOpenDialog({
-          properties: ['openFile'],
+          properties: ['openFile', 'multiSelections'],
           filters: [{ name: 'Papers', extensions: ['pdf', 'md', 'markdown'] }]
         })
         if (result.canceled || result.filePaths.length === 0) {
           throw new Error('已取消导入。')
         }
 
-        const folder = repos.folders.getById(folderId)
-        if (!folder) throw new Error('论文文件夹不存在。')
-        if (!folder.difyDatasetId) throw new Error('当前文件夹还没有关联 Dify dataset。')
-
+        const imported: Paper[] = []
+        for (const sourcePath of result.filePaths) imported.push(await importPaperFromPath(folderId, sourcePath))
+        return imported
+      },
+      importFiles: async (folderId, filePaths) => {
+        if (filePaths.length === 0) throw new Error('没有可导入的本地文件。')
+        const imported: Paper[] = []
+        for (const sourcePath of filePaths) imported.push(await importPaperFromPath(folderId, sourcePath))
+        return imported
+      },
+      updateReadingStatus: async (paperId, readingStatus) => repos.paperCards.updateReadingStatus(paperId, readingStatus),
+      reindex: async (paperId) => {
+        const paper = repos.papers.getById(paperId)
+        if (!paper) throw new Error('论文不存在。')
         const settings = await settingsService.get()
-        return importAndIndexPaper({
-          folderId,
-          folderDatasetId: folder.difyDatasetId,
-          sourcePath: result.filePaths[0],
-          userDataDir,
+        const dify = createConfiguredDifyClient(settings)
+        const dataset = await ensureFolderDataset({
+          folderId: paper.folderId,
           repos,
-          dify: createConfiguredDifyClient(settings)
+          dify
         })
+        return reindexPaper({
+          paperId,
+          folderDatasetId: dataset.datasetId,
+          repos,
+          dify
+        })
+      },
+      delete: async (paperId) => {
+        const paper = repos.papers.getById(paperId)
+        if (!paper) throw new Error('论文不存在。')
+        if (paper.difyDocumentId) {
+          const folder = repos.folders.getById(paper.folderId)
+          if (!folder?.difyDatasetId) {
+            throw new Error('该论文仍关联 Dify 文档，但找不到所属论文库的 Dify 知识库标识。请先恢复 Dify 设置后再删除。')
+          }
+          const settings = await settingsService.get()
+          await createConfiguredDifyClient(settings).deleteDocument(folder.difyDatasetId, paper.difyDocumentId)
+        }
+        const deleted = repos.papers.delete(paperId)
+        await fs.rm(deleted.filePath, { force: true })
+        return deleted
+      },
+      getOutline: async (paperId) => {
+        const paper = repos.papers.getById(paperId)
+        if (!paper) throw new Error('论文不存在。')
+        return extractOutline(await readPaperPages(paper))
+      },
+      searchText: async (paperId, query) => {
+        const paper = repos.papers.getById(paperId)
+        if (!paper) throw new Error('论文不存在。')
+        const normalizedQuery = query.trim()
+        if (!normalizedQuery) return []
+        return searchPages(await readPaperPages(paper), normalizedQuery, 24)
       },
       read: async (paperId) => {
         const paper = repos.papers.getById(paperId)
         if (!paper) throw new Error('论文不存在。')
         return {
           paper,
-          markdownText: await readPaperMarkdown(paper)
+          markdownText: await readPaperMarkdown(paper),
+          plainText: await readPaperPlainText(paper),
+          previewUrl: paper.fileType === 'pdf' ? pathToFileURL(paper.filePath).toString() : null,
+          pdfData: paper.fileType === 'pdf' ? await fs.readFile(paper.filePath) : null
         }
       }
     },
     conversations: {
-      list: async () => repos.conversations.list(),
+      list: async (options) => repos.conversations.list(options),
       create: async (input) => repos.conversations.create(input),
-      sendMessage: async (conversationId, content) => {
+      rename: async (conversationId, title) => repos.conversations.rename(conversationId, title),
+      delete: async (conversationId) => repos.conversations.delete(conversationId),
+      moveToFolder: async (conversationId, conversationFolderId) =>
+        repos.conversations.moveToFolder(conversationId, conversationFolderId),
+      reorder: async (conversationIds) => repos.conversations.reorder(conversationIds),
+      sendMessage: async (conversationId, content, options, emitProgress) => {
         const conversation = repos.conversations.getById(conversationId)
         if (!conversation) throw new Error('对话不存在。')
 
-        repos.messages.create({
-          conversationId,
-          role: 'user',
-          content,
-          citations: []
-        })
-
         const settings = await settingsService.get()
-        const result = await createConfiguredDifyClient(settings).sendChatMessage({
-          query: content,
-          user: 'local-user',
-          inputs: contextInputs(conversation.context)
+        const progressRequestId = options?.progressRequestId?.trim()
+        const abortController = progressRequestId ? new AbortController() : null
+        if (progressRequestId && abortController) activeSendControllers.set(progressRequestId, abortController)
+        const paper = conversation.context.type === 'paper' ? repos.papers.getById(conversation.context.paperId) : null
+        const readingPatch = readingStatePatchForConversationContext({
+          context: conversation.context,
+          paperFolderId: paper?.folderId ?? null,
+          emphasisContext: options?.emphasisContext
         })
+        if (readingPatch) readingState.update(readingPatch)
+        const conversationHistory = formatConversationHistory(repos.messages.listByConversation(conversationId))
+        const toolInvocationCursor = agentToolService.getInvocationCursor()
 
-        return repos.messages.create({
-          conversationId,
-          role: 'assistant',
-          content: result.answer,
-          citations: result.citations
+        try {
+          const result = await createConfiguredDifyClient(settings).sendChatMessage({
+            query: buildResearchAgentQuery({
+              content,
+              context: conversation.context,
+              emphasisContext: options?.emphasisContext,
+              contextInventory: buildContextInventory(conversation.context),
+              conversationHistory
+            }),
+            user: 'local-user',
+            inputs: buildResearchAgentInputs(conversation.context, options),
+            conversationId: conversation.difyConversationId ?? undefined,
+            signal: abortController?.signal,
+            onProgress:
+              progressRequestId && emitProgress
+                ? (progress) => {
+                    emitProgress({ requestId: progressRequestId, ...progress })
+                  }
+                : undefined
+          })
+
+          if (result.difyConversationId) {
+            repos.conversations.setDifyConversationId(conversationId, result.difyConversationId)
+          }
+
+          repos.messages.create({
+            conversationId,
+            role: 'user',
+            content,
+            citations: []
+          })
+
+          const mappedCitations = mapCitationsToLocalPapers(
+            result.citations,
+            repos.papers.getByDifyDocumentId,
+            repos.papers.getByTitle,
+            repos.papers.getById
+          )
+          const citations = mergeCitationsWithToolInvocations(
+            mappedCitations,
+            agentToolService.getInvocationsAfter(toolInvocationCursor),
+            repos.papers.getById
+          )
+
+          return repos.messages.create({
+            conversationId,
+            role: 'assistant',
+            content: result.answer,
+            citations
+          })
+        } finally {
+          if (progressRequestId && activeSendControllers.get(progressRequestId) === abortController) {
+            activeSendControllers.delete(progressRequestId)
+          }
+        }
+      },
+      cancelSend: async (requestId) => {
+        const controller = activeSendControllers.get(requestId)
+        if (!controller || controller.signal.aborted) return false
+        controller.abort()
+        return true
+      },
+      exportMarkdown: async (conversationId) => {
+        const conversation = repos.conversations.getById(conversationId)
+        if (!conversation) throw new Error('对话不存在。')
+        const result = await dialog.showSaveDialog({
+          title: '导出 Markdown 对话',
+          defaultPath: conversationExportFilename(conversation.title),
+          filters: [{ name: 'Markdown', extensions: ['md'] }]
         })
+        if (result.canceled || !result.filePath) return { canceled: true, filePath: null }
+        await fs.writeFile(result.filePath, formatConversationMarkdown(conversation, repos.messages.listByConversation(conversationId)), 'utf8')
+        return { canceled: false, filePath: result.filePath }
       }
+    },
+    messages: {
+      list: async (conversationId) => repos.messages.listByConversation(conversationId)
     }
   })
 

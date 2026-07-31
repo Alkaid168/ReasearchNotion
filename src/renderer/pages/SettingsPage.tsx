@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent, type JSX } from 'react'
-import { CheckCircle2, KeyRound, Loader2, Plug, Save, Server, XCircle } from 'lucide-react'
+import { CheckCircle2, Database, FileText, Folder, KeyRound, Loader2, MessageSquare, Plug, RefreshCw, Save, Server, XCircle } from 'lucide-react'
 import { desktopApi } from '../api/desktopApi'
+import type { ConnectionTestResult, EnvironmentStatus } from '../../shared/ipcTypes'
 import type { AppSettings } from '../../shared/types'
 
 const emptySettings: AppSettings = {
@@ -15,21 +16,28 @@ type Notice = {
   message: string
 }
 
-export function SettingsPage(): JSX.Element {
+type SettingsPageProps = {
+  onSettingsSaved?: (settings: AppSettings) => void
+  onConnectionTested?: (result: ConnectionTestResult) => void
+}
+
+export function SettingsPage({ onSettingsSaved, onConnectionTested }: SettingsPageProps = {}): JSX.Element {
   const [settings, setSettings] = useState<AppSettings>(emptySettings)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
+  const [refreshingStatus, setRefreshingStatus] = useState(false)
+  const [environmentStatus, setEnvironmentStatus] = useState<EnvironmentStatus | null>(null)
   const [notice, setNotice] = useState<Notice | null>(null)
 
   useEffect(() => {
     let alive = true
 
-    void desktopApi.settings
-      .get()
-      .then((storedSettings) => {
+    void Promise.all([desktopApi.settings.get(), desktopApi.app.getEnvironmentStatus()])
+      .then(([storedSettings, status]) => {
         if (!alive) return
         setSettings(storedSettings)
+        setEnvironmentStatus(status)
         setNotice(null)
       })
       .catch(() => {
@@ -56,7 +64,9 @@ export function SettingsPage(): JSX.Element {
     try {
       const savedSettings = await desktopApi.settings.save(settings)
       setSettings(savedSettings)
+      setEnvironmentStatus(await desktopApi.app.getEnvironmentStatus())
       setNotice({ tone: 'success', message: '设置已保存。' })
+      onSettingsSaved?.(savedSettings)
     } catch {
       setNotice({ tone: 'error', message: '保存设置失败。' })
     } finally {
@@ -70,6 +80,7 @@ export function SettingsPage(): JSX.Element {
     try {
       const result = await desktopApi.settings.testConnection(settings)
       setNotice({ tone: result.ok ? 'success' : 'error', message: result.message })
+      onConnectionTested?.(result)
     } catch {
       setNotice({ tone: 'error', message: '连接测试失败。' })
     } finally {
@@ -77,11 +88,20 @@ export function SettingsPage(): JSX.Element {
     }
   }
 
+  async function refreshEnvironmentStatus(): Promise<void> {
+    setRefreshingStatus(true)
+    try {
+      setEnvironmentStatus(await desktopApi.app.getEnvironmentStatus())
+    } finally {
+      setRefreshingStatus(false)
+    }
+  }
+
   return (
     <main className="settings-page">
       <section className="settings-header">
         <div>
-          <span className="settings-kicker">Local Dify</span>
+          <span className="settings-kicker">本地 Dify</span>
           <h1>连接 Dify</h1>
         </div>
         <div className={notice ? `settings-notice ${notice.tone}` : 'settings-notice neutral'}>
@@ -145,6 +165,58 @@ export function SettingsPage(): JSX.Element {
           </button>
         </div>
       </form>
+
+      <section className="settings-status-panel" aria-label="本地状态">
+        <div className="settings-status-head">
+          <div>
+            <span className="settings-kicker">本地状态</span>
+            <h2>本地状态</h2>
+          </div>
+          <button className="secondary-action compact" type="button" onClick={() => void refreshEnvironmentStatus()} disabled={refreshingStatus}>
+            {refreshingStatus ? <Loader2 className="spin" size={15} aria-hidden="true" /> : <RefreshCw size={15} aria-hidden="true" />}
+            刷新
+          </button>
+        </div>
+
+        <div className="settings-status-grid">
+          <div className="settings-status-card">
+            <Plug size={16} aria-hidden="true" />
+            <span>Dify</span>
+            <strong>{environmentStatus?.difyConfigured ? '已配置' : '未配置'}</strong>
+          </div>
+          <div className="settings-status-card">
+            <Folder size={16} aria-hidden="true" />
+            <span>论文库</span>
+            <strong>{environmentStatus?.folderCount ?? '-'}</strong>
+          </div>
+          <div className="settings-status-card">
+            <FileText size={16} aria-hidden="true" />
+            <span>论文</span>
+            <strong>{environmentStatus?.paperCount ?? '-'}</strong>
+          </div>
+          <div className="settings-status-card">
+            <FileText size={16} aria-hidden="true" />
+            <span>PDF</span>
+            <strong>{environmentStatus?.pdfPaperCount ?? '-'}</strong>
+          </div>
+          <div className="settings-status-card">
+            <Database size={16} aria-hidden="true" />
+            <span>已索引</span>
+            <strong>{environmentStatus?.indexedPaperCount ?? '-'}</strong>
+          </div>
+          <div className="settings-status-card">
+            <Database size={16} aria-hidden="true" />
+            <span>论文卡片</span>
+            <strong>{environmentStatus?.cardCount ?? '-'}</strong>
+          </div>
+          <div className="settings-status-card">
+            <MessageSquare size={16} aria-hidden="true" />
+            <span>对话</span>
+            <strong>{environmentStatus?.conversationCount ?? '-'}</strong>
+          </div>
+        </div>
+
+      </section>
     </main>
   )
 }

@@ -39,14 +39,26 @@ CREATE TABLE IF NOT EXISTS paper_cards (
   FOREIGN KEY(paper_id) REFERENCES papers(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS conversation_folders (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS conversations (
   id TEXT PRIMARY KEY,
   title TEXT NOT NULL,
   folder_id TEXT,
+  conversation_folder_id TEXT,
+  dify_conversation_id TEXT,
   context_json TEXT NOT NULL,
+  sort_order INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
-  FOREIGN KEY(folder_id) REFERENCES folders(id) ON DELETE SET NULL
+  FOREIGN KEY(folder_id) REFERENCES folders(id) ON DELETE SET NULL,
+  FOREIGN KEY(conversation_folder_id) REFERENCES conversation_folders(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS messages (

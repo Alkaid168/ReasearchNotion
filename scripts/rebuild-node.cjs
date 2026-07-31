@@ -6,6 +6,7 @@ const path = require('node:path')
 function candidatePnpmExecutables() {
   const candidates = []
   candidates.push(path.join(os.homedir(), '.cache', 'codex-runtimes', 'codex-primary-runtime', 'dependencies', 'bin', 'pnpm.cmd'))
+  candidates.push(process.platform === 'win32' ? 'corepack.cmd' : 'corepack')
   if (process.env.npm_execpath) {
     candidates.push(process.env.npm_execpath)
   }
@@ -20,8 +21,9 @@ function runPnpm(args) {
 
     const isScript = candidate.endsWith('.js') || candidate.endsWith('.cjs')
     const isCmd = process.platform === 'win32' && /\.(cmd|bat)$/i.test(candidate)
+    const isCorepack = /(^|[/\\])corepack(\.cmd)?$/i.test(candidate)
     const command = isScript ? process.execPath : candidate
-    const commandArgs = isScript ? [candidate, ...args] : args
+    const commandArgs = isScript ? [candidate, ...args] : isCorepack ? ['pnpm', ...args] : args
     const result = spawnSync(command, commandArgs, { stdio: 'inherit', shell: isCmd })
 
     if (result.error && result.error.code === 'ENOENT') continue

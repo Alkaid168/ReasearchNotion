@@ -13,6 +13,14 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     globals: true,
-    setupFiles: []
+    setupFiles: ['tests/setup.ts'],
+    // Renderer tests temporarily replace browser globals such as navigator.clipboard.
+    // Keep files isolated in time so those mocks cannot race across test files.
+    fileParallelism: false,
+    poolOptions: {
+      threads: {
+        singleThread: true
+      }
+    }
   }
 })

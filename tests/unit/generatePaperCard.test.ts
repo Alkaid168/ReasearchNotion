@@ -39,4 +39,31 @@ describe('generate paper card workflow', () => {
       })
     )
   })
+
+  it('parses paper-card JSON when the model includes reasoning tags', async () => {
+    const sendChatMessage = vi.fn().mockResolvedValue({
+      answer: `<think>drafting fields</think>
+{
+  "authors": "",
+  "year": "",
+  "oneSentenceSummary": "RAG improves factual grounding.",
+  "researchProblem": "Hallucination in generation-only models",
+  "methodSummary": "Retrieve relevant passages before generation.",
+  "contributions": ["Uses external knowledge before generation"],
+  "keywords": ["RAG"]
+}`
+    })
+
+    await expect(
+      generatePaperCard({
+        paperId: 'paper-1',
+        title: 'RAG Survey',
+        dify: { sendChatMessage }
+      })
+    ).resolves.toMatchObject({
+      oneSentenceSummary: 'RAG improves factual grounding.',
+      contributions: ['Uses external knowledge before generation'],
+      keywords: ['RAG']
+    })
+  })
 })
