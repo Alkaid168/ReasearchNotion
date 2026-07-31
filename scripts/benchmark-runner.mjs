@@ -43,7 +43,7 @@ function latestReport(prefix) {
   return JSON.parse(fs.readFileSync(path.resolve(benchDir, files[files.length - 1]), 'utf8'))
 }
 
-function main() {
+async function main() {
   const toolK = Number(process.env.RESEARCH_NOTION_BENCHMARK_K ?? 3)
   const trustK = Number(process.env.RESEARCH_NOTION_TRUST_K ?? 2)
 
