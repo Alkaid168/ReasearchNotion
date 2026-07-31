@@ -3,6 +3,7 @@
 .codex/
 .superpowers/
 .worktrees/
+docs/superpowers/
 
 # Course notification materials kept outside the public source repo
 教学通知/
@@ -12,6 +13,7 @@ node_modules/
 dist/
 build/
 out/
+output/
 
 # Local runtime data
 .env
@@ -22,6 +24,19 @@ storage/
 uploads/
 logs/
 *.log
+papers/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+tool-service-token
+
+# Visual exploration and local UI checks
+assets/brand/
+scripts/generate-*.py
+chat-preview.png
+knowledge-*.png
+ResearchNotion-*.png
+output-*.svg
 
 # OS/editor noise
 .DS_Store
