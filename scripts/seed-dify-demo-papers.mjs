@@ -255,7 +255,7 @@ import sys
 payload = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
 pathlib.Path(payload["dbPath"]).parent.mkdir(parents=True, exist_ok=True)
 conn = sqlite3.connect(payload["dbPath"])
-now = datetime.datetime.now(datetime.UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+now = datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 folder = payload["folder"]
 paper = payload["paper"]
