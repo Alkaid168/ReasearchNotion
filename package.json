@@ -32,6 +32,7 @@
     "@electron-toolkit/preload": "^3.0.1",
     "better-sqlite3": "^12.11.1",
     "electron-store": "^10.0.1",
+    "jsonrepair": "^3.15.0",
     "katex": "^0.17.0",
     "lucide-react": "^0.468.0",
     "pdfjs-dist": "^4.10.38",

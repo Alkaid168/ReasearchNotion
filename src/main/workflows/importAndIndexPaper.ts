@@ -63,7 +63,8 @@ async function uploadAndGenerateCard(input: {
         ...card,
         readingStatus: existingCard?.readingStatus
       })
-    } catch {
+    } catch (cardError) {
+      console.error(`[paperCard] 生成失败 paperId=${input.paper.id}`, cardError)
       input.repos.paperCards.upsert({
         paperId: input.paper.id,
         authors: '',
