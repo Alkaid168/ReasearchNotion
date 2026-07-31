@@ -71,7 +71,9 @@ async function ensureDataset(datasetToken) {
     },
     body: JSON.stringify({
       name: datasetName,
-      indexing_technique: 'economy',
+      indexing_technique: 'high_quality',
+      embedding_model: 'bge-m3',
+      embedding_model_provider: 'langgenius/openai_api_compatible/openai_api_compatible',
       permission: 'only_me'
     })
   })

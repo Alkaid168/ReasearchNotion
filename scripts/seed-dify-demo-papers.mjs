@@ -174,7 +174,7 @@ async function uploadPaper({ datasetId, datasetToken, paper, bytes }) {
   form.append(
     'data',
     JSON.stringify({
-      indexing_technique: 'economy',
+      indexing_technique: 'high_quality',
       process_rule: { mode: 'automatic' }
     })
   )
