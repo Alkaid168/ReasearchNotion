@@ -1,0 +1,21 @@
+appId: com.researchnotion.desktop
+productName: ResearchNotion
+directories:
+  output: release
+  buildResources: resources
+files:
+  - dist/**/*
+  - resources/**/*
+  - "!dist/**/*.map"
+extraResources:
+  - from: node_modules/pdfjs-dist/standard_fonts
+    to: standard_fonts
+win:
+  target:
+    - target: dir
+      arch: [x64]
+  icon: resources/research-notion.ico
+asar: true
+asarUnpack:
+  - "**/better-sqlite3/**"
+  - "**/@napi-rs/canvas/**"
