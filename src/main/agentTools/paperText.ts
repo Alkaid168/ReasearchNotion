@@ -58,28 +58,77 @@ function normalizeText(text: string): string {
   return text.replace(/\s+/g, ' ').trim()
 }
 
-function pdfItemsToText(items: unknown[]): string {
+type PositionedItem = {
+  str: string
+  x: number
+  y: number
+  hasEOL: boolean
+}
+
+function extractPositionedItems(items: unknown[]): PositionedItem[] {
+  return items
+    .filter(isPdfTextItem)
+    .map((item) => ({
+      str: item.str,
+      x: Array.isArray(item.transform) && typeof item.transform[4] === 'number' ? item.transform[4] : 0,
+      y: Array.isArray(item.transform) && typeof item.transform[5] === 'number' ? item.transform[5] : 0,
+      hasEOL: Boolean(item.hasEOL)
+    }))
+}
+
+/** Sort items by Y (top to bottom) and group into lines (same Y within 2pt tolerance). */
+export function itemsToLines(items: PositionedItem[]): string {
+  if (items.length === 0) return ''
+  const sorted = [...items].sort((a, b) => b.y - a.y)
   const lines: string[] = []
   let currentLine: string[] = []
   let previousY: number | null = null
 
-  const flushLine = () => {
-    const line = normalizeText(currentLine.join(' '))
-    if (line) lines.push(line)
-    currentLine = []
-  }
-
-  items.forEach((item) => {
-    if (!isPdfTextItem(item)) return
-    const y = Array.isArray(item.transform) && typeof item.transform[5] === 'number' ? item.transform[5] : null
-    if (previousY !== null && y !== null && Math.abs(y - previousY) > 2 && currentLine.length > 0) flushLine()
+  for (const item of sorted) {
+    if (previousY !== null && Math.abs(item.y - previousY) > 2 && currentLine.length > 0) {
+      const line = normalizeText(currentLine.join(' '))
+      if (line) lines.push(line)
+      currentLine = []
+    }
     if (item.str.trim()) currentLine.push(item.str)
-    if (item.hasEOL) flushLine()
-    if (y !== null) previousY = y
-  })
-  flushLine()
+    if (item.hasEOL) {
+      const line = normalizeText(currentLine.join(' '))
+      if (line) lines.push(line)
+      currentLine = []
+    }
+    previousY = item.y
+  }
+  const line = normalizeText(currentLine.join(' '))
+  if (line) lines.push(line)
 
   return lines.join('\n')
+}
+
+/**
+ * Convert PDF text items to page text. Detects double-column layouts (common in
+ * academic papers: IEEE/ACM/Springer) and reads the left column fully before
+ * the right column, instead of interleaving same-Y items from both columns.
+ *
+ * T8 stage 1: double-column sort. OCR (stage 2) and table extraction (stage 3)
+ * are future work.
+ */
+export function pdfItemsToText(items: unknown[], pageWidth?: number): string {
+  const positioned = extractPositionedItems(items)
+  if (positioned.length === 0) return ''
+
+  const width = pageWidth ?? positioned.reduce((max, item) => Math.max(max, item.x), 0)
+  const mid = width / 2
+  const leftItems = positioned.filter((item) => item.x < mid)
+  const rightItems = positioned.filter((item) => item.x >= mid)
+
+  // Single-column guard: if one side has <15% of items, treat as single column
+  const threshold = positioned.length * 0.15
+  if (leftItems.length < threshold || rightItems.length < threshold) {
+    return itemsToLines(positioned)
+  }
+
+  // Double-column: left column first, then right
+  return `${itemsToLines(leftItems)}\n${itemsToLines(rightItems)}`
 }
 
 function cacheKey(paper: Paper): string {
@@ -120,8 +169,9 @@ async function readPaperPagesUncached(paper: Paper): Promise<PaperTextPage[]> {
   try {
     for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
       const page = await pdf.getPage(pageNumber)
+      const viewport = page.getViewport({ scale: 1 })
       const textContent = await page.getTextContent()
-      const text = pdfItemsToText(textContent.items)
+      const text = pdfItemsToText(textContent.items, viewport.width)
       pages.push({ pageNumber, text })
     }
   } finally {
