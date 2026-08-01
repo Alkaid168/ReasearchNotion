@@ -2,6 +2,7 @@ import type { createRepositories } from '../db/repositories'
 import type { Paper, PaperOutlineItem } from '../../shared/types'
 import type { ReadingStateStore } from './readingState'
 import { chunkPaperText, collectPaperEvidence, extractOutline, extractSection, readPaperPages, searchPages } from './paperText'
+import { searchArxiv, searchSemanticScholar } from './externalSearch'
 
 type Repositories = ReturnType<typeof createRepositories>
 
@@ -347,6 +348,14 @@ export function createAgentToolHandlers({ repos, readingState }: ToolDeps) {
         evidenceByPaper,
         noEvidencePaperIds: evidenceByPaper.filter((item) => item.evidence.length === 0).map((item) => item.paper.id)
       }
+    },
+
+    // T12a: External search tools
+    async searchArxiv(query: string, maxResults = 5) {
+      return searchArxiv(query, maxResults)
+    },
+    async searchSemanticScholar(query: string, maxResults = 5) {
+      return searchSemanticScholar(query, maxResults)
     }
   }
 }

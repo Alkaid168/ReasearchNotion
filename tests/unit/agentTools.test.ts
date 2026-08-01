@@ -657,7 +657,7 @@ describe('agent OpenAPI tool service', () => {
       expect(service.getStatus()).toEqual({
         running: false,
         baseUrl: null,
-        operationCount: 12
+        operationCount: 14
       })
 
     await service.start()
@@ -665,7 +665,7 @@ describe('agent OpenAPI tool service', () => {
       expect(service.getStatus()).toMatchObject({
         running: true,
         baseUrl: expect.stringMatching(/^http:\/\/127\.0\.0\.1:\d+$/),
-        operationCount: 12
+        operationCount: 14
       })
     } finally {
       await service.stop()

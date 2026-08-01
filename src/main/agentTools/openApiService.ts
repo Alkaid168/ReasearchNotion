@@ -212,6 +212,36 @@ const routes: Route[] = [
         }
       }
     }
+  },
+  {
+    method: 'GET',
+    path: '/tools/external/arxiv',
+    operationId: 'search_arxiv',
+    description: '在 arXiv 上搜索外部论文。返回标题、作者、摘要、arXiv 链接。用于查找本地论文库之外的最新或相关研究。',
+    requestSchema: {
+      type: 'object',
+      required: ['query'],
+      additionalProperties: false,
+      properties: {
+        query: { type: 'string', description: '搜索关键词，建议用英文。' },
+        maxResults: { type: 'integer', minimum: 1, maximum: 10, default: 5, description: '返回结果数量。' }
+      }
+    }
+  },
+  {
+    method: 'GET',
+    path: '/tools/external/scholar',
+    operationId: 'search_semantic_scholar',
+    description: '在 Semantic Scholar 上搜索外部论文。返回标题、作者、摘要、引用数、DOI。适合查找高引论文和影响力分析。',
+    requestSchema: {
+      type: 'object',
+      required: ['query'],
+      additionalProperties: false,
+      properties: {
+        query: { type: 'string', description: '搜索关键词，建议用英文。' },
+        maxResults: { type: 'integer', minimum: 1, maximum: 10, default: 5, description: '返回结果数量。' }
+      }
+    }
   }
 ]
 
