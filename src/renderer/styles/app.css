@@ -3667,3 +3667,144 @@ button {
     display: none;
   }
 }
+
+/* === T12b: Settings memories (research preferences) === */
+.settings-memories-empty {
+  color: var(--rn-muted);
+  font-size: 13px;
+  line-height: 1.6;
+  margin: 0;
+}
+
+.settings-memories-list {
+  display: grid;
+  gap: 10px;
+}
+
+.settings-memory-card {
+  border: 1px solid var(--rn-border);
+  border-radius: 8px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.82), rgba(240, 243, 241, 0.68));
+  padding: 12px 14px;
+}
+
+.settings-memory-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.settings-memory-head strong {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--rn-text);
+}
+
+.settings-memory-desc {
+  font-size: 12px;
+  color: var(--rn-muted-2);
+}
+
+.settings-memory-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  background: var(--rn-accent-soft);
+  color: var(--rn-accent);
+}
+
+.settings-memory-badge.preference {
+  background: var(--rn-blue-soft);
+  color: var(--rn-blue-text);
+}
+
+.settings-memory-badge.feedback {
+  background: #fff1ee;
+  color: #9a4033;
+}
+
+.settings-memory-badge.project {
+  background: #f3f0ff;
+  color: #5a44a0;
+}
+
+.settings-memory-badge.reference {
+  background: #fef5e7;
+  color: #8a6d2c;
+}
+
+.settings-memory-body {
+  margin: 0 0 8px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--rn-muted);
+}
+
+.settings-memory-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.settings-memory-editor {
+  width: min(780px, 100%);
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--rn-border-strong);
+  border-radius: 8px;
+  background: var(--rn-surface);
+  padding: 16px;
+  margin-bottom: 4px;
+}
+
+.settings-memory-select {
+  width: 100%;
+  height: 44px;
+  border: 1px solid var(--rn-border);
+  border-radius: 8px;
+  background: var(--rn-surface);
+  color: var(--rn-text);
+  outline: 0;
+  padding: 0 12px;
+  font-size: 14px;
+  appearance: none;
+}
+
+.settings-memory-select:focus {
+  border-color: var(--rn-border-strong);
+  box-shadow: 0 0 0 3px rgb(37 111 91 / 10%);
+}
+
+.settings-memory-textarea {
+  width: 100%;
+  min-height: 64px;
+  border: 1px solid var(--rn-border);
+  border-radius: 8px;
+  background: var(--rn-surface);
+  color: var(--rn-text);
+  outline: 0;
+  padding: 10px 12px;
+  font-size: 14px;
+  font-family: inherit;
+  resize: vertical;
+}
+
+.settings-memory-textarea:focus {
+  border-color: var(--rn-border-strong);
+  box-shadow: 0 0 0 3px rgb(37 111 91 / 10%);
+}
+
+.secondary-action.danger {
+  color: #9a4033;
+  border-color: #ead0cc;
+}
+
+.secondary-action.danger:hover {
+  background: #fff1ee;
+}

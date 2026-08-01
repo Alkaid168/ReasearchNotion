@@ -50,7 +50,7 @@ function createApiMock(status: EnvironmentStatus = unconfiguredStatus): DesktopA
         updatedAt: '2026-07-08T00:00:00.000Z'
       })
     },
-    memories: { list: vi.fn(), save: vi.fn(), delete: vi.fn() },
+    memories: { list: vi.fn().mockResolvedValue([]), save: vi.fn(), delete: vi.fn() },
     papers: {
       list: vi.fn(),
       import: vi.fn(),
