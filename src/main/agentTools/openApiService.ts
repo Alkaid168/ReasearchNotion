@@ -376,6 +376,20 @@ export function createOpenApiToolService({ tools, readingState, authToken, prefe
         sendJson(response, 200, await tools.listLibraryPapers({ folderId: url.searchParams.get('folderId') }))
         return
       }
+      if (request.method === 'GET' && url.pathname === '/tools/external/arxiv') {
+        sendJson(response, 200, await tools.searchArxiv(
+          url.searchParams.get('query') ?? '',
+          Number(url.searchParams.get('maxResults') ?? 5)
+        ))
+        return
+      }
+      if (request.method === 'GET' && url.pathname === '/tools/external/scholar') {
+        sendJson(response, 200, await tools.searchSemanticScholar(
+          url.searchParams.get('query') ?? '',
+          Number(url.searchParams.get('maxResults') ?? 5)
+        ))
+        return
+      }
       const body = request.method === 'POST' ? await readRequestJson(request) : {}
       if (request.method === 'POST' && url.pathname.startsWith('/tools/')) {
         recordToolInvocation(request.method, url.pathname, body)
