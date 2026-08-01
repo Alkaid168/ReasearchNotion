@@ -1,4 +1,5 @@
 import { ipcMain } from 'electron'
+import { syncDeepseekApiKey } from './settings/modelKeySync'
 import type {
   ConversationListOptions,
   ConversationExportResult,
@@ -86,7 +87,15 @@ export type IpcServices = {
 export function registerIpc(services: IpcServices): void {
   ipcMain.handle('app:getEnvironmentStatus', () => services.app.getEnvironmentStatus())
   ipcMain.handle('settings:get', () => services.settings.get())
-  ipcMain.handle('settings:save', (_event, settings: AppSettings) => services.settings.save(settings))
+  ipcMain.handle('settings:save', async (_event, settings: AppSettings) => {
+    const saved = await services.settings.save(settings)
+    try {
+      syncDeepseekApiKey(settings.deepseekApiKey)
+    } catch (error) {
+      console.error('[modelKey] sync to Dify failed (best-effort, ignored):', error)
+    }
+    return saved
+  })
   ipcMain.handle('settings:testConnection', (_event, settings: AppSettings) => services.settings.testConnection(settings))
   ipcMain.handle('folders:list', () => services.folders.list())
   ipcMain.handle('folders:create', (_event, input: { name: string; parentId: string | null }) =>

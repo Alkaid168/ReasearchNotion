@@ -8,6 +8,7 @@ const emptySettings: AppSettings = {
   difyBaseUrl: '',
   difyAppApiKey: '',
   difyKnowledgeApiKey: '',
+    deepseekApiKey: '',
   defaultFolderId: null
 }
 

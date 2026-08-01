@@ -97,6 +97,7 @@ export type AppSettings = {
   difyBaseUrl: string
   difyAppApiKey: string
   difyKnowledgeApiKey: string
+  deepseekApiKey: string
   defaultFolderId: string | null
 }
 

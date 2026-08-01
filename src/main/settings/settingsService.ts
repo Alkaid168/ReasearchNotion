@@ -6,6 +6,7 @@ const keys = {
   difyBaseUrl: 'difyBaseUrl',
   difyAppApiKey: 'difyAppApiKey',
   difyKnowledgeApiKey: 'difyKnowledgeApiKey',
+  deepseekApiKey: 'deepseekApiKey',
   defaultFolderId: 'defaultFolderId'
 } as const
 
@@ -27,6 +28,7 @@ export function createSettingsService(db: Database.Database, secretBox: SecretBo
       difyBaseUrl: getRaw(keys.difyBaseUrl),
       difyAppApiKey: secretBox.unseal(getRaw(keys.difyAppApiKey)),
       difyKnowledgeApiKey: secretBox.unseal(getRaw(keys.difyKnowledgeApiKey)),
+      deepseekApiKey: secretBox.unseal(getRaw(keys.deepseekApiKey)),
       defaultFolderId: getRaw(keys.defaultFolderId) || null
     }
   }
@@ -37,6 +39,7 @@ export function createSettingsService(db: Database.Database, secretBox: SecretBo
       setRaw(keys.difyBaseUrl, settings.difyBaseUrl.trim().replace(/\/+$/, ''))
       setRaw(keys.difyAppApiKey, secretBox.seal(settings.difyAppApiKey.trim()))
       setRaw(keys.difyKnowledgeApiKey, secretBox.seal(settings.difyKnowledgeApiKey.trim()))
+      setRaw(keys.deepseekApiKey, secretBox.seal(settings.deepseekApiKey.trim()))
       setRaw(keys.defaultFolderId, settings.defaultFolderId ?? '')
       return readSettings()
     }

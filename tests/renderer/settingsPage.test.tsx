@@ -8,6 +8,7 @@ const emptySettings: AppSettings = {
   difyBaseUrl: '',
   difyAppApiKey: '',
   difyKnowledgeApiKey: '',
+    deepseekApiKey: '',
   defaultFolderId: null
 }
 
@@ -101,6 +102,7 @@ describe('SettingsPage', () => {
         difyBaseUrl: 'http://localhost:8080/',
         difyAppApiKey: 'app-key',
         difyKnowledgeApiKey: 'knowledge-key',
+    deepseekApiKey: '',
         defaultFolderId: null
       })
     })
@@ -119,6 +121,7 @@ describe('SettingsPage', () => {
         difyBaseUrl: 'http://localhost:8080',
         difyAppApiKey: 'app-key',
         difyKnowledgeApiKey: 'knowledge-key',
+    deepseekApiKey: '',
         defaultFolderId: null
       })
     })

@@ -8,6 +8,7 @@ const emptySettings: AppSettings = {
   difyBaseUrl: '',
   difyAppApiKey: '',
   difyKnowledgeApiKey: '',
+  deepseekApiKey: '',
   defaultFolderId: null
 }
 
@@ -149,6 +150,20 @@ export function SettingsPage({ onSettingsSaved, onConnectionTested }: SettingsPa
             value={settings.difyKnowledgeApiKey}
             onChange={(event) => updateField('difyKnowledgeApiKey', event.target.value)}
             placeholder="dataset-..."
+            type="password"
+            disabled={loading}
+          />
+        </label>
+
+        <label className="settings-field">
+          <span>
+            <KeyRound size={16} aria-hidden="true" />
+            DeepSeek API Key（模型密钥，保存时自动同步到 Dify）
+          </span>
+          <input
+            value={settings.deepseekApiKey}
+            onChange={(event) => updateField('deepseekApiKey', event.target.value)}
+            placeholder="sk-..."
             type="password"
             disabled={loading}
           />
