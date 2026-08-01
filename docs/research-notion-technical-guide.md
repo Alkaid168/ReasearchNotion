@@ -185,7 +185,7 @@ RAG 是 **Retrieval-Augmented Generation，检索增强生成**。它的核心�
 
 答案是：**有，但分两条路径，能力不同。**
 
-#### A. 稳定 Workflow 路径：Dify 关键词 RAG
+#### A. 稳定 Workflow 路径：Dify 向量 RAG（T9 升级，2026-07-31）
 
 `ResearchNotion Academic QA Agent` 是一个 Dify Advanced Chat Workflow：
 
@@ -195,16 +195,18 @@ RAG 是 **Retrieval-Augmented Generation，检索增强生成**。它的核心�
 
 它把用户问题交给 Dify 的知识库检索节点，并把召回的片段放进大模型上下文。因此它属于 RAG。
 
-不过当前上传代码明确使用：
+**T9（2026-07-31）之前**是 `economy` 关键词索引（无 embedding，基于文本关键词的经济型检索）；**T9 之后**改为 `high_quality` 向量索引，使用本地 TEI `bge-m3` embedding（1024 维）。上传代码（`provision-dify-research-agent.mjs` + `seed-dify-demo-papers.mjs`）已默认 `high_quality`：
 
 ```json
 {
-  "indexing_technique": "economy",
+  "indexing_technique": "high_quality",
+  "embedding_model": "bge-m3",
+  "embedding_model_provider": "langgenius/openai_api_compatible/openai_api_compatible",
   "process_rule": { "mode": "automatic" }
 }
 ```
 
-项目文档也明确说明：本机 Dify 当时没有配置默认文本 embedding 模型，因此采用 `economy` 索引。这个模式可以理解为**基于文本关键词的经济型检索**，不需要把每段文本转换成向量。
+详见 §2.5（embedding 模型）和 `docs/dify-local-deploy.md` §9（部署步骤）。
 
 #### B. 自治 Tool Agent 路径：本地全文工具取证
 
@@ -214,15 +216,16 @@ RAG 是 **Retrieval-Augmented Generation，检索增强生成**。它的核心�
 
 ### 2.5 有没有 embedding 模型？用的什么？
 
-**当前实际答案：没有启用 embedding 模型，因此不存在“当前项目使用了某某 embedding 模型”。**
+**当前实际答案（2026-07-31 T9 更新）：已启用 `BAAI/bge-m3` embedding 模型（本地 TEI GPU 容器），知识库索引为 `high_quality` 向量。**
 
-这不是猜测，而是由当前配置与项目文档共同确认的：上传使用 Dify `economy` 索引，项目文档明确写明“本机 Dify 尚未配置默认文本 embedding 模型”。因此下面这些说法在当前版本都是错误的：
+T9（2026-07-31）之前是 Dify `economy` 关键词索引（无 embedding）；T9 部署了本地 TEI（Text Embeddings Inference）bge-m3 容器（GPU），通过 Dify `openai_api_compatible` provider 接入，知识库改为 `high_quality` 向量索引。**Workflow 路径（论文卡片 + 问答）现在走向量召回**；Tool Agent 路径仍用本地工具的词法检索（不经 Dify 知识库，不受此影响）。
 
-- “我们用了 BGE-M3 向量模型”；
-- “每篇论文都已经变成向量存到向量数据库”；
-- “当前 RAG 是语义向量召回”。
+- embedding 模型：`BAAI/bge-m3`（568M 参数，FP16 ~1.13GB，1024 维，8192 token 上下文，100+ 语言含中英）。
+- 服务：本地 Docker TEI（`D:/CODES/dify/docker/docker-compose.tei.yaml`，GPU），OpenAI 兼容 `/v1/embeddings` endpoint。
+- Dify provider：`langgenius/openai_api_compatible`（plugin 从源码 build `.difypkg` + 关签名 + upload install，绕 Dify 1.16.1 marketplace bug；详见 `docs/dify-local-deploy.md` §9）。
+- **reranker 暂未启用**：TEI 1.5 把 bge-reranker-v2-m3 当 embedding backend（FlashBert，不兼容 classifier）→ restart loop。两阶段检索需换 Infinity 或 classifier 镜像（future work）。
 
-后续要升级为向量 RAG，才需要在 Dify 配置 embedding provider，并把索引改成 `high_quality` 或在桌面端自行接入向量数据库。候选可包括 `bge-m3`、`bge-large-zh-v1.5`、`text-embedding-3-large` 等，但选择必须结合中文/英文论文比例、成本、是否本地部署和检索评测结果，不能只看模型名字。
+> 答辩注意：现在可以说"用了 bge-m3 向量检索"，但要区分路径——**Workflow RAG**（知识库检索节点）是向量召回；**Tool Agent**（12 个本地工具）仍是词法检索（非向量）。两条路径检索机制不同，不要混为一谈。
 
 ### 2.6 当前工具召回使用什么算法
 

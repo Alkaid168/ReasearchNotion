@@ -117,3 +117,84 @@ node scripts/benchmark-runner.mjs               # T6 完整评测（tool k=3 + t
 | Electron dev（工具服务 17777）/ smoke / benchmark | `node node_modules/@electron/rebuild/lib/cli.js -f -w better-sqlite3` |
 
 > ResearchNotion 的 `scripts/start-dify.ps1` 硬编码 `F:\CODES\dify`；本机部署在 `D:\CODES\dify`，需改路径或用 env 覆盖（本笔记所有命令直接用 `D:/CODES/dify/docker`）。
+
+## 9. 向量检索（T9: bge-m3 + high_quality）
+
+> 启用向量 RAG（替代默认 economy 关键词）。需 TEI bge-m3 容器 + openai_api_compatible plugin。
+> **Dify 1.16.1 marketplace 坏**（plugin_daemon fetch manifest 调旧 API 404），绕 marketplace：build .difypkg + 关签名 + upload install。
+
+### 9.1 TEI bge-m3 容器（GPU）
+```bash
+# 预下载模型（绕 TEI download "relative URL without base" bug；排除 onnx/.DS_Store）
+HF_ENDPOINT=https://hf-mirror.com NO_PROXY="*" python -c "
+from huggingface_hub import snapshot_download
+snapshot_download('BAAI/bge-m3', local_dir='D:/CODES/dify/tei-models/bge-m3',
+  allow_patterns=['*.json','*.safetensors','*.bin','tokenizer*','vocab*','1_Pooling/*'])
+"
+# .wslconfig 改 memory=16GB（Dify 16 容器 + TEI，原 8GB OOM 137）→ wsl --shutdown
+
+# docker-compose.tei.yaml（bind mount 本地模型 + GPU）
+cat > D:/CODES/dify/docker/docker-compose.tei.yaml <<'EOF'
+services:
+  tei-embedding:
+    image: ghcr.io/huggingface/text-embeddings-inference:1.5
+    command: --model-id /models/bge-m3
+    ports: ["7080:80"]
+    volumes: ["D:/CODES/dify/tei-models:/models"]
+    deploy: { resources: { reservations: { devices: [{ driver: nvidia, capabilities: [gpu] }] } } }
+    restart: unless-stopped
+EOF
+cd D:/CODES/dify/docker && docker compose -f docker-compose.yaml -f docker-compose.tei.yaml up -d tei-embedding
+# 验证（用 Dify 容器内部网络，主机 7080 Windows Docker 端口转发可能不通）
+docker exec docker-api-1 curl -s http://tei-embedding:80/v1/embeddings -X POST \
+  -H "Content-Type: application/json" -d '{"model":"bge-m3","input":"test"}'
+```
+
+### 9.2 装 openai_api_compatible plugin（绕 marketplace）
+```bash
+# 1) build .difypkg from source（dify plugin package CLI 不在 pip/uv，手动 zip 够）
+git clone --depth 1 https://github.com/langgenius/dify-official-plugins.git D:/CODES/dify-official-plugins
+cd D:/CODES/dify-official-plugins/models/openai_api_compatible
+python -c "
+import zipfile, os
+out=r'D:\CODES\dify-official-plugins\openai_api_compatible.difypkg'
+with zipfile.ZipFile(out,'w',zipfile.ZIP_DEFLATED) as z:
+    for r,d,f in os.walk('.'):
+        d[:]=[x for x in d if x not in ('__pycache__','.git','.venv')]
+        for fn in f: z.write(os.path.join(r,fn), os.path.relpath(os.path.join(r,fn),'.'))
+print('built', os.path.getsize(out))"
+
+# 2) 关签名（自托管默认验签；env 在 plugin_daemon service，force-recreate 才生效）
+cd D:/CODES/dify/docker && echo "FORCE_VERIFYING_SIGNATURE=false" >> .env
+docker compose up -d --force-recreate plugin_daemon
+
+# 3) upload（field "pkg" 非 file）+ install
+PASS_B64=$(printf 'ResearchNotion2026!' | base64)
+curl -c /tmp/dc.txt -X POST http://localhost:8080/console/api/login \
+  -H "Content-Type: application/json" -d "{\"email\":\"admin@researchnotion.local\",\"password\":\"$PASS_B64\"}"
+CSRF=$(awk '/csrf_token/{print $7}' /tmp/dc.txt)
+RESP=$(curl -b /tmp/dc.txt -X POST http://localhost:8080/console/api/workspaces/current/plugin/upload/pkg \
+  -H "X-CSRF-Token: $CSRF" -F "pkg=@D:/CODES/dify-official-plugins/openai_api_compatible.difypkg")
+PLUGIN_UID=$(echo "$RESP" | node -e "let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>console.log(JSON.parse(d).unique_identifier))")
+curl -b /tmp/dc.txt -X POST http://localhost:8080/console/api/workspaces/current/plugin/install/pkg \
+  -H "Content-Type: application/json" -H "X-CSRF-Token: $CSRF" \
+  -d "{\"plugin_unique_identifiers\":[\"$PLUGIN_UID\"]}"
+# 轮询 plugin/list 确认装上（~60s）
+```
+
+### 9.3 配 embedding + 切 high_quality
+```bash
+# 配 bge-m3（max_chunks/context_size 必须 string！数字报 TypeError）
+curl -b /tmp/dc.txt -X POST "http://localhost:8080/console/api/workspaces/current/model-providers/langgenius/openai_api_compatible/openai_api_compatible/models/credentials" \
+  -H "Content-Type: application/json" -H "X-CSRF-Token: $CSRF" \
+  -d '{"model_type":"text-embedding","model":"bge-m3","credentials":{"api_key":"dummy","endpoint_url":"http://tei-embedding:80/v1","max_chunks":"32","context_size":"8192","display_name":"bge-m3 (TEI)"}}'
+
+# 切 dataset high_quality（Dify 自动后台重索引，~40s 后 embedding_available=true）
+curl -b /tmp/dc.txt -X PATCH "http://localhost:8080/console/api/datasets/<dataset_id>" \
+  -H "Content-Type: application/json" -H "X-CSRF-Token: $CSRF" \
+  -d '{"indexing_technique":"high_quality","embedding_model":"bge-m3","embedding_model_provider":"langgenius/openai_api_compatible/openai_api_compatible"}'
+```
+
+> provision-dify-research-agent.mjs + seed-dify-demo-papers.mjs 默认 high_quality（commit 1ba5383），新部署自动向量索引。
+>
+> **reranker**：TEI 1.5 把 bge-reranker-v2-m3 当 FlashBert（embedding backend），不兼容 classifier → exit 0 restart loop。两阶段检索需换 Infinity 或 classifier 镜像。
