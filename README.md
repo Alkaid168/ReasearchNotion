@@ -1,84 +1,108 @@
-# ReasearchNotion
+# ResearchNotion
 
-ReasearchNotion 是一个面向科研论文管理与问答的本地桌面软件设想。它借鉴 Notion AI 的对话入口和 Codex 式工作台体验，将本地论文库、阅读器和 Dify RAG 智能体组合成一个个人科研知识库。
+ResearchNotion 是一个面向科研论文管理与问答的本地桌面软件。它借鉴 Notion AI 的对话入口和 Codex 式工作台体验，将本地论文库、阅读器和 Dify RAG 智能体组合成一个个人科研知识库。
 
-当前阶段：本地桌面 MVP 原型实现中。
+当前阶段：MVP + P2 功能完成（向量检索 / 评测集 / 用户记忆 / 外网搜索 / 模型 Key 桌面端配置 / 双栏 PDF）。
 
-## MVP 方向
+## 核心功能
 
-- 桌面软件，默认进入 AI 对话页。
-- 知识库页采用阅读器优先布局。
-- 支持 PDF 和 Markdown 论文导入。
-- 每个论文文件夹对应一个 Dify 知识库 dataset。
-- 上传后自动生成论文卡片。
-- 对话页可选择论文库或单篇论文作为上下文。
-- 知识库阅读页通过快捷键呼出 AI 问答栏。
-- 设置页手动配置 Dify 地址和 API Key。
+### AI 科研助手（两条路径）
+- **Workflow RAG**（稳定路径）：Dify 知识库检索 → LLM 回答 / 论文卡片。支持**向量检索**（bge-m3 via 本地 TEI GPU 容器）。
+- **Tool Agent**（自治路径）：Dify Agent Chat 自主调用 **14 个本地工具**（论文阅读、章节抽取、跨库取证、**arXiv / Semantic Scholar 外网搜索**），最多 12 轮 function-call 迭代。
+
+### 论文管理
+- PDF / Markdown 导入，自动生成论文卡片（Zod schema 校验 + jsonrepair + LLM repair retry）。
+- 论文卡片包含作者、年份、一句话摘要、研究问题、方法、贡献、关键词。
+- 支持 Notion 风格论文库导航、对话历史管理。
+
+### 桌面端体验
+- Electron + React 19 + TypeScript 桌面应用。
+- PDF canvas 阅读器（适宽、翻页、缩放、Ctrl+I 呼出 AI）。
+- **双栏 PDF 排序**（自动检测 IEEE/ACM/Springer 双栏布局，左栏读完再右栏）。
+- Settings 页一站式配置（Dify 地址 + App/Knowledge Key + **DeepSeek 模型 Key 桌面端同步**）。
+- **研究偏好记忆**（5 类：身份 / 偏好 / 纠正 / 课题 / 资源，每次对话自动注入）。
+
+### 评测与质量
+- **Agent benchmark**（pass^k 可靠性 + JSON 报告 + baseline diff）：11 个能力 case + 5 个安全 case。
+- 论文卡片 Zod schema + jsonrepair + repair retry（18 测试覆盖各类坏 JSON）。
 
 ## 设计文档
 
-- [ResearchNotion 技术说明与答辩学习手册](docs/research-notion-technical-guide.md)
-- [MVP Runbook](docs/mvp-runbook.md)
+- [ResearchNotion 技术说明与答辩学习手册](docs/research-notion-technical-guide.md) — 核心文档，1112+ 行，严格区分已实现/未实现
+- [Dify 本地部署笔记](docs/dify-local-deploy.md) — 命令行部署全流程（含 TEI 向量检索 + SSRF + 签名绕 marketplace）
+- [MVP Runbook](docs/mvp-runbook.md) — 演示准备与验证流程
 - [Dify 科研学术问答智能体配置](docs/dify-research-agent.md)
 - [Dify Workflow 搭建说明](docs/dify-workflow-build-guide.md)
+- [桌面端视觉审计清单](docs/visual-audit-checklist.md)
 
 ## 本地运行
 
-Windows 上可以直接双击：
-
+### 快速启动（Windows）
 ```text
-start-research-notion.bat
+双击 start-research-notion.bat
 ```
 
-启动脚本会后台检查并启动本地 Dify，同时自动启动一个本机 DeepSeek bridge：Dify 容器访问 `http://host.docker.internal:17778`，再由主机转发到 DeepSeek 官方接口。这样可以绕过部分 Windows Docker 环境中容器直连 `api.deepseek.com` 出现 TLS EOF 的问题。
-
-答辩或演示前可以先双击：
-
-```text
-prepare-demo.bat
-```
-
-它会静默启动本地 Dify，创建/更新 Dify Workflow 智能体，临时启动 ResearchNotion 工具服务来导入 Agent 工具，上传真实演示论文，运行配置检查和 MVP 演示检查，然后把原生依赖切回桌面端可启动状态。
-
-或在终端运行：
-
+### 从源码运行
 ```bash
 pnpm install
-pnpm dev
+pnpm dev    # Electron dev（含工具服务 17777）
 ```
 
-首次运行后，在设置页填写本地 Dify 地址、Dify App API Key 和 Dify Knowledge API Key。MVP 中的大模型 Provider API Key 仍在 Dify 控制台配置。
+首次运行后在 Settings 页填写：Dify 地址、App API Key、Knowledge API Key、DeepSeek API Key（保存时自动同步到 Dify）。
 
-本地 Dify 已启动并初始化后，也可以直接运行：
+> **Windows 用户注意**：如果 IDE 是 Trae CN，需先 `unset ELECTRON_RUN_AS_NODE`（否则 electron.exe 退化为 node）。
 
-```bash
-pnpm demo:prepare
-pnpm provision:dify
-pnpm use:deepseek-bridge
-pnpm import:dify-tools
-pnpm provision:dify-agent
-pnpm seed:dify
-pnpm check:dify
-```
-
-这会创建/更新 Dify Workflow 智能体，把本地 ResearchNotion 设置指向它，导入 `ResearchNotion_Local_Tools` Agent 工具，额外创建一个 `ResearchNotion Tool Agent` 工具调用型 Agent Chat，并向演示知识库上传 RAG、Transformer、BERT 三篇真实论文用于调试。`prepare-demo.bat` 会临时启动 ResearchNotion 工具服务；如果手动运行 `pnpm import:dify-tools`，需要先确保 `http://127.0.0.1:17777/openapi.json` 可访问。
-
-如果需要手动切换 Dify 的 DeepSeek endpoint：
-
-```bash
-pnpm use:deepseek-bridge
-pnpm use:deepseek-official
-pnpm deepseek:bridge
-```
-
-`pnpm use:deepseek-bridge` 会把 Dify DeepSeek Provider 的 `endpoint_url` 指向 `http://host.docker.internal:17778`，并清理 Dify Redis 中的 Provider 缓存；`pnpm use:deepseek-official` 会切回 `https://api.deepseek.com`。`pnpm deepseek:bridge` 只负责启动本机转发服务，平时双击 `start-research-notion.bat` 会自动启动它。
-
-`pnpm dev` 会先为 Electron 重建 `better-sqlite3`。如果之后要跑单元测试，直接运行 `pnpm test`，测试脚本会切回 Node.js ABI。
+### 完整 Dify 部署（含向量检索）
+参见 [docs/dify-local-deploy.md](docs/dify-local-deploy.md) §9（TEI bge-m3 GPU + high_quality 向量索引）。
 
 ## 验证命令
 
 ```bash
-pnpm test
-pnpm lint:types
-pnpm build
+pnpm test         # 38 文件 / 294+ 测试
+pnpm lint:types   # TypeScript 类型检查
+pnpm build        # 生产构建
+
+# Agent benchmark（需 Dify + 工具服务运行）
+node scripts/benchmark-runner.mjs    # tool k=3 + trust k=2，合并 JSON 报告
 ```
+
+## 技术栈
+
+| 层 | 技术 |
+|---|---|
+| 桌面壳 | Electron 33 |
+| 前端 | React 19 + TypeScript 5.9 |
+| 数据库 | SQLite（better-sqlite3） |
+| PDF | pdfjs-dist（含双栏排序） |
+| Markdown | react-markdown + remark + KaTeX |
+| AI 后端 | Dify 1.16.1（Workflow + Tool Agent） |
+| 模型 | DeepSeek（v4-flash / chat / reasoner） |
+| 向量检索 | 本地 TEI bge-m3（GPU，OpenAI-compatible） |
+| 外网搜索 | arXiv Atom API + Semantic Scholar Graph API |
+| 测试 | Vitest + Testing Library |
+
+## 项目结构
+
+```
+src/
+├── main/               # Electron 主进程
+│   ├── agentTools/     # 14 个 Agent 工具 + OpenAPI 服务
+│   ├── dify/           # Dify 客户端 + 研究助手提示词
+│   ├── workflows/      # 论文导入/索引/卡片生成（Zod schema + repair）
+│   ├── settings/       # 设置 / 用户记忆 / 模型 Key 同步
+│   ├── conversations/  # 对话管理
+│   └── ipc.ts          # IPC 路由
+├── renderer/           # React UI
+│   ├── pages/          # Chat / Knowledge / Settings
+│   ├── components/     # AppShell / PaperReader / AiDrawer / ...
+│   └── state/          # 工作区偏好
+├── preload/            # Electron 安全桥
+└── shared/             # 共享类型 + IPC 类型
+scripts/                # Dify provision / benchmark / seed / 部署脚本
+tests/                  # 38 个测试文件（unit + renderer）
+docs/                   # 技术说明 + 部署笔记 + 审计清单
+```
+
+## License
+
+Private.

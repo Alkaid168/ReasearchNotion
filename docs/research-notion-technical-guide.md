@@ -433,7 +433,8 @@ TypeScript 是 JavaScript 的超集：JavaScript 能运行的代码，基本都�
 | 注入给模型的近期记忆 | 是 | 每次请求拼接 | 取最近 8 条消息，每条压缩到最多 600 个字符 |
 | Dify 会话记忆 | 是 | Dify 的 conversation | 桌面端保存并复用 `dify_conversation_id`，让同一 Dify 对话连续 |
 | 论文事实记忆 | 有资料，不是“摘要记忆” | 本地原文、论文卡片、Dify 数据集 | Agent 必须重新读原文取证，不能把上轮回答当原文事实 |
-| 用户偏好长期记忆 | 否 | 无 | 尚未记住研究方向、写作偏好、常用术语等 |
+| 用户偏好长期记忆 | 是（T12b） | SQLite `user_memories` | 记住用户研究方向、语言偏好、写作风格、纠正和外部资源；每次对话注入 |
+| 向量语义记忆 | 否 | 无 | 未使用 embedding 和记忆向量库 |
 | 向量语义记忆 | 否 | 无 | 未使用 embedding 和记忆向量库 |
 
 ### 6.2 一次提问会把什么给模型
@@ -493,7 +494,7 @@ formatConversationHistory(messages, limit = 8)
 
 ---
 
-## 7. 当前 12 个工具，输入输出和接入方式
+## 7. 当前 14 个工具，输入输出和接入方式
 
 ### 7.1 工具总览
 
@@ -511,6 +512,10 @@ formatConversationHistory(messages, limit = 8)
 | `search_current_paper` | 搜当前论文 | `query`、可选 `limit` | 命中页、片段、分数 |
 | `search_library` | 搜论文库 | 可选 `folderId`、`query` | 跨论文命中、片段、分数 |
 | `investigate_library` | 多篇论文逐篇取证 | `query`、可选 `paperIds/aspects` | 每篇论文各自的证据与未确认项 |
+| `search_arxiv` | 搜 arXiv 外部论文（T12a） | `query`、可选 `maxResults` | 标题、作者、摘要、arXiv 链接 |
+| `search_semantic_scholar` | 搜 Semantic Scholar（T12a） | `query`、可选 `maxResults` | 标题、作者、摘要、引用数、DOI |
+
+> T12a（2026-08-01）新增 `search_arxiv` 和 `search_semantic_scholar`，使 Agent 能搜索本地论文库之外的外部论文。两个 API 均免费无 key（arXiv Atom API + Semantic Scholar Graph API，后者限速 ~100 req/5min）。
 
 所有工具返回 JSON 对象，成功时都带：
 
@@ -585,12 +590,12 @@ OpenAPI schema 声明了类型与范围，如 `pageNumber` 是大于等于 1 的
 
 ### 8.1 模型有没有搜索功能
 
-当前有两种“搜索”，但都不是互联网搜索：
+当前有两种”搜索”，但都不是互联网搜索：
 
 1. Dify Workflow 的知识库检索；
 2. Tool Agent 的 `search_current_paper` 与 `search_library` 本地论文搜索。
 
-**尚未实现**：Google、Bing、arXiv、Semantic Scholar、Crossref、PubMed 等外部检索。因此 Agent 不能声称“刚刚从网上找到了一篇新论文”。
+**T12a（2026-08-01）已实现**：`search_arxiv`（arXiv Atom API）和 `search_semantic_scholar`（Semantic Scholar Graph API）两个外部论文搜索工具，免费无 key。Agent 现在可以搜索本地论文库之外的外部论文（标题、作者、摘要、引用数、链接）。但这两个工具不搜索互联网网页（Google/Bing），仅限于学术论文元数据检索。
 
 ### 8.2 模型能使用 Skill 吗
 
@@ -794,11 +799,7 @@ pnpm build
 
 ### 13.3 用户自己填模型 API Key 的产品目标实现了吗
 
-目前**没有完全实现为“用户只在桌面端填一个模型 API Key”**。桌面端当前设置页填写的是：
-
-- Dify 服务地址；
-- Dify App API Key；
-- Dify Knowledge API Key。
+**T11（2026-08-01）已实现**。桌面端 Settings 页新增 “DeepSeek API Key” 字段，保存时自动通过 `docker exec psql` 同步到 Dify `provider_credentials` 表 + 清 Redis 缓存。用户现在只需在桌面端填 Key（不需打开 Dify 控制台）。实现见 `src/main/settings/modelKeySync.ts`（best-effort：Docker/Dify 没跑时 save 仍成功本地）。
 
 模型 Provider 的 API Key 当前配置在 Dify 控制台/数据库中。也就是说，当前最适合课程演示与本机使用，不是面向陌生终端用户的一键本地产品。
 
@@ -1072,12 +1073,16 @@ folder 上下文只回答该论文库范围；paper 上下文只回答该论文�
 
 ### 16.2 下一阶段优先级
 
-1. **合并前工程整理**：清理候选 Logo、截图、日志，提交核心实现和本文档，跑类型检查/构建/关键回归；
-2. **Agent 评测集**：先建立可重复的工具轨迹和事实引用评测，再改提示词；
-3. **结构化 PDF 解析**：解决双栏、目录、扫描件的基础问题；
-4. **向量混合检索**：配置 embedding 后，用真实数据验证是否真的提升；
-5. **产品化部署**：决定保留 Dify/Docker，还是转向纯本地后端；
-6. **长期记忆与用户偏好**：在明确隐私边界后再做，不要无控制地把全部聊天永久塞回模型。
+1. ✅ **合并前工程整理**：已完成（工作树 clean，22 commit on develop）
+2. ✅ **Agent 评测集（T6）**：已完成。pass^k + JSON 报告 + baseline diff + trust 集成。16/16 全通过
+3. ✅ **结构化 PDF 解析（T8）**：阶段 1 已完成（双栏排序）。OCR（Tesseract）+ Docling/GROBID 因速度问题暂缓
+4. ✅ **向量混合检索（T9）**：已完成。本地 TEI bge-m3 GPU + high_quality 向量索引。Reranker 暂缓
+5. ✅ **模型 Key 桌面端配置（T11）**：已完成。Settings 页填 DeepSeek Key → 自动 psql sync Dify
+6. ✅ **长期记忆与用户偏好（T12b）**：已完成。Claude Code 式单事实存储（5 类）+ 运行时注入
+7. ✅ **外网论文搜索（T12a）**：已完成。arXiv + Semantic Scholar 两个工具，免费无 key
+8. ⏳ **产品化部署（T10）**：electron-builder 打 Windows 安装包（最后一步）
+
+> 上述 2-7 均在 develop 分支（2026-08-01），benchmark 实测 16/16 全通过（tool 11/11 + trust 5/5，pass^k 全满分）。
 
 ---
 
@@ -1087,9 +1092,14 @@ folder 上下文只回答该论文库范围；paper 上下文只回答该论文�
 |---|---|
 | SQLite 表结构 | `src/main/db/schema.ts` |
 | 本地论文文件复制 | `src/main/files/storage.ts`、`src/main/workflows/importAndIndexPaper.ts` |
-| PDF 解析与词法检索 | `src/main/agentTools/paperText.ts` |
-| 12 个工具处理器 | `src/main/agentTools/toolHandlers.ts` |
+| PDF 解析与词法检索（含双栏排序） | `src/main/agentTools/paperText.ts` |
+| 14 个工具处理器 | `src/main/agentTools/toolHandlers.ts` |
 | OpenAPI 工具服务 | `src/main/agentTools/openApiService.ts` |
+| 外网论文搜索（arXiv + S2） | `src/main/agentTools/externalSearch.ts` |
+| 论文卡片 Zod 校验 + repair | `src/main/workflows/paperCardSchema.ts` |
+| 用户记忆系统 | `src/main/settings/memoriesService.ts` |
+| 模型 Key 同步到 Dify | `src/main/settings/modelKeySync.ts` |
+| Benchmark 评测（pass^k + JSON） | `scripts/benchmark-runner.mjs`、`scripts/benchmarkRunner.mjs` |
 | Dify HTTP 客户端、流式解析、重试 | `src/main/dify/client.ts` |
 | 运行时上下文、历史窗口、卡片提示 | `src/main/dify/researchAgent.ts` |
 | Dify Tool Agent 创建与系统提示词 | `scripts/provision-dify-tool-agent.mjs` |
