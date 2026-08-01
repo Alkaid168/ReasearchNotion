@@ -19,6 +19,7 @@ import { readPaperMarkdown, readPaperPlainText } from './files/importPaper'
 import { registerIpc } from './ipc'
 import { createElectronSecretBox } from './settings/secretBox'
 import { createSettingsService } from './settings/settingsService'
+import { createMemoriesService } from './settings/memoriesService'
 import { ensureFolderDataset } from './workflows/ensureFolderDataset'
 import { importAndIndexPaper, reindexPaper } from './workflows/importAndIndexPaper'
 import type { AppSettings, ChatContext, Paper } from '../shared/types'
@@ -66,6 +67,7 @@ void app.whenReady().then(async () => {
     authToken: toolServiceToken
   })
   const settingsService = createSettingsService(db, createElectronSecretBox())
+  const memoriesService = createMemoriesService(db)
   const activeSendControllers = new Map<string, AbortController>()
 
   await agentToolService.start()
@@ -265,6 +267,11 @@ void app.whenReady().then(async () => {
     reading: {
       updateState: async (input) => readingState.update(input)
     },
+    memories: {
+      list: async () => memoriesService.list(),
+      save: async (input) => memoriesService.save(input),
+      delete: async (id) => memoriesService.delete(id)
+    },
     papers: {
       list: async (folderId) => repos.papers.listByFolder(folderId),
       import: async (folderId) => {
@@ -376,7 +383,8 @@ void app.whenReady().then(async () => {
               context: conversation.context,
               emphasisContext: options?.emphasisContext,
               contextInventory: buildContextInventory(conversation.context),
-              conversationHistory
+              conversationHistory,
+              memoriesPrefix: memoriesService.buildInjectionPrefix()
             }),
             user: 'local-user',
             inputs: buildResearchAgentInputs(conversation.context, options),

@@ -10,7 +10,9 @@ import type {
   PaperSearchResult,
   ReadingState,
   ReadingStateUpdate,
-  ReadingStatus
+  ReadingStatus,
+  UserMemory,
+  UserMemoryInput
 } from './types'
 
 export type SendMessageOptions = {
@@ -86,6 +88,11 @@ export type DesktopApi = {
   }
   reading: {
     updateState(input: ReadingStateUpdate): Promise<ReadingState>
+  }
+  memories: {
+    list(): Promise<UserMemory[]>
+    save(input: UserMemoryInput): Promise<UserMemory>
+    delete(id: string): Promise<void>
   }
   papers: {
     list(folderId: string): Promise<Array<Paper & { card: PaperCard | null }>>

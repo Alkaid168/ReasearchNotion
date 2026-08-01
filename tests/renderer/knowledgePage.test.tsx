@@ -133,6 +133,7 @@ function createApiMock(): DesktopApi {
         updatedAt: '2026-07-08T00:00:00.000Z'
       })
     },
+    memories: { list: vi.fn(), save: vi.fn(), delete: vi.fn() },
     papers: {
       list: vi.fn().mockResolvedValue([{ ...paper, card }]),
       import: vi.fn(),

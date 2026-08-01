@@ -101,6 +101,26 @@ export type AppSettings = {
   defaultFolderId: string | null
 }
 
+export type UserMemoryType = 'user' | 'preference' | 'feedback' | 'project' | 'reference'
+
+export type UserMemory = {
+  id: string
+  type: UserMemoryType
+  name: string
+  description: string
+  body: string
+  createdAt: string
+  updatedAt: string
+}
+
+export type UserMemoryInput = {
+  id?: string
+  type: UserMemoryType
+  name: string
+  description: string
+  body: string
+}
+
 export type ReadingState = {
   activeFolderId: string | null
   activePaperId: string | null

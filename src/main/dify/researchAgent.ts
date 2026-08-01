@@ -77,13 +77,16 @@ export function buildResearchAgentQuery(input: {
   emphasisContext?: string | null
   contextInventory?: string | null
   conversationHistory?: string | null
+  memoriesPrefix?: string | null
 }): string {
   const emphasis = input.emphasisContext?.trim()
   const inventory = input.contextInventory?.trim()
   const history = input.conversationHistory?.trim()
+  const memories = input.memoriesPrefix?.trim()
 
   return [
     'ResearchNotion runtime context for this turn:',
+    memories || null,
     contextScope(input.context),
     contextScopeGuard(input.context),
     [
