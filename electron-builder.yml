@@ -12,9 +12,15 @@ extraResources:
     to: standard_fonts
 win:
   target:
-    - target: dir
+    - target: nsis
       arch: [x64]
   icon: resources/research-notion.ico
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: ResearchNotion
 asar: true
 asarUnpack:
   - "**/better-sqlite3/**"
