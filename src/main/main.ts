@@ -205,30 +205,40 @@ void app.whenReady().then(async () => {
         if (!settings.difyBaseUrl || !settings.difyAppApiKey || !settings.difyKnowledgeApiKey) {
           return { ok: false, message: '请填写 Dify 地址、App API Key 和 Knowledge API Key。' }
         }
-        try {
-          const check = await createConfiguredDifyClient(settings).testConnection()
-          if (check.missingInputs.length > 0) {
-            return {
-              ok: false,
-              message: `Dify App 缺少变量：${check.missingInputs.join('、')}。请按文档配置科研问答智能体。`
+        const client = createConfiguredDifyClient(settings)
+        const maxRetries = 3
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+          try {
+            const check = await client.testConnection()
+            if (check.missingInputs.length > 0) {
+              return {
+                ok: false,
+                message: `Dify App 缺少变量：${check.missingInputs.join('、')}。请按文档配置科研问答智能体。`
+              }
             }
-          }
-          if (!check.retrieverResourceEnabled) {
-            return {
-              ok: false,
-              message: 'Dify App 未开启引用与归因返回，请开启 retriever_resource 后再测试。'
+            if (!check.retrieverResourceEnabled) {
+              return {
+                ok: false,
+                message: 'Dify App 未开启引用与归因返回，请开启 retriever_resource 后再测试。'
+              }
             }
-          }
-          return { ok: true, message: 'Dify 连接正常，App 与知识库 API Key 均可用。' }
-        } catch (error) {
-          if (error instanceof DifyApiError) {
-            return {
-              ok: false,
-              message: `Dify 返回 ${error.status}，请检查服务地址和 API Key。`
+            return { ok: true, message: 'Dify 连接正常，App 与知识库 API Key 均可用。' }
+          } catch (error) {
+            const isTransient = error instanceof DifyApiError && (error.status === 502 || error.status === 503)
+            if ((isTransient || !(error instanceof DifyApiError)) && attempt < maxRetries) {
+              await new Promise((r) => setTimeout(r, 5000))
+              continue
             }
+            if (error instanceof DifyApiError) {
+              return {
+                ok: false,
+                message: `Dify 返回 ${error.status}，请检查服务地址和 API Key。`
+              }
+            }
+            return { ok: false, message: '无法连接 Dify，请确认本地 Dify 正在运行。' }
           }
-          return { ok: false, message: '无法连接 Dify，请确认本地 Dify 正在运行。' }
         }
+        return { ok: false, message: 'Dify 暂不可用，请确认服务已启动。' }
       }
     },
     folders: {
