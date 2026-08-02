@@ -468,6 +468,15 @@ export function createRepositories(db: Database.Database) {
         if (!conversation) throw new Error('Conversation not found.')
         return conversation
       },
+      clearDifyConversationIds(): number {
+        // Dify conversation_ids are scoped to one app; clear them when switching apps
+        // so the next message starts a fresh conversation instead of 404-ing.
+        return db
+          .prepare(
+            `UPDATE conversations SET dify_conversation_id = NULL, updated_at = ? WHERE dify_conversation_id IS NOT NULL`
+          )
+          .run(now()).changes
+      },
       reorder(conversationIds: string[]): Conversation[] {
         reorderRows('conversations', conversationIds)
         return conversationIds.map((conversationId) => {

@@ -54,8 +54,20 @@ function isPdfTextItem(item: unknown): item is PdfTextItem {
   return typeof item === 'object' && item !== null && 'str' in item && typeof (item as PdfTextItem).str === 'string'
 }
 
+/** Replace lone UTF-16 surrogates with U+FFFD. PDF extraction of math symbols
+ *  (U+1D400–U+1D7FF mathematical bold/italic, encoded as surrogate pairs in JS)
+ *  can yield broken pairs; Dify's Python backend then refuses to encode UTF-8
+ *  ("'utf-8' codec can't encode character '\ud835' ... surrogates not allowed").
+ *  Valid pairs (e.g. 𝑥 = 𝑥) are preserved. */
+export function cleanSurrogates(text: string): string {
+  return text.replace(
+    /[\u{D800}-\u{DBFF}](?![\u{DC00}-\u{DFFF}])|(?<![\u{D800}-\u{DBFF}])[\u{DC00}-\u{DFFF}]/gu,
+    '�'
+  )
+}
+
 function normalizeText(text: string): string {
-  return text.replace(/\s+/g, ' ').trim()
+  return cleanSurrogates(text).replace(/\s+/g, ' ').trim()
 }
 
 type PositionedItem = {
@@ -151,7 +163,7 @@ function rememberPages(key: string, entry: { signature: string; pages: Promise<P
 
 async function readPaperPagesUncached(paper: Paper): Promise<PaperTextPage[]> {
   if (paper.fileType === 'markdown') {
-    const text = await fs.readFile(paper.filePath, 'utf8')
+    const text = cleanSurrogates(await fs.readFile(paper.filePath, 'utf8'))
     return [{ pageNumber: 1, text }]
   }
 

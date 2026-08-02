@@ -26,7 +26,8 @@ export const desktopApi: DesktopApi = {
   settings: {
     get: () => getBridge().settings.get(),
     save: (settings: AppSettings) => getBridge().settings.save(settings),
-    testConnection: (settings: AppSettings) => getBridge().settings.testConnection(settings)
+    testConnection: (settings: AppSettings) => getBridge().settings.testConnection(settings),
+    switchDifyApp: (mode: 'workflow' | 'agent') => getBridge().settings.switchDifyApp(mode)
   },
   folders: {
     list: () => getBridge().folders.list(),

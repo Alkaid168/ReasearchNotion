@@ -21,7 +21,8 @@ function createApiMock(): DesktopApi {
     settings: {
       get: vi.fn().mockResolvedValue(emptySettings),
       save: vi.fn().mockImplementation(async (settings: AppSettings) => settings),
-      testConnection: vi.fn().mockResolvedValue({ ok: true, message: 'valid' })
+      testConnection: vi.fn().mockResolvedValue({ ok: true, message: 'valid' }),
+      switchDifyApp: vi.fn().mockResolvedValue({ ok: true, message: '已切换', settings: emptySettings })
     },
     folders: { list: vi.fn().mockResolvedValue([]), create: vi.fn(), rename: vi.fn(), delete: vi.fn() },
     conversationFolders: { list: vi.fn().mockResolvedValue([]), create: vi.fn(), rename: vi.fn(), reorder: vi.fn() },

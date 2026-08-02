@@ -1074,6 +1074,7 @@ button {
   min-height: 0;
   overflow: auto;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   align-content: start;
   gap: 14px;
   padding: 62px min(12vw, 150px) 28px;
@@ -3807,4 +3808,69 @@ button {
 
 .secondary-action.danger:hover {
   background: #fff1ee;
+}
+
+/* === Dify App mode switcher === */
+.settings-app-mode {
+  width: min(780px, 100%);
+  margin-top: 14px;
+  display: grid;
+  gap: 8px;
+}
+.settings-field-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--rn-muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+.settings-app-mode-buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.settings-mode-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--rn-border);
+  border-radius: 8px;
+  background: linear-gradient(135deg, rgba(255,255,255,0.82), rgba(240,243,241,0.68));
+  color: var(--rn-muted);
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+  text-align: left;
+}
+.settings-mode-btn:hover {
+  border-color: var(--rn-border-strong);
+}
+.settings-mode-btn.active {
+  border-color: var(--rn-accent);
+  background: var(--rn-accent-soft);
+  color: var(--rn-accent);
+}
+.settings-mode-btn.active strong {
+  color: var(--rn-accent);
+}
+.settings-mode-btn strong {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--rn-text);
+  display: block;
+}
+.settings-mode-btn small {
+  font-size: 11px;
+  color: var(--rn-muted);
+}
+.settings-mode-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.settings-app-mode-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--rn-muted);
+  line-height: 1.5;
 }

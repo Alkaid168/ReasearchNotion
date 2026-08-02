@@ -177,6 +177,7 @@ function llmNode(title, paperCard) {
         '直接回答用户问题，不要自我介绍，不要复述用户任务，不要说“好的，作为 ResearchNotion...”。',
         '回答要结构清晰，适合科研阅读和小组作业展示。',
         agentToolInstructions,
+        '模式边界：当前是 Workflow 稳定模式，只能检索本地论文库，不能联网。如果用户要求搜索 arXiv、查找本地论文库之外的论文、查找“最新研究/进展/state of the art”或任何需要联网的能力，请直接告知：“当前为 Workflow 模式（仅本地知识库检索），请在「设置 → AI 引擎模式」切换到 Tool Agent 模式，即可使用 arXiv 与 Semantic Scholar 外部搜索。”不要回答“我没有联网权限”或“本地论文库中没有相关论文”就结束——必须给出上述切换指引。',
         '不要输出 <think> 或隐藏推理过程。'
       ].join('\n')
   const user = paperCard

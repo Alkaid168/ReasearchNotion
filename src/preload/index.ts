@@ -15,7 +15,8 @@ const api: DesktopApi = {
   settings: {
     get: () => ipcRenderer.invoke('settings:get'),
     save: (settings: AppSettings) => ipcRenderer.invoke('settings:save', settings),
-    testConnection: (settings: AppSettings) => ipcRenderer.invoke('settings:testConnection', settings)
+    testConnection: (settings: AppSettings) => ipcRenderer.invoke('settings:testConnection', settings),
+    switchDifyApp: (mode: 'workflow' | 'agent') => ipcRenderer.invoke('settings:switchDifyApp', { mode })
   },
   folders: {
     list: () => ipcRenderer.invoke('folders:list'),

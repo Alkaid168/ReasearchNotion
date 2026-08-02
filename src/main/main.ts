@@ -1,4 +1,5 @@
-import { app, BrowserWindow, dialog } from 'electron'
+import { app, BrowserWindow, dialog, shell } from 'electron'
+import { execFileSync } from 'node:child_process'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -28,6 +29,45 @@ const isolatedUserDataDir = process.env.RESEARCH_NOTION_USER_DATA_DIR?.trim()
 if (isolatedUserDataDir) app.setPath('userData', isolatedUserDataDir)
 if (process.platform === 'win32') app.setAppUserModelId('com.researchnotion.desktop')
 
+function safeUrl(raw: string): URL | null {
+  try {
+    return new URL(raw)
+  } catch {
+    return null
+  }
+}
+
+// Desktop apps must not navigate the main window to an external URL — once the
+// renderer leaves the React app the user cannot get back. Open external links
+// (arXiv, Semantic Scholar, DOIs, …) in the system default browser instead and
+// keep the ResearchNotion window where it is.
+function openExternalLinksInSystemBrowser(window: BrowserWindow): void {
+  const openExternal = (rawUrl: string): void => {
+    const parsed = safeUrl(rawUrl)
+    if (parsed && (parsed.protocol === 'http:' || parsed.protocol === 'https:')) {
+      void shell.openExternal(parsed.href)
+    }
+  }
+  // <a target="_blank"> / window.open → system browser, no in-app popup window
+  window.webContents.setWindowOpenHandler(({ url }) => {
+    openExternal(url)
+    return { action: 'deny' }
+  })
+  // <a> without target tries to navigate the current window — block that and
+  // allow only same-origin navigation (dev server / packaged file:// app).
+  window.webContents.on('will-navigate', (event, url) => {
+    const current = safeUrl(window.webContents.getURL())
+    const target = safeUrl(url)
+    if (!target) {
+      event.preventDefault()
+      return
+    }
+    if (current && target.origin === current.origin) return
+    event.preventDefault()
+    openExternal(url)
+  })
+}
+
 function createWindow(): void {
   const appIconPath = path.join(process.cwd(), 'resources', 'research-notion.ico')
   const mainWindow = new BrowserWindow({
@@ -47,6 +87,8 @@ function createWindow(): void {
     }
   })
 
+  openExternalLinksInSystemBrowser(mainWindow)
+
   if (process.env.ELECTRON_RENDERER_URL) {
     void mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL)
   } else {
@@ -61,13 +103,13 @@ void app.whenReady().then(async () => {
   const repos = createRepositories(db)
   const readingState = createReadingStateStore()
   const toolServiceToken = await resolveToolServiceToken(userDataDir)
+  const settingsService = createSettingsService(db, createElectronSecretBox())
+  const memoriesService = createMemoriesService(db)
   const agentToolService = createOpenApiToolService({
-    tools: createAgentToolHandlers({ repos, readingState }),
+    tools: createAgentToolHandlers({ repos, readingState, memories: memoriesService }),
     readingState,
     authToken: toolServiceToken
   })
-  const settingsService = createSettingsService(db, createElectronSecretBox())
-  const memoriesService = createMemoriesService(db)
   const activeSendControllers = new Map<string, AbortController>()
 
   await agentToolService.start()
@@ -239,6 +281,28 @@ void app.whenReady().then(async () => {
           }
         }
         return { ok: false, message: 'Dify 暂不可用，请确认服务已启动。' }
+      },
+      switchDifyApp: async (mode: 'workflow' | 'agent') => {
+        const current = await settingsService.get()
+        if (!current.difyBaseUrl) return { ok: false, message: '请先配置 Dify 地址。', settings: current }
+        const appName = mode === 'agent' ? 'ResearchNotion Tool Agent' : 'ResearchNotion Academic QA Agent'
+        const DOCKER_BIN = process.platform === 'win32' ? 'C:/Program Files/Docker/Docker/resources/bin/docker.exe' : 'docker'
+        const DB_CONTAINER = process.env.DIFY_DB_CONTAINER || 'docker-db_postgres-1'
+        try {
+          const token = execFileSync(DOCKER_BIN, ['exec', DB_CONTAINER, 'psql', '-U', 'postgres', '-d', 'dify', '-t', '-A', '-c',
+            `SELECT t.token FROM api_tokens t JOIN apps a ON a.id = t.app_id WHERE a.name = '${appName.replace(/'/g, "''")}' AND t.type = 'app' ORDER BY t.created_at DESC LIMIT 1;`
+          ], { encoding: 'utf8' }).trim()
+          if (!token) return { ok: false, message: `Dify 中未找到「${appName}」。请先运行 provision。`, settings: current }
+          const updated = await settingsService.save({ ...current, difyAppApiKey: token })
+          const cleared = repos.conversations.clearDifyConversationIds()
+          return {
+            ok: true,
+            message: `已切换到「${appName}」（${mode === 'agent' ? 'Tool Agent，16 个工具' : 'Workflow，知识库检索'}）。${cleared > 0 ? `已重置 ${cleared} 条旧对话的会话标识，下一轮问答将在新 App 里重新开始。` : ''}`,
+            settings: updated
+          }
+        } catch (error) {
+          return { ok: false, message: `切换失败：${error instanceof Error ? error.message : String(error)}`, settings: current }
+        }
       }
     },
     folders: {

@@ -40,7 +40,7 @@ function createApiMock(): DesktopApi {
     settings: {
       get: vi.fn().mockResolvedValue(emptySettings),
       save: vi.fn().mockImplementation(async (settings: AppSettings) => settings),
-      testConnection: vi.fn().mockResolvedValue({ ok: true, message: '连接配置有效。' })
+      testConnection: vi.fn(), switchDifyApp: vi.fn().mockResolvedValue({ ok: true, message: "", settings: { difyBaseUrl: "", difyAppApiKey: "", difyKnowledgeApiKey: "", deepseekApiKey: "", defaultFolderId: null } }).mockResolvedValue({ ok: true, message: '连接配置有效。' })
     },
     folders: { list: vi.fn().mockResolvedValue([]), create: vi.fn(), rename: vi.fn(), delete: vi.fn() },
     conversationFolders: { list: vi.fn().mockResolvedValue([]), create: vi.fn(), rename: vi.fn(), reorder: vi.fn() },

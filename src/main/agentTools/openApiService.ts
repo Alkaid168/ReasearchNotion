@@ -218,28 +218,85 @@ const routes: Route[] = [
     path: '/tools/external/arxiv',
     operationId: 'search_arxiv',
     description: '在 arXiv 上搜索外部论文。返回标题、作者、摘要、arXiv 链接。用于查找本地论文库之外的最新或相关研究。',
-    requestSchema: {
-      type: 'object',
-      required: ['query'],
-      additionalProperties: false,
-      properties: {
-        query: { type: 'string', description: '搜索关键词，建议用英文。' },
-        maxResults: { type: 'integer', minimum: 1, maximum: 10, default: 5, description: '返回结果数量。' }
+    queryParameters: [
+      {
+        name: 'query',
+        in: 'query',
+        required: true,
+        description: '搜索关键词，建议用英文。',
+        schema: { type: 'string' }
+      },
+      {
+        name: 'maxResults',
+        in: 'query',
+        required: false,
+        description: '返回结果数量。',
+        schema: { type: 'integer', minimum: 1, maximum: 10, default: 5 }
       }
-    }
+    ]
   },
   {
     method: 'GET',
     path: '/tools/external/scholar',
     operationId: 'search_semantic_scholar',
     description: '在 Semantic Scholar 上搜索外部论文。返回标题、作者、摘要、引用数、DOI。适合查找高引论文和影响力分析。',
+    queryParameters: [
+      {
+        name: 'query',
+        in: 'query',
+        required: true,
+        description: '搜索关键词，建议用英文。',
+        schema: { type: 'string' }
+      },
+      {
+        name: 'maxResults',
+        in: 'query',
+        required: false,
+        description: '返回结果数量。',
+        schema: { type: 'integer', minimum: 1, maximum: 10, default: 5 }
+      }
+    ]
+  },
+  {
+    method: 'GET',
+    path: '/tools/external/openalex',
+    operationId: 'search_openalex',
+    description: '在 OpenAlex 搜索外部论文（开放学术图谱，免费无 key、配额宽松）。返回标题、作者、摘要、引用数（cited_by_count）、DOI、年份。引用数与影响力分析的首选源，比 Semantic Scholar 不易限流。',
+    queryParameters: [
+      {
+        name: 'query',
+        in: 'query',
+        required: true,
+        description: '搜索关键词，建议用英文。',
+        schema: { type: 'string' }
+      },
+      {
+        name: 'maxResults',
+        in: 'query',
+        required: false,
+        description: '返回结果数量。',
+        schema: { type: 'integer', minimum: 1, maximum: 10, default: 5 }
+      }
+    ]
+  },
+  {
+    method: 'POST',
+    path: '/tools/memory/save',
+    operationId: 'save_memory',
+    description: '把一条用户记忆存入长期记忆库（agent 自动学习用户身份、偏好、反馈、项目、参考）。type ∈ user（身份，如研究领域/角色）/ preference（偏好，如语言/写作风格）/ feedback（用户对你之前回答的纠正）/ project（进行中的工作，如当前论文/截止日期）/ reference（外部参考，如链接/文献）。name 是简短标签，body 是具体内容。同 type+name 的记忆会被更新而不是新增。',
     requestSchema: {
       type: 'object',
-      required: ['query'],
+      required: ['type', 'name', 'body'],
       additionalProperties: false,
       properties: {
-        query: { type: 'string', description: '搜索关键词，建议用英文。' },
-        maxResults: { type: 'integer', minimum: 1, maximum: 10, default: 5, description: '返回结果数量。' }
+        type: {
+          type: 'string',
+          enum: ['user', 'preference', 'feedback', 'project', 'reference'],
+          description: '记忆类型。'
+        },
+        name: { type: 'string', description: '简短标签，如“研究方向”、“语言偏好”、“上次说错 X”。' },
+        body: { type: 'string', description: '记忆内容。' },
+        description: { type: 'string', description: '可选补充说明。' }
       }
     }
   }
@@ -390,6 +447,13 @@ export function createOpenApiToolService({ tools, readingState, authToken, prefe
         ))
         return
       }
+      if (request.method === 'GET' && url.pathname === '/tools/external/openalex') {
+        sendJson(response, 200, await tools.searchOpenalex(
+          url.searchParams.get('query') ?? '',
+          Number(url.searchParams.get('maxResults') ?? 5)
+        ))
+        return
+      }
       const body = request.method === 'POST' ? await readRequestJson(request) : {}
       if (request.method === 'POST' && url.pathname.startsWith('/tools/')) {
         recordToolInvocation(request.method, url.pathname, body)
@@ -492,6 +556,20 @@ export function createOpenApiToolService({ tools, readingState, authToken, prefe
         )
         return
       }
+      if (request.method === 'POST' && url.pathname === '/tools/memory/save') {
+        const memoryType = String(body.type ?? '') as 'user' | 'preference' | 'feedback' | 'project' | 'reference'
+        sendJson(
+          response,
+          200,
+          await tools.saveMemory({
+            type: memoryType,
+            name: String(body.name ?? ''),
+            body: String(body.body ?? ''),
+            description: typeof body.description === 'string' ? body.description : undefined
+          })
+        )
+        return
+      }
       sendJson(response, 404, { ok: false, error: 'Tool endpoint not found.' })
     } catch (error) {
       sendJson(response, 500, { ok: false, error: error instanceof Error ? error.message : String(error) })
@@ -502,7 +580,12 @@ export function createOpenApiToolService({ tools, readingState, authToken, prefe
     return new Promise((resolve, reject) => {
       const candidate = http.createServer((request, response) => void handle(request, response))
       candidate.once('error', reject)
-      candidate.listen(port, '127.0.0.1', () => {
+      // Bind 0.0.0.0 (not 127.0.0.1) so Dify running in Docker can reach the
+      // tool service through the host gateway (host.docker.internal → 192.168.65.x).
+      // 127.0.0.1 only accepts host-local connections; Docker's ssrf_proxy then
+      // gets "Connection refused" and every agent tool call fails with HTTP 503.
+      // The service is still gated by `authToken` (X-ResearchNotion-Tool-Token header).
+      candidate.listen(port, '0.0.0.0', () => {
         candidate.off('error', reject)
         server = candidate
         const address = candidate.address() as AddressInfo

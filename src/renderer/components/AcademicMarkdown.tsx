@@ -45,7 +45,12 @@ export function AcademicMarkdown({ children }: AcademicMarkdownProps): JSX.Eleme
             <table>{tableChildren}</table>
           </div>
         ),
-        pre: ({ children: codeChildren }) => <CodeBlock>{codeChildren}</CodeBlock>
+        pre: ({ children: codeChildren }) => <CodeBlock>{codeChildren}</CodeBlock>,
+        a: ({ href, children: linkChildren }) => (
+          <a href={href} target="_blank" rel="noopener noreferrer">
+            {linkChildren}
+          </a>
+        )
       }}
     >
       {children}
