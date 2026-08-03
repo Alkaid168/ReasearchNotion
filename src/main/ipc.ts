@@ -32,7 +32,6 @@ export type IpcServices = {
     get(): Promise<AppSettings>
     save(settings: AppSettings): Promise<AppSettings>
     testConnection(settings: AppSettings): Promise<{ ok: boolean; message: string }>
-    switchDifyApp(mode: 'workflow' | 'agent'): Promise<{ ok: boolean; message: string; settings: AppSettings }>
   }
   folders: {
     list(): Promise<Folder[]>
@@ -104,7 +103,6 @@ export function registerIpc(services: IpcServices): void {
     return saved
   })
   ipcMain.handle('settings:testConnection', (_event, settings: AppSettings) => services.settings.testConnection(settings))
-  ipcMain.handle('settings:switchDifyApp', (_event, input: { mode: 'workflow' | 'agent' }) => services.settings.switchDifyApp(input.mode))
   ipcMain.handle('folders:list', () => services.folders.list())
   ipcMain.handle('folders:create', (_event, input: { name: string; parentId: string | null }) =>
     services.folders.create(input.name, input.parentId)

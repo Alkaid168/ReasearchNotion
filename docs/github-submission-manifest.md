@@ -26,7 +26,6 @@ start-deepseek-bridge.bat
 start-dify.bat
 start-research-notion.bat
 use-dify-agent.bat
-use-dify-workflow.bat
 ```
 
 ### 产品源代码
@@ -120,7 +119,6 @@ tests/**
 ```text
 docs/mvp-runbook.md
 docs/dify-research-agent.md
-docs/dify-workflow-build-guide.md
 docs/research-notion-technical-guide.md
 docs/dify-local-deploy.md
 docs/visual-audit-checklist.md

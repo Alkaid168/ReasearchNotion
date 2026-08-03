@@ -57,9 +57,9 @@ async function main(){
   console.log("  pnpm install");
   console.log("  node node_modules/@electron/rebuild/lib/cli.js -f -w better-sqlite3");
   console.log("  node node_modules/electron-vite/bin/electron-vite.js dev");
-  console.log("  node scripts/provision-dify-research-agent.mjs");
   console.log("  node scripts/import-dify-agent-tools.mjs");
   console.log("  node scripts/provision-dify-tool-agent.mjs");
+  console.log("  node scripts/configure-dify-agent.mjs");
   console.log("  node scripts/rebuild-node.cjs && node scripts/seed-dify-demo-papers.mjs");
 }
 main().catch(e=>DIE(e.message));

@@ -21,8 +21,7 @@ function createApiMock(): DesktopApi {
     settings: {
       get: vi.fn().mockResolvedValue(emptySettings),
       save: vi.fn().mockImplementation(async (settings: AppSettings) => settings),
-      testConnection: vi.fn().mockResolvedValue({ ok: true, message: 'valid' }),
-      switchDifyApp: vi.fn().mockResolvedValue({ ok: true, message: '已切换', settings: emptySettings })
+      testConnection: vi.fn().mockResolvedValue({ ok: true, message: 'valid' })
     },
     folders: { list: vi.fn().mockResolvedValue([]), create: vi.fn(), rename: vi.fn(), delete: vi.fn() },
     conversationFolders: { list: vi.fn().mockResolvedValue([]), create: vi.fn(), rename: vi.fn(), reorder: vi.fn() },
@@ -328,7 +327,6 @@ describe('App shell', () => {
     fireEvent.click(screen.getByRole('tab', { name: /设置/ }))
     fireEvent.change(await screen.findByLabelText('Dify 服务地址'), { target: { value: 'http://localhost:8080' } })
     fireEvent.change(screen.getByLabelText('Dify App API Key'), { target: { value: 'app-key' } })
-    fireEvent.change(screen.getByLabelText('Dify Knowledge API Key'), { target: { value: 'knowledge-key' } })
     fireEvent.click(screen.getByRole('button', { name: '测试连接' }))
 
     expect(await screen.findAllByText('Dify 连接正常')).toHaveLength(2)
@@ -415,6 +413,7 @@ describe('App shell', () => {
     render(<App />)
 
     fireEvent.click(screen.getByRole('tab', { name: /知识库/ }))
+    fireEvent.click(await screen.findByRole('button', { name: paperFolder.name }))
     fireEvent.click(await screen.findByRole('button', { name: '导入 PDF / Markdown' }))
 
     expect(await screen.findByText('已导入「RAG 综述笔记」')).toBeInTheDocument()

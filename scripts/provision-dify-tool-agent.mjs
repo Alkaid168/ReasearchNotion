@@ -292,8 +292,25 @@ with flask_app.app_context():
     config["chat_prompt_config"] = {}
     config["completion_prompt_config"] = {}
 
-    validated = AppModelConfigService.validate_configuration(tenant_id=tenant_id, config=config, app_mode=AppMode.AGENT_CHAT, session=db.session)
-    AgentChatAppConfigManager.get_app_config(app, AppModelConfig(app_id=app.id).from_model_config_dict(validated), annotation_reply=None)
+    # Dify 1.15 accepted an explicit SQLAlchemy session here; newer releases
+    # resolve the session internally. Keep the provisioner compatible with both.
+    try:
+        validated = AppModelConfigService.validate_configuration(
+            tenant_id=tenant_id, config=config, app_mode=AppMode.AGENT_CHAT, session=db.session
+        )
+    except TypeError as error:
+        if "unexpected keyword argument 'session'" not in str(error):
+            raise
+        validated = AppModelConfigService.validate_configuration(
+            tenant_id=tenant_id, config=config, app_mode=AppMode.AGENT_CHAT
+        )
+    app_model_config = AppModelConfig(app_id=app.id).from_model_config_dict(validated)
+    try:
+        AgentChatAppConfigManager.get_app_config(app, app_model_config, annotation_reply=None)
+    except TypeError as error:
+        if "unexpected keyword argument 'annotation_reply'" not in str(error):
+            raise
+        AgentChatAppConfigManager.get_app_config(app, app_model_config)
 
     for tool_config in agent_tools:
         ToolManager.get_agent_tool_runtime(

@@ -1,5 +1,4 @@
 import { app, BrowserWindow, dialog, shell } from 'electron'
-import { execFileSync } from 'node:child_process'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -118,8 +117,8 @@ void app.whenReady().then(async () => {
   })
 
   function createConfiguredDifyClient(settings: AppSettings) {
-    if (!settings.difyBaseUrl || !settings.difyAppApiKey || !settings.difyKnowledgeApiKey) {
-      throw new Error('请先在设置页填写 Dify 地址、App API Key 和 Knowledge API Key。')
+    if (!settings.difyBaseUrl || !settings.difyAppApiKey) {
+      throw new Error('请先在设置页填写 Dify 地址和 Tool Agent App API Key。')
     }
     return createDifyClient({
       baseUrl: settings.difyBaseUrl,
@@ -210,7 +209,7 @@ void app.whenReady().then(async () => {
         const settings = await settingsService.get()
         const counts = repos.stats.getEnvironmentCounts()
         const agentToolStatus = agentToolService.getStatus()
-        const difyConfigured = Boolean(settings.difyBaseUrl && settings.difyAppApiKey && settings.difyKnowledgeApiKey)
+    const difyConfigured = Boolean(settings.difyBaseUrl && settings.difyAppApiKey)
         let difyAppName: string | null = null
         let difyAppMode: string | null = null
 
@@ -244,27 +243,21 @@ void app.whenReady().then(async () => {
       get: () => settingsService.get(),
       save: (settings) => settingsService.save(settings),
       testConnection: async (settings) => {
-        if (!settings.difyBaseUrl || !settings.difyAppApiKey || !settings.difyKnowledgeApiKey) {
-          return { ok: false, message: '请填写 Dify 地址、App API Key 和 Knowledge API Key。' }
+        if (!settings.difyBaseUrl || !settings.difyAppApiKey) {
+          return { ok: false, message: '请填写 Dify 地址和 Tool Agent App API Key。' }
         }
         const client = createConfiguredDifyClient(settings)
         const maxRetries = 3
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
           try {
             const check = await client.testConnection()
-            if (check.missingInputs.length > 0) {
+            if (check.appMode !== 'agent-chat') {
               return {
                 ok: false,
-                message: `Dify App 缺少变量：${check.missingInputs.join('、')}。请按文档配置科研问答智能体。`
+                message: '当前 App 不是 ResearchNotion Tool Agent。请在 Dify 中配置 agent-chat 应用后重试。'
               }
             }
-            if (!check.retrieverResourceEnabled) {
-              return {
-                ok: false,
-                message: 'Dify App 未开启引用与归因返回，请开启 retriever_resource 后再测试。'
-              }
-            }
-            return { ok: true, message: 'Dify 连接正常，App 与知识库 API Key 均可用。' }
+            return { ok: true, message: 'Dify Tool Agent 连接正常。' }
           } catch (error) {
             const isTransient = error instanceof DifyApiError && (error.status === 502 || error.status === 503)
             if ((isTransient || !(error instanceof DifyApiError)) && attempt < maxRetries) {
@@ -282,28 +275,6 @@ void app.whenReady().then(async () => {
         }
         return { ok: false, message: 'Dify 暂不可用，请确认服务已启动。' }
       },
-      switchDifyApp: async (mode: 'workflow' | 'agent') => {
-        const current = await settingsService.get()
-        if (!current.difyBaseUrl) return { ok: false, message: '请先配置 Dify 地址。', settings: current }
-        const appName = mode === 'agent' ? 'ResearchNotion Tool Agent' : 'ResearchNotion Academic QA Agent'
-        const DOCKER_BIN = process.platform === 'win32' ? 'C:/Program Files/Docker/Docker/resources/bin/docker.exe' : 'docker'
-        const DB_CONTAINER = process.env.DIFY_DB_CONTAINER || 'docker-db_postgres-1'
-        try {
-          const token = execFileSync(DOCKER_BIN, ['exec', DB_CONTAINER, 'psql', '-U', 'postgres', '-d', 'dify', '-t', '-A', '-c',
-            `SELECT t.token FROM api_tokens t JOIN apps a ON a.id = t.app_id WHERE a.name = '${appName.replace(/'/g, "''")}' AND t.type = 'app' ORDER BY t.created_at DESC LIMIT 1;`
-          ], { encoding: 'utf8' }).trim()
-          if (!token) return { ok: false, message: `Dify 中未找到「${appName}」。请先运行 provision。`, settings: current }
-          const updated = await settingsService.save({ ...current, difyAppApiKey: token })
-          const cleared = repos.conversations.clearDifyConversationIds()
-          return {
-            ok: true,
-            message: `已切换到「${appName}」（${mode === 'agent' ? 'Tool Agent，16 个工具' : 'Workflow，知识库检索'}）。${cleared > 0 ? `已重置 ${cleared} 条旧对话的会话标识，下一轮问答将在新 App 里重新开始。` : ''}`,
-            settings: updated
-          }
-        } catch (error) {
-          return { ok: false, message: `切换失败：${error instanceof Error ? error.message : String(error)}`, settings: current }
-        }
-      }
     },
     folders: {
       list: async () => repos.folders.list(),

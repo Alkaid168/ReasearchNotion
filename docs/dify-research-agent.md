@@ -1,134 +1,61 @@
-# Dify 科研学术问答智能体配置
+# Dify Tool Agent 配置
 
-这份文档对应 ResearchNotion MVP 当前的 Dify 接入方式：用户只看到桌面软件，Dify 在后台提供知识库检索、问答和论文卡片生成能力。
+ResearchNotion 的桌面端只连接 Dify 中的 `ResearchNotion Tool Agent`。该应用必须是 `agent-chat` 模式；模型通过 function calling 自主调用运行在本机的论文工具服务，而不是接收一个固定的知识库召回结果。
 
-## Dify App 类型
+## 运行边界
 
-在 Dify 中创建一个 Advanced Chat Workflow App，并在工作流里加入“知识库检索、任务分流、科研问答 LLM、论文卡片 LLM、回答输出”等节点。模型 Provider、模型名称、模型 API Key 暂时都在 Dify 控制台里配置；ResearchNotion 设置页只填写：
+- 桌面端聊天：Dify Tool Agent -> 本地 OpenAPI 工具 -> SQLite 论文库与本地论文文件。
+- 可选论文归档：Dify Knowledge API Key 可将论文副本同步到 Dify 知识库。它不用于默认聊天，也不会被 Agent 当作唯一证据来源。
+- 用户可见界面只有 ResearchNotion 桌面软件；Dify 在后台提供 Agent 运行时。
 
-- Dify 服务地址
-- Dify App API Key
-- Dify Knowledge API Key
+## 初始化步骤
 
-## App 变量
+1. 启动本地 Dify：`scripts/start-dify.ps1 -NoOpen`。
+2. 启动 ResearchNotion 工具服务：运行 `pnpm dev`，确认 `http://127.0.0.1:17777/openapi.json` 可访问。
+3. 导入工具：`pnpm import:dify-tools`。Docker 内的 Dify 使用 `host.docker.internal:17777` 访问该服务。
+4. 创建或更新 Tool Agent：`pnpm provision:dify-agent`。
+5. 写入已有 Tool Agent 的本地配置：`pnpm use:dify-agent`，或双击 `use-dify-agent.bat`。
+6. 检查：`pnpm check:dify`。
 
-ResearchNotion 调用 `/v1/chat-messages` 时会通过 `inputs` 传入以下变量。请在 Dify Workflow 的开始节点中配置同名变量：
-
-| 变量名 | 含义 |
-| --- | --- |
-| `task` | 当前任务类型，普通科研问答为 `research_chat`，论文卡片为 `paper_card`。 |
-| `contextType` | 当前上下文类型：`free`、`folder` 或 `paper`。 |
-| `contextLabel` | 当前论文库名、论文标题，或“未限定知识库”。 |
-| `folderId` | 当前论文库在 ResearchNotion 本地数据库中的 ID，仅论文库上下文存在。 |
-| `paperId` | 当前论文在 ResearchNotion 本地数据库中的 ID，仅单篇论文上下文或论文卡片任务存在。 |
-| `emphasisContext` | 用户在阅读器中选中的强调上下文，可为空。 |
-
-设置页的“测试连接”会检查这些变量是否存在。如果缺少变量，ResearchNotion 会提示具体变量名。完整节点搭建方式见 [Dify Workflow 搭建说明](dify-workflow-build-guide.md)。
-
-## 引用返回
-
-请在 Dify Workflow 中开启引用与归因返回，也就是让 `/v1/chat-messages` 的响应包含 `metadata.retriever_resources`。ResearchNotion 会读取其中的 `document_id`、`document_name`、`content` 和 `score`：
-
-- `document_id` 用来尽量映射回本地论文。
-- `document_name` 在无法映射时作为引用来源名称显示。
-- `content` 作为引用片段保存。
-- `score` 作为检索相关度保存。
-
-如果 Dify App 没有开启引用返回，设置页的“测试连接”会提示需要开启。
-
-## 命令行检查
-
-如果是第一次配置本地 Dify，可以先运行初始化脚本。它会在本地 Dify 中创建或更新：
-
-- `ResearchNotion Academic QA Agent` Advanced Chat Workflow App
-- `ResearchNotion Demo Library` 知识库
-- Dify App API Key
-- Dify Knowledge API Key
-- ResearchNotion 本地设置中的 Dify 地址和 Key
-- ResearchNotion 本地论文库到 Dify dataset 的映射
+完整演示可直接运行：
 
 ```powershell
-pnpm provision:dify
+pnpm demo:prepare
 ```
 
-如果想在启动桌面软件前检查 Dify 配置，可以运行：
+## Tool Agent
 
-```powershell
-pnpm check:dify
-```
+Tool Agent 挂载 `ResearchNotion_Local_Tools` 提供者的 16 个 OpenAPI 工具。它可获取当前上下文、页面文本、论文章节、论文大纲、全文片段、当前论文搜索、跨库搜索、单篇调查、论文库调查和外网学术搜索等信息。
 
-这个命令会优先读取环境变量；如果没有环境变量，会自动读取 `pnpm provision:dify` 写入 ResearchNotion 本地设置的 Dify 地址和 Key。它会检查 App API Key、Knowledge API Key、ResearchNotion 必需变量，以及引用返回开关。
+回答时，Dify 先将用户问题和系统提示词交给模型；模型根据工具的 JSON schema 输出工具调用；Dify 执行工具并把结果返回模型；模型可以继续调用其他工具，直到形成最终 Markdown 回答。桌面端显示的是最终回答和精简的执行进度，不显示函数调用 JSON。
 
-当前本地演示环境使用 `economy` 索引模式上传文档，因为本机 Dify 尚未配置默认文本 embedding 模型。后续如果在 Dify 里配置好 embedding provider，可以再切换到 `high_quality` 向量索引。
+## 设置页
 
-## 系统提示词
+设置页需要：
 
-把下面这段作为 Dify App 的系统提示词或核心角色提示词：
+- Dify 服务地址，例如 `http://127.0.0.1:8080`
+- Tool Agent App API Key
 
-```text
-你是 ResearchNotion 科研学术问答智能体，服务于论文阅读、文献综述、术语解释、创新点提取、方法比较和研究方案讨论。
+可选：
 
-回答原则：
-1. 优先依据知识库检索结果、用户当前打开的论文、用户选中的强调上下文回答。
-2. 如果知识库证据不足，要明确说“不知道”或“当前资料不足”，不要编造论文、作者、年份、实验数据或结论。
-3. 回答要适合科研学习和小组作业展示，必要时按“结论、依据、局限、下一步问题”组织。
-4. 解释术语时先给直观中文解释，再补充技术细节。
-5. 分析创新点、方法比较、实验评价时，要说明它与已有工作的差异、适用场景和潜在局限。
-6. 如果 Dify 返回引用来源，请在回答中自然提到依据，方便用户回到原论文核对。
-```
+- Knowledge API Key：仅用于论文归档同步、删除归档副本等管理操作
+- DeepSeek API Key：同步到本地 Dify 的模型提供者或本地桥接服务时使用
 
-## ResearchNotion 发给 Dify 的任务
+“测试连接”只接受 `agent-chat` 应用。若填入旧的非 Agent App Key，桌面端会提示当前配置不是 Tool Agent。
 
-普通问答会被包装成科研问答任务，包含当前论文库或当前论文信息。如果用户在阅读器里选中一段文字并按 `Ctrl+I` 提问，这段文字会作为 `emphasisContext` 同时进入 `inputs` 和 `query`。
+## 系统提示词要点
 
-论文导入后，ResearchNotion 会调用同一个 Chat App 生成论文卡片。此时 `task` 为 `paper_card`，并要求 Dify 只返回 JSON：
+Tool Agent 的系统提示词位于 `scripts/provision-dify-tool-agent.mjs`，运行时还会由桌面端注入当前论文、论文库、选中文本和用户记忆。提示词约束如下：
 
-```json
-{
-  "authors": "",
-  "year": "",
-  "oneSentenceSummary": "",
-  "researchProblem": "",
-  "methodSummary": "",
-  "contributions": [],
-  "keywords": []
-}
-```
+1. 先判断需要哪些证据，再调用恰当的工具。
+2. 涉及当前论文的事实优先读取论文原文、章节或全文证据。
+3. 中文问题可以自行生成英文检索词，以改善英文论文召回。
+4. 资料不足时明确说明证据边界，不编造作者、实验、页码和结论。
+5. 不自我介绍、不复述任务、不把工具执行过程写进最终回答。
 
-如果证据不足，字段应返回空字符串或空数组，不要编造。
+## 故障排查
 
-## 后续可增强
-
-- 将论文卡片生成拆成 Dify Workflow，提高 JSON 稳定性。
-- 在 Dify 中为 `research_chat` 和 `paper_card` 走不同分支。
-- 将 Dify 返回的引用与本地 `paperId` 做更强映射，点击引用直接跳回论文阅读位置。
-- 增加“综述生成”“方法对比表”“创新点雷达图”等独立任务类型。
-
-## Agent 工具路线
-
-当前桌面端已经内置一组本地 OpenAPI 工具，供 Dify Agent 主动调用。它和旧的“知识库检索节点”不是同一件事：旧流程是先固定召回一批片段，再把片段交给 LLM；Agent 工具路线是让模型先判断应该读当前页、当前章节、整篇论文，还是搜索当前论文库，再调用对应工具。
-
-使用步骤：
-
-1. 演示准备推荐直接运行 `prepare-demo.bat` 或 `pnpm demo:prepare`，脚本会临时启动 ResearchNotion 工具服务并导入工具。
-2. 如果在浏览器或宿主机上查看 OpenAPI，地址是 `http://127.0.0.1:17777/openapi.json`。
-3. 如果 Dify 跑在 Docker 里，导入地址建议使用 `http://host.docker.internal:17777/openapi.json?server=http%3A%2F%2Fhost.docker.internal%3A17777`。
-4. 运行 `pnpm import:dify-tools`，把 11 个本地工具导入 Dify 自定义 API 工具提供者。
-5. 运行 `pnpm provision:dify-agent`，创建或更新 `ResearchNotion Tool Agent` 工具调用型 Agent Chat，并自动挂载这些工具。
-
-`pnpm provision:dify` 仍然会创建可演示的 Advanced Chat Workflow，并把桌面端设置指向这个稳定工作流。`pnpm import:dify-tools` 会创建或更新 `ResearchNotion_Local_Tools` 自定义 API 工具提供者。`pnpm provision:dify-agent` 则会额外创建 `agent-chat` 模式的 `ResearchNotion Tool Agent`，把这些 API 工具写入 `agent_mode.tools`，让 Dify 旧 Agent 运行器以函数调用方式自主选择工具。
-
-如果不使用 `prepare-demo.bat`，手动导入工具时需要先启动 Dify，并确认 ResearchNotion 工具服务 `http://127.0.0.1:17777/openapi.json` 可访问，然后运行：
-
-```powershell
-pnpm import:dify-tools
-pnpm provision:dify-agent
-```
-
-第一条命令会在 Dify 中创建或更新 `ResearchNotion_Local_Tools` 自定义 API 工具提供者，并导入 11 个本地阅读工具，其中 `investigate_paper` 会为宽泛论文问题一次返回元数据、大纲和页级证据。第二条命令会创建或更新 `ResearchNotion Tool Agent`，并验证 Dify 能为每个工具构建 Agent 运行时。
-
-桌面端默认仍使用 `pnpm provision:dify` 写入的旧 Workflow App Key，作为稳定演示链路。如果要在桌面端直接试用工具型 Agent，双击 `use-dify-agent.bat` 或运行 `pnpm use:dify-agent` 即可把本地设置切到 `ResearchNotion Tool Agent`；需要回到稳定 Workflow 时双击 `use-dify-workflow.bat` 或运行 `pnpm use:dify-workflow`。桌面端会自动兼容 `agent-chat` 的 streaming 响应。
-
-`pnpm verify:mvp` 同时认可这两条路线：旧 Workflow App 会检查 ResearchNotion 输入变量和引用返回，`agent-chat` Tool Agent 则按工具调用型 Agent 检查，不再要求旧 Workflow 的变量表。
-
-说明：Dify 1.15 的新版 Agent App / Agent V2 工具层更偏向 Plugin Tool；ResearchNotion 当前的 OpenAPI 自定义工具在旧 `agent-chat` 运行器里有明确支持路径。因此现阶段自动化选择旧 Agent Chat，后续如果要在新版 Agent App 画布中展示更漂亮的节点式配置，可以继续研究 Plugin 化或 Agent V2 适配。
+- `Tool Agent not found`：先运行 `pnpm import:dify-tools` 与 `pnpm provision:dify-agent`。
+- 工具无法连接：确认桌面端已启动，检查 `http://127.0.0.1:17777/openapi.json`；Dify Docker 容器应使用 `host.docker.internal:17777`。
+- `check:dify` 显示工具数不匹配：重新运行 `pnpm import:dify-tools` 后再 provision Agent。
+- 知识库归档失败：只影响归档同步，不影响 Agent 的本地论文问答；单独检查 Knowledge API Key。

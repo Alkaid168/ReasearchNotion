@@ -23,7 +23,7 @@
 
 1. Docker Desktop 处于 Running；本地 Dify 可访问 `http://localhost:8080`。
 2. DeepSeek bridge 已启动（双击 `start-deepseek-bridge.bat` 或 `pnpm deepseek:bridge`）。
-3. 演示数据就绪：`pnpm demo:prepare`（或手动 `provision:dify` → `use:deepseek-bridge` → `import:dify-tools` → `provision:dify-agent` → `seed:dify` → `check:dify`）。
+3. 演示数据就绪：`pnpm demo:prepare`（或手动 `use:deepseek-bridge` → `import:dify-tools` → `provision:dify-agent` → `use:dify-agent` → `seed:dify` → `check:dify`）。
 4. 桌面端启动：`pnpm rebuild:native` 后 `pnpm dev`（或双击 `start-research-notion.bat`）。
 
 ---

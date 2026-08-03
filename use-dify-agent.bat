@@ -2,7 +2,7 @@
 setlocal
 
 set "SCRIPT_DIR=%~dp0"
-powershell -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT_DIR%scripts\use-dify-app.ps1" -Target agent
+powershell -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT_DIR%scripts\configure-dify-agent.ps1"
 set "EXIT_CODE=%ERRORLEVEL%"
 
 if not "%EXIT_CODE%"=="0" (

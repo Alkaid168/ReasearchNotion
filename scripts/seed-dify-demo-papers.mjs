@@ -108,8 +108,8 @@ async function readJson(response) {
 async function getDatasetConfig() {
   const datasetId = psql(`select id from datasets where name=${quote(datasetName)} order by created_at desc limit 1;`)
   const datasetToken = psql(`select token from api_tokens where type='dataset' order by created_at desc limit 1;`)
-  if (!datasetId) throw new Error(`未找到 Dify 知识库：${datasetName}。请先运行 pnpm provision:dify。`)
-  if (!datasetToken) throw new Error('未找到 Dify Knowledge API Key。请先运行 pnpm provision:dify。')
+  if (!datasetId) throw new Error(`未找到 Dify 知识库：${datasetName}。请先在 Dify 中创建该归档知识库，或设置 RESEARCH_NOTION_DATASET_NAME。`)
+  if (!datasetToken) throw new Error('未找到 Dify Knowledge API Key。请设置 DIFY_KNOWLEDGE_API_KEY，或在桌面端保存归档配置后重试。')
   return { datasetId, datasetToken }
 }
 

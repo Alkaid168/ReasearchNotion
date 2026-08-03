@@ -75,8 +75,8 @@ describe('MVP demo verification script helpers', () => {
       dify: {
         ok: true,
         missingConfig: [],
-        appName: 'ResearchNotion Academic QA Agent',
-        appMode: 'advanced-chat',
+        appName: 'ResearchNotion Tool Agent',
+        appMode: 'agent-chat',
         missingInputs: [],
         retrieverEnabled: true,
         knowledgeApiOk: true,
@@ -100,23 +100,10 @@ describe('MVP demo verification script helpers', () => {
   })
 
   it('accepts an agent-chat Dify app without legacy workflow inputs', async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          retriever_resource: { enabled: false },
-          user_input_form: []
-        })
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ name: 'ResearchNotion Tool Agent', mode: 'agent-chat' })
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ data: [] })
-      })
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ name: 'ResearchNotion Tool Agent', mode: 'agent-chat' })
+    })
     vi.stubGlobal('fetch', fetchMock)
 
     const result = await checkDifyReadiness({

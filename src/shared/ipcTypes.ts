@@ -73,7 +73,6 @@ export type DesktopApi = {
     get(): Promise<AppSettings>
     save(settings: AppSettings): Promise<AppSettings>
     testConnection(settings: AppSettings): Promise<ConnectionTestResult>
-    switchDifyApp(mode: 'workflow' | 'agent'): Promise<{ ok: boolean; message: string; settings: AppSettings }>
   }
   folders: {
     list(): Promise<Folder[]>

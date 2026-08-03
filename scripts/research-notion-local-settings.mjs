@@ -169,7 +169,7 @@ export function readLocalSettings() {
   }
 }
 
-export function writeLocalSettings({ baseUrl, appToken, datasetToken, datasetName, datasetId }) {
+export function writeLocalSettings({ baseUrl, appToken, datasetToken = '', datasetName = '', datasetId = '' }) {
   const dbPath = preferredDatabasePath()
   fs.mkdirSync(path.dirname(dbPath), { recursive: true })
   const db = new Database(dbPath)
@@ -182,6 +182,8 @@ export function writeLocalSettings({ baseUrl, appToken, datasetToken, datasetNam
     setting.run('difyBaseUrl', baseUrl)
     setting.run('difyAppApiKey', sealPlain(appToken))
     setting.run('difyKnowledgeApiKey', sealPlain(datasetToken))
+
+    if (!datasetId || !datasetName) return dbPath
 
     const folderId =
       db

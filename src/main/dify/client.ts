@@ -1,6 +1,5 @@
 import type { Citation } from '../../shared/types'
 import { DifyApiError } from './errors'
-import { researchAgentRequiredInputs } from './researchAgent'
 import type { DifyAppInfo, DifyChatProgressEvent, DifyConnectionCheck, DifyDataset, SendChatInput, SendChatResult } from './types'
 
 type FetchResponseLike = {
@@ -271,34 +270,6 @@ function retrieverResourcesFromResponse(json: Record<string, unknown>): unknown 
   return []
 }
 
-function isAgentChatMode(appMode: unknown): boolean {
-  return appMode === 'agent-chat'
-}
-
-function collectParameterVariables(parameters: unknown): Set<string> {
-  const variables = new Set<string>()
-  const form = (parameters as Record<string, unknown>).user_input_form
-  if (!Array.isArray(form)) return variables
-
-  form.forEach((item) => {
-    if (!item || typeof item !== 'object') return
-    const controls = Object.values(item as Record<string, unknown>)
-    controls.forEach((control) => {
-      if (!control || typeof control !== 'object') return
-      const variable = (control as Record<string, unknown>).variable
-      if (typeof variable === 'string' && variable.trim()) variables.add(variable)
-    })
-  })
-
-  return variables
-}
-
-function isRetrieverResourceEnabled(parameters: unknown): boolean {
-  const retriever = (parameters as Record<string, unknown>).retriever_resource
-  if (!retriever || typeof retriever !== 'object') return false
-  return (retriever as Record<string, unknown>).enabled === true
-}
-
 function isTransientDifyFailure(error: unknown): boolean {
   if (!(error instanceof DifyApiError)) return false
   if (![400, 500, 502, 503, 504].includes(error.status)) return false
@@ -312,9 +283,8 @@ function isBlockingModeUnsupported(error: unknown): boolean {
 }
 
 function isConversationNotFound(error: unknown): boolean {
-  // Dify returns 404 "Conversation Not Exists" when a conversation_id from one app
-  // (e.g. Workflow) is replayed against another app (e.g. Tool Agent). This happens
-  // after switching Dify apps mid-session; recover by dropping the stale id.
+  // Dify may retain a conversation id after its server-side state is removed.
+  // Recover by retrying the request without that stale id.
   return error instanceof DifyApiError && error.status === 404 && /conversation not exists/i.test(error.body)
 }
 
@@ -487,35 +457,27 @@ export function createDifyClient(options: DifyClientOptions) {
   return {
     getAppInfo,
     async testConnection(): Promise<DifyConnectionCheck> {
-      const parameters = await readJson(
-        await fetchImpl(`${baseUrl}/v1/parameters`, {
-          method: 'GET',
-          headers: {
-            Authorization: `Bearer ${options.appApiKey}`
-          }
-        })
-      )
-
       const info = await getAppInfo()
 
-      await readJson(
-        await fetchImpl(`${baseUrl}/v1/datasets?page=1&limit=1`, {
-          method: 'GET',
-          headers: {
-            Authorization: `Bearer ${options.knowledgeApiKey}`
-          }
-        })
-      )
+      const hasKnowledgeKey = Boolean(options.knowledgeApiKey)
+      if (hasKnowledgeKey) {
+        await readJson(
+          await fetchImpl(`${baseUrl}/v1/datasets?page=1&limit=1`, {
+            method: 'GET',
+            headers: {
+              Authorization: `Bearer ${options.knowledgeApiKey}`
+            }
+          })
+        )
+      }
 
-      const appMode = info.mode
-      const variables = collectParameterVariables(parameters)
       return {
         app: true,
-        knowledge: true,
+        knowledge: hasKnowledgeKey,
         appName: info.name,
-        appMode,
-        missingInputs: isAgentChatMode(appMode) ? [] : researchAgentRequiredInputs.filter((variable) => !variables.has(variable)),
-        retrieverResourceEnabled: isAgentChatMode(appMode) ? true : isRetrieverResourceEnabled(parameters)
+        appMode: info.mode,
+        missingInputs: [],
+        retrieverResourceEnabled: true
       }
     },
     async createDataset(name: string): Promise<DifyDataset> {

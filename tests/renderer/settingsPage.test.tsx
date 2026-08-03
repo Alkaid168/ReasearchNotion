@@ -37,7 +37,7 @@ function createApiMock(status: EnvironmentStatus = unconfiguredStatus): DesktopA
     settings: {
       get: vi.fn().mockResolvedValue(emptySettings),
       save: vi.fn().mockImplementation(async (settings: AppSettings) => settings),
-      testConnection: vi.fn(), switchDifyApp: vi.fn().mockResolvedValue({ ok: true, message: "", settings: { difyBaseUrl: "", difyAppApiKey: "", difyKnowledgeApiKey: "", deepseekApiKey: "", defaultFolderId: null } }).mockResolvedValue({ ok: true, message: 'connection configured' })
+      testConnection: vi.fn().mockResolvedValue({ ok: true, message: 'connection configured' })
     },
     folders: { list: vi.fn(), create: vi.fn(), rename: vi.fn(), delete: vi.fn() },
     conversationFolders: { list: vi.fn(), create: vi.fn(), rename: vi.fn(), reorder: vi.fn() },

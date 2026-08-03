@@ -1,7 +1,6 @@
 import childProcess from 'node:child_process'
 
-const requiredInputs = ['task', 'contextType', 'contextLabel', 'folderId', 'paperId', 'emphasisContext']
-const expectedToolCount = 12
+const expectedToolCount = 16
 const toolAgentName = process.env.RESEARCH_NOTION_TOOL_AGENT_NAME || 'ResearchNotion Tool Agent'
 const toolProviderName = process.env.RESEARCH_NOTION_TOOL_PROVIDER || 'ResearchNotion_Local_Tools'
 const dbContainer = process.env.DIFY_DB_CONTAINER || 'docker-db_postgres-1'
@@ -33,16 +32,6 @@ async function readJson(response) {
   if (response.ok) return response.json()
   const body = await response.text()
   throw new Error(`HTTP ${response.status}: ${body}`)
-}
-
-function collectVariables(parameters) {
-  const variables = new Set()
-  for (const item of parameters.user_input_form ?? []) {
-    for (const control of Object.values(item)) {
-      if (control?.variable) variables.add(control.variable)
-    }
-  }
-  return variables
 }
 
 async function getJson(url, apiKey) {
@@ -164,29 +153,19 @@ function checkDeepSeekEndpoint() {
 async function main() {
   const { baseUrl, appApiKey, knowledgeApiKey, source } = readConfig()
   if (!appApiKey) {
-    throw new Error('未找到 ResearchNotion Tool Agent 的 API Token。请先运行 pnpm provision:dify，或设置 DIFY_APP_API_KEY。')
+    throw new Error('未找到 ResearchNotion Tool Agent 的 API Token。请先运行 pnpm provision:dify-agent，或设置 DIFY_APP_API_KEY。')
   }
 
-  const parameters = await getJson(`${baseUrl}/v1/parameters`, appApiKey)
   const info = await getJson(`${baseUrl}/v1/info`, appApiKey)
   const localTools = await checkLocalAgentTools()
   const toolAgent = checkDifyToolAgent()
   const deepSeekEndpoint = checkDeepSeekEndpoint()
 
-  const variables = collectVariables(parameters)
   const isToolAgentApp = info.mode === 'agent-chat'
-  if (!isToolAgentApp && !knowledgeApiKey) {
-    throw new Error('当前 Dify 应用不是 Tool Agent，需要设置 DIFY_KNOWLEDGE_API_KEY 后才能检查知识库接口。')
-  }
-  if (!isToolAgentApp) await getJson(`${baseUrl}/v1/datasets?page=1&limit=1`, knowledgeApiKey)
-  const missingInputs = isToolAgentApp ? [] : requiredInputs.filter((variable) => !variables.has(variable))
-  const retrieverEnabled = isToolAgentApp ? true : parameters.retriever_resource?.enabled === true
 
   console.log(`配置来源: ${source}`)
   console.log(`Dify App: ${info.name ?? '未命名'} (${info.mode ?? 'unknown mode'})`)
-  console.log(`Knowledge API Key: ${isToolAgentApp ? 'Tool Agent 不需要' : '可用'}`)
-  console.log(`引用返回: ${retrieverEnabled ? '已开启' : '未开启'}`)
-  console.log(`ResearchNotion 变量: ${missingInputs.length === 0 ? '完整' : `缺少 ${missingInputs.join(', ')}`}`)
+  console.log(`Knowledge API Key: ${knowledgeApiKey ? '已配置（仅论文归档同步）' : '未配置（Tool Agent 不需要）'}`)
   console.log(
     `ResearchNotion Agent 工具: ${
       localTools.ok ? `可用 (${localTools.operationCount} 个接口)` : `未连接，先启动桌面端后再检查 (${localTools.url})`
@@ -214,7 +193,7 @@ async function main() {
     }`
   )
 
-  if (missingInputs.length > 0 || !retrieverEnabled || (toolAgent.checked && !toolAgent.ok)) {
+  if (!isToolAgentApp || (toolAgent.checked && !toolAgent.ok)) {
     process.exitCode = 1
   }
 }

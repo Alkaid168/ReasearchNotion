@@ -114,24 +114,6 @@ export function SettingsPage({ onSettingsSaved, onConnectionTested }: SettingsPa
     setNotice({ tone: 'neutral', message: '记忆已删除。' })
   }
 
-  const [switchingApp, setSwitchingApp] = useState(false)
-  const difyMode: 'workflow' | 'agent' | null = environmentStatus?.difyAppMode === 'agent-chat' ? 'agent' : environmentStatus?.difyAppMode ? 'workflow' : null
-
-  async function switchDifyApp(mode: 'workflow' | 'agent'): Promise<void> {
-    setSwitchingApp(true)
-    setNotice(null)
-    try {
-      const result = await desktopApi.settings.switchDifyApp(mode)
-      setSettings(result.settings)
-      setEnvironmentStatus(await desktopApi.app.getEnvironmentStatus())
-      setNotice({ tone: result.ok ? 'success' : 'error', message: result.message })
-    } catch {
-      setNotice({ tone: 'error', message: '切换 App 模式失败。' })
-    } finally {
-      setSwitchingApp(false)
-    }
-  }
-
   const memoryTypeLabels: Record<UserMemoryType, string> = {
     user: '身份',
     preference: '偏好',
@@ -186,7 +168,7 @@ export function SettingsPage({ onSettingsSaved, onConnectionTested }: SettingsPa
         <label className="settings-field">
           <span>
             <KeyRound size={16} aria-hidden="true" />
-            Dify Knowledge API Key
+            Dify Knowledge API Key（论文归档同步，可选）
           </span>
           <input
             value={settings.difyKnowledgeApiKey}
@@ -226,36 +208,19 @@ export function SettingsPage({ onSettingsSaved, onConnectionTested }: SettingsPa
       <div className="settings-app-mode">
         <span className="settings-field-label">
           <Zap size={16} aria-hidden="true" />
-          AI 引擎模式
+          AI 引擎
         </span>
         <div className="settings-app-mode-buttons">
-          <button
-            className={difyMode === 'agent' ? 'settings-mode-btn active' : 'settings-mode-btn'}
-            type="button"
-            onClick={() => void switchDifyApp('agent')}
-            disabled={switchingApp || !environmentStatus?.difyConfigured}
-          >
+          <div className="settings-mode-btn active" aria-label="当前 AI 引擎为 Tool Agent">
             <Brain size={15} aria-hidden="true" />
             <div>
               <strong>Tool Agent</strong>
-              <small>16 个工具 · 外网搜索 · 自主多轮 · 自动记忆</small>
+              <small>本地论文取证 · 外网搜索 · 自主多轮 · 长期记忆</small>
             </div>
-          </button>
-          <button
-            className={difyMode === 'workflow' ? 'settings-mode-btn active' : 'settings-mode-btn'}
-            type="button"
-            onClick={() => void switchDifyApp('workflow')}
-            disabled={switchingApp || !environmentStatus?.difyConfigured}
-          >
-            <Server size={15} aria-hidden="true" />
-            <div>
-              <strong>Workflow</strong>
-              <small>知识库检索 · 稳定模式</small>
-            </div>
-          </button>
+          </div>
         </div>
         <p className="settings-app-mode-hint">
-          Tool Agent = 全功能（14 工具含 arXiv/S2 搜索、跨论文取证）。Workflow = 稳定路径（仅知识库检索）。切换不需要重启。
+          ResearchNotion 只使用 Tool Agent。它会按问题自主读取本地论文、调用检索工具，并在需要时查询公开学术资源。
         </p>
       </div>
 

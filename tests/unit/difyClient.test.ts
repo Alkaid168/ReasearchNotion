@@ -2,28 +2,12 @@ import { describe, expect, it, vi } from 'vitest'
 import { createDifyClient } from '../../src/main/dify/client'
 
 describe('Dify client', () => {
-  it('checks app and knowledge credentials without creating data', async () => {
+  it('checks the Tool Agent and optionally validates the archive key', async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce({
         ok: true,
-        json: async () => ({
-          opening_statement: '',
-          suggested_questions: [],
-          retriever_resource: { enabled: true },
-          user_input_form: [
-            { text_input: { variable: 'task' } },
-            { text_input: { variable: 'contextType' } },
-            { text_input: { variable: 'contextLabel' } },
-            { text_input: { variable: 'folderId' } },
-            { text_input: { variable: 'paperId' } },
-            { paragraph: { variable: 'emphasisContext' } }
-          ]
-        })
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ name: 'ResearchNotion Academic QA Agent', mode: 'chat' })
+        json: async () => ({ name: 'ResearchNotion Tool Agent', mode: 'agent-chat' })
       })
       .mockResolvedValueOnce({
         ok: true,
@@ -39,21 +23,13 @@ describe('Dify client', () => {
     await expect(client.testConnection()).resolves.toEqual({
       app: true,
       knowledge: true,
-      appName: 'ResearchNotion Academic QA Agent',
-      appMode: 'chat',
+      appName: 'ResearchNotion Tool Agent',
+      appMode: 'agent-chat',
       missingInputs: [],
       retrieverResourceEnabled: true
     })
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      'http://localhost:8080/v1/parameters',
-      expect.objectContaining({
-        method: 'GET',
-        headers: expect.objectContaining({ Authorization: 'Bearer app-key' })
-      })
-    )
-    expect(fetchMock).toHaveBeenNthCalledWith(
-      2,
       'http://localhost:8080/v1/info',
       expect.objectContaining({
         method: 'GET',
@@ -61,7 +37,7 @@ describe('Dify client', () => {
       })
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
-      3,
+      2,
       'http://localhost:8080/v1/datasets?page=1&limit=1',
       expect.objectContaining({
         method: 'GET',
@@ -95,66 +71,23 @@ describe('Dify client', () => {
     )
   })
 
-  it('reports missing ResearchNotion variables and disabled retriever resources', async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          retriever_resource: { enabled: false },
-          user_input_form: [{ text_input: { variable: 'task' } }]
-        })
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ mode: 'chat' })
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ data: [] })
-      })
+  it('accepts an agent-chat app without a knowledge archive key', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ mode: 'agent-chat' })
+    })
     const client = createDifyClient({
       baseUrl: 'http://localhost:8080',
       appApiKey: 'app-key',
-      knowledgeApiKey: 'knowledge-key',
-      fetchImpl: fetchMock
-    })
-
-    await expect(client.testConnection()).resolves.toMatchObject({
-      missingInputs: ['contextType', 'contextLabel', 'folderId', 'paperId', 'emphasisContext'],
-      retrieverResourceEnabled: false
-    })
-  })
-
-  it('accepts agent-chat apps without the legacy workflow input variables', async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          retriever_resource: { enabled: false },
-          user_input_form: []
-        })
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ mode: 'agent-chat' })
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ data: [] })
-      })
-    const client = createDifyClient({
-      baseUrl: 'http://localhost:8080',
-      appApiKey: 'app-key',
-      knowledgeApiKey: 'knowledge-key',
+      knowledgeApiKey: '',
       fetchImpl: fetchMock
     })
 
     await expect(client.testConnection()).resolves.toMatchObject({
       appMode: 'agent-chat',
       missingInputs: [],
-      retrieverResourceEnabled: true
+      retrieverResourceEnabled: true,
+      knowledge: false
     })
   })
 
@@ -1001,13 +934,13 @@ describe('Dify client', () => {
       query: '继续讨论',
       user: 'local-user',
       inputs: {},
-      conversationId: 'stale-conv-from-workflow-app'
+      conversationId: 'stale-conversation-id'
     })
 
     expect(result.answer).toBe('已在新对话恢复。')
     expect(result.difyConversationId).toBe('new-agent-conv')
     expect(JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body))).toMatchObject({
-      conversation_id: 'stale-conv-from-workflow-app'
+      conversation_id: 'stale-conversation-id'
     })
     expect(JSON.parse(String(fetchMock.mock.calls[3]?.[1]?.body))).not.toHaveProperty('conversation_id')
   })

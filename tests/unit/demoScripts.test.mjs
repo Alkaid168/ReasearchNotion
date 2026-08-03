@@ -26,7 +26,6 @@ describe('demo preparation scripts', () => {
     )
 
     expect(output).toContain('ResearchNotion demo preparation')
-    expect(output).toContain('pnpm provision:dify')
     expect(output).toContain('scripts\\start-dify.ps1 -NoOpen')
     expect(output).toContain('pnpm use:deepseek-bridge')
     expect(output).toContain('pnpm import:dify-tools')

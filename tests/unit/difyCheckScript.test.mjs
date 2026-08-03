@@ -3,7 +3,7 @@ import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 describe('Dify check script', () => {
-  it('checks both the workflow app and the tool Agent Chat app', () => {
+  it('checks the Tool Agent and its local tool provider', () => {
     const script = readFileSync(resolve('scripts/check-dify-research-agent.mjs'), 'utf8')
     const packageJson = JSON.parse(readFileSync(resolve('package.json'), 'utf8'))
 
@@ -15,11 +15,12 @@ describe('Dify check script', () => {
     expect(script).toContain("info.mode === 'agent-chat'")
     expect(script).toContain('function_call')
     expect(script).toContain('Dify Tool Agent')
-    expect(script).toContain('expectedToolCount = 12')
+    expect(script).toContain('expectedToolCount = 16')
     expect(script).toContain('readToolAgentToken')
     expect(script).toContain("from api_tokens")
     expect(script).toContain('provider_credentials')
     expect(script).toContain('endpoint_url')
     expect(script).toContain('DeepSeek endpoint')
+    expect(script).not.toContain('ResearchNotion Academic QA Agent')
   })
 })

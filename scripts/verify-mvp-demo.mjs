@@ -3,8 +3,6 @@ import { fileURLToPath } from 'node:url'
 import Database from 'better-sqlite3'
 import { readLocalSettings } from './research-notion-local-settings.mjs'
 
-export const requiredInputs = ['task', 'contextType', 'contextLabel', 'folderId', 'paperId', 'emphasisContext']
-
 function statusLine(ok, label, detail) {
   return `${ok ? '[OK]' : '[FAIL]'} ${label}${detail ? `: ${detail}` : ''}`
 }
@@ -31,20 +29,6 @@ async function readJson(response) {
   throw new Error(`HTTP ${response.status}: ${await response.text()}`)
 }
 
-function collectVariables(parameters) {
-  const variables = new Set()
-  for (const item of parameters.user_input_form ?? []) {
-    for (const control of Object.values(item)) {
-      if (control?.variable) variables.add(control.variable)
-    }
-  }
-  return variables
-}
-
-function isAgentChatMode(mode) {
-  return mode === 'agent-chat'
-}
-
 async function getJson(url, apiKey) {
   return readJson(
     await fetch(url, {
@@ -57,8 +41,7 @@ async function getJson(url, apiKey) {
 export async function checkDifyReadiness(config) {
   const missingConfig = [
     ['DIFY_BASE_URL', config.baseUrl],
-    ['DIFY_APP_API_KEY', config.appApiKey],
-    ['DIFY_KNOWLEDGE_API_KEY', config.knowledgeApiKey]
+    ['DIFY_APP_API_KEY', config.appApiKey]
   ].filter(([, value]) => !value)
 
   if (missingConfig.length > 0) {
@@ -67,7 +50,7 @@ export async function checkDifyReadiness(config) {
       missingConfig: missingConfig.map(([name]) => name),
       appName: '',
       appMode: '',
-      missingInputs: requiredInputs,
+      missingInputs: [],
       retrieverEnabled: false,
       knowledgeApiOk: false,
       error: '缺少 Dify 配置。'
@@ -75,23 +58,17 @@ export async function checkDifyReadiness(config) {
   }
 
   try {
-    const parameters = await getJson(`${config.baseUrl}/v1/parameters`, config.appApiKey)
     const info = await getJson(`${config.baseUrl}/v1/info`, config.appApiKey)
-    await getJson(`${config.baseUrl}/v1/datasets?page=1&limit=1`, config.knowledgeApiKey)
-
     const appMode = info.mode ?? 'unknown'
-    const variables = collectVariables(parameters)
-    const missingInputs = isAgentChatMode(appMode) ? [] : requiredInputs.filter((variable) => !variables.has(variable))
-    const retrieverEnabled = isAgentChatMode(appMode) ? true : parameters.retriever_resource?.enabled === true
 
     return {
-      ok: missingInputs.length === 0 && retrieverEnabled,
+      ok: appMode === 'agent-chat',
       missingConfig: [],
       appName: info.name ?? '未命名',
       appMode,
-      missingInputs,
-      retrieverEnabled,
-      knowledgeApiOk: true,
+      missingInputs: [],
+      retrieverEnabled: true,
+      knowledgeApiOk: Boolean(config.knowledgeApiKey),
       error: ''
     }
   } catch (error) {
@@ -100,7 +77,7 @@ export async function checkDifyReadiness(config) {
       missingConfig: [],
       appName: '',
       appMode: '',
-      missingInputs: requiredInputs,
+      missingInputs: [],
       retrieverEnabled: false,
       knowledgeApiOk: false,
       error: error instanceof Error ? error.message : String(error)
@@ -185,13 +162,8 @@ export function buildDemoReadinessReport({ config, dify, local }) {
     lines.push(statusLine(false, 'Dify 配置', `缺少 ${dify.missingConfig.join(', ')}`))
   } else {
     lines.push(statusLine(dify.ok, 'Dify App', dify.appName ? `${dify.appName} (${dify.appMode})` : dify.error))
-    lines.push(statusLine(dify.knowledgeApiOk, 'Knowledge API Key', dify.knowledgeApiOk ? '可用' : dify.error))
-    if (isAgentChatMode(dify.appMode)) {
-      lines.push(statusLine(dify.ok, 'Agent 模式', dify.ok ? '已启用' : '未就绪'))
-    } else {
-      lines.push(statusLine(dify.retrieverEnabled, '引用返回', dify.retrieverEnabled ? '已开启' : '未开启'))
-      lines.push(statusLine(dify.missingInputs.length === 0, 'ResearchNotion 变量', dify.missingInputs.length ? dify.missingInputs.join(', ') : '完整'))
-    }
+    lines.push(statusLine(dify.ok, 'Agent 模式', dify.ok ? '已启用' : '当前 App 不是 agent-chat'))
+    lines.push(statusLine(true, '知识库归档', dify.knowledgeApiOk ? '保留既有 Dify 知识库配置' : '未配置，Tool Agent 不受影响'))
   }
   lines.push(statusLine(local.folderCount > 0, '论文库数量', String(local.folderCount)))
   lines.push(statusLine(local.paperCount > 0, '论文数量', String(local.paperCount)))

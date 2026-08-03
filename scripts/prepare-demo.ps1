@@ -203,11 +203,10 @@ if ($SkipDifyStart) {
     -Arguments @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $PSScriptRoot 'start-dify.ps1'), '-NoOpen')
 }
 
-Invoke-PnpmScript -Label 'Provision Dify Workflow and local settings' -ScriptName 'provision:dify'
 Invoke-PnpmScript -Label 'Route Dify DeepSeek through local bridge' -ScriptName 'use:deepseek-bridge'
 Start-ResearchNotionToolService
 Invoke-PnpmScript -Label 'Import ResearchNotion Agent tools' -ScriptName 'import:dify-tools'
-Invoke-PnpmScript -Label 'Provision Dify tool Agent Chat' -ScriptName 'provision:dify-agent'
+Invoke-PnpmScript -Label 'Provision and configure Dify Tool Agent' -ScriptName 'provision:dify-agent'
 Stop-ProjectDevProcesses
 Invoke-PnpmScript -Label 'Seed real demo papers' -ScriptName 'seed:dify'
 Invoke-PnpmScript -Label 'Check Dify agent contract' -ScriptName 'check:dify'
