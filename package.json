@@ -31,7 +31,6 @@
   },
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.1",
-    "@napi-rs/canvas": "^1.0.3",
     "better-sqlite3": "^12.11.1",
     "electron-store": "^10.0.1",
     "jsonrepair": "^3.15.0",
@@ -44,7 +43,6 @@
     "rehype-katex": "^7.0.1",
     "remark-gfm": "4.0.1",
     "remark-math": "^6.0.0",
-    "tesseract.js": "^7.0.0",
     "zod": "^3.24.1"
   },
   "devDependencies": {

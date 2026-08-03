@@ -24,4 +24,3 @@ nsis:
 asar: true
 asarUnpack:
   - "**/better-sqlite3/**"
-  - "**/@napi-rs/canvas/**"
