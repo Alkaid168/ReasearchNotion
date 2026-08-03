@@ -1,4 +1,5 @@
-import { app, BrowserWindow, dialog } from 'electron'
+import { app, BrowserWindow, dialog, shell } from 'electron'
+import { execFileSync } from 'node:child_process'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -19,6 +20,7 @@ import { readPaperMarkdown, readPaperPlainText } from './files/importPaper'
 import { registerIpc } from './ipc'
 import { createElectronSecretBox } from './settings/secretBox'
 import { createSettingsService } from './settings/settingsService'
+import { createMemoriesService } from './settings/memoriesService'
 import { ensureFolderDataset } from './workflows/ensureFolderDataset'
 import { importAndIndexPaper, reindexPaper } from './workflows/importAndIndexPaper'
 import type { AppSettings, ChatContext, Paper } from '../shared/types'
@@ -26,6 +28,45 @@ import type { AppSettings, ChatContext, Paper } from '../shared/types'
 const isolatedUserDataDir = process.env.RESEARCH_NOTION_USER_DATA_DIR?.trim()
 if (isolatedUserDataDir) app.setPath('userData', isolatedUserDataDir)
 if (process.platform === 'win32') app.setAppUserModelId('com.researchnotion.desktop')
+
+function safeUrl(raw: string): URL | null {
+  try {
+    return new URL(raw)
+  } catch {
+    return null
+  }
+}
+
+// Desktop apps must not navigate the main window to an external URL — once the
+// renderer leaves the React app the user cannot get back. Open external links
+// (arXiv, Semantic Scholar, DOIs, …) in the system default browser instead and
+// keep the ResearchNotion window where it is.
+function openExternalLinksInSystemBrowser(window: BrowserWindow): void {
+  const openExternal = (rawUrl: string): void => {
+    const parsed = safeUrl(rawUrl)
+    if (parsed && (parsed.protocol === 'http:' || parsed.protocol === 'https:')) {
+      void shell.openExternal(parsed.href)
+    }
+  }
+  // <a target="_blank"> / window.open → system browser, no in-app popup window
+  window.webContents.setWindowOpenHandler(({ url }) => {
+    openExternal(url)
+    return { action: 'deny' }
+  })
+  // <a> without target tries to navigate the current window — block that and
+  // allow only same-origin navigation (dev server / packaged file:// app).
+  window.webContents.on('will-navigate', (event, url) => {
+    const current = safeUrl(window.webContents.getURL())
+    const target = safeUrl(url)
+    if (!target) {
+      event.preventDefault()
+      return
+    }
+    if (current && target.origin === current.origin) return
+    event.preventDefault()
+    openExternal(url)
+  })
+}
 
 function createWindow(): void {
   const appIconPath = path.join(process.cwd(), 'resources', 'research-notion.ico')
@@ -46,6 +87,8 @@ function createWindow(): void {
     }
   })
 
+  openExternalLinksInSystemBrowser(mainWindow)
+
   if (process.env.ELECTRON_RENDERER_URL) {
     void mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL)
   } else {
@@ -60,12 +103,13 @@ void app.whenReady().then(async () => {
   const repos = createRepositories(db)
   const readingState = createReadingStateStore()
   const toolServiceToken = await resolveToolServiceToken(userDataDir)
+  const settingsService = createSettingsService(db, createElectronSecretBox())
+  const memoriesService = createMemoriesService(db)
   const agentToolService = createOpenApiToolService({
-    tools: createAgentToolHandlers({ repos, readingState }),
+    tools: createAgentToolHandlers({ repos, readingState, memories: memoriesService }),
     readingState,
     authToken: toolServiceToken
   })
-  const settingsService = createSettingsService(db, createElectronSecretBox())
   const activeSendControllers = new Map<string, AbortController>()
 
   await agentToolService.start()
@@ -203,29 +247,61 @@ void app.whenReady().then(async () => {
         if (!settings.difyBaseUrl || !settings.difyAppApiKey || !settings.difyKnowledgeApiKey) {
           return { ok: false, message: '请填写 Dify 地址、App API Key 和 Knowledge API Key。' }
         }
+        const client = createConfiguredDifyClient(settings)
+        const maxRetries = 3
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+          try {
+            const check = await client.testConnection()
+            if (check.missingInputs.length > 0) {
+              return {
+                ok: false,
+                message: `Dify App 缺少变量：${check.missingInputs.join('、')}。请按文档配置科研问答智能体。`
+              }
+            }
+            if (!check.retrieverResourceEnabled) {
+              return {
+                ok: false,
+                message: 'Dify App 未开启引用与归因返回，请开启 retriever_resource 后再测试。'
+              }
+            }
+            return { ok: true, message: 'Dify 连接正常，App 与知识库 API Key 均可用。' }
+          } catch (error) {
+            const isTransient = error instanceof DifyApiError && (error.status === 502 || error.status === 503)
+            if ((isTransient || !(error instanceof DifyApiError)) && attempt < maxRetries) {
+              await new Promise((r) => setTimeout(r, 5000))
+              continue
+            }
+            if (error instanceof DifyApiError) {
+              return {
+                ok: false,
+                message: `Dify 返回 ${error.status}，请检查服务地址和 API Key。`
+              }
+            }
+            return { ok: false, message: '无法连接 Dify，请确认本地 Dify 正在运行。' }
+          }
+        }
+        return { ok: false, message: 'Dify 暂不可用，请确认服务已启动。' }
+      },
+      switchDifyApp: async (mode: 'workflow' | 'agent') => {
+        const current = await settingsService.get()
+        if (!current.difyBaseUrl) return { ok: false, message: '请先配置 Dify 地址。', settings: current }
+        const appName = mode === 'agent' ? 'ResearchNotion Tool Agent' : 'ResearchNotion Academic QA Agent'
+        const DOCKER_BIN = process.platform === 'win32' ? 'C:/Program Files/Docker/Docker/resources/bin/docker.exe' : 'docker'
+        const DB_CONTAINER = process.env.DIFY_DB_CONTAINER || 'docker-db_postgres-1'
         try {
-          const check = await createConfiguredDifyClient(settings).testConnection()
-          if (check.missingInputs.length > 0) {
-            return {
-              ok: false,
-              message: `Dify App 缺少变量：${check.missingInputs.join('、')}。请按文档配置科研问答智能体。`
-            }
+          const token = execFileSync(DOCKER_BIN, ['exec', DB_CONTAINER, 'psql', '-U', 'postgres', '-d', 'dify', '-t', '-A', '-c',
+            `SELECT t.token FROM api_tokens t JOIN apps a ON a.id = t.app_id WHERE a.name = '${appName.replace(/'/g, "''")}' AND t.type = 'app' ORDER BY t.created_at DESC LIMIT 1;`
+          ], { encoding: 'utf8' }).trim()
+          if (!token) return { ok: false, message: `Dify 中未找到「${appName}」。请先运行 provision。`, settings: current }
+          const updated = await settingsService.save({ ...current, difyAppApiKey: token })
+          const cleared = repos.conversations.clearDifyConversationIds()
+          return {
+            ok: true,
+            message: `已切换到「${appName}」（${mode === 'agent' ? 'Tool Agent，16 个工具' : 'Workflow，知识库检索'}）。${cleared > 0 ? `已重置 ${cleared} 条旧对话的会话标识，下一轮问答将在新 App 里重新开始。` : ''}`,
+            settings: updated
           }
-          if (!check.retrieverResourceEnabled) {
-            return {
-              ok: false,
-              message: 'Dify App 未开启引用与归因返回，请开启 retriever_resource 后再测试。'
-            }
-          }
-          return { ok: true, message: 'Dify 连接正常，App 与知识库 API Key 均可用。' }
         } catch (error) {
-          if (error instanceof DifyApiError) {
-            return {
-              ok: false,
-              message: `Dify 返回 ${error.status}，请检查服务地址和 API Key。`
-            }
-          }
-          return { ok: false, message: '无法连接 Dify，请确认本地 Dify 正在运行。' }
+          return { ok: false, message: `切换失败：${error instanceof Error ? error.message : String(error)}`, settings: current }
         }
       }
     },
@@ -264,6 +340,11 @@ void app.whenReady().then(async () => {
     },
     reading: {
       updateState: async (input) => readingState.update(input)
+    },
+    memories: {
+      list: async () => memoriesService.list(),
+      save: async (input) => memoriesService.save(input),
+      delete: async (id) => memoriesService.delete(id)
     },
     papers: {
       list: async (folderId) => repos.papers.listByFolder(folderId),
@@ -376,7 +457,8 @@ void app.whenReady().then(async () => {
               context: conversation.context,
               emphasisContext: options?.emphasisContext,
               contextInventory: buildContextInventory(conversation.context),
-              conversationHistory
+              conversationHistory,
+              memoriesPrefix: memoriesService.buildInjectionPrefix()
             }),
             user: 'local-user',
             inputs: buildResearchAgentInputs(conversation.context, options),

@@ -43,3 +43,6 @@ output-*.svg
 Thumbs.db
 .vscode/
 .idea/
+.tmp/
+bench/
+release/

@@ -1,5 +1,10 @@
 import type { PaperCard } from '../../shared/types'
-import { buildPaperCardAgentInputs, buildPaperCardAgentQuery } from '../dify/researchAgent'
+import {
+  buildPaperCardAgentInputs,
+  buildPaperCardAgentQuery,
+  buildPaperCardRepairQuery
+} from '../dify/researchAgent'
+import { parsePaperCardResponse, type PaperCardFields } from './paperCardSchema'
 
 type GeneratePaperCardInput = {
   paperId: string
@@ -13,39 +18,47 @@ type GeneratePaperCardInput = {
   }
 }
 
-function parseList(value: unknown): string[] {
-  return Array.isArray(value) ? value.map(String).filter(Boolean) : []
+type GeneratedPaperCard = Omit<PaperCard, 'id' | 'updatedAt' | 'readingStatus'>
+
+function withPaperId(paperId: string, fields: PaperCardFields): GeneratedPaperCard {
+  return { paperId, ...fields }
 }
 
-function parseJsonAnswer(answer: string): Record<string, unknown> {
-  const trimmed = answer.replace(/<think>[\s\S]*?<\/think>/gi, '').trim()
-  const fenced = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i)
-  if (fenced) return JSON.parse(fenced[1]) as Record<string, unknown>
-
-  const jsonStart = trimmed.indexOf('{')
-  const jsonEnd = trimmed.lastIndexOf('}')
-  const json = jsonStart >= 0 && jsonEnd > jsonStart ? trimmed.slice(jsonStart, jsonEnd + 1) : trimmed
-  return JSON.parse(json) as Record<string, unknown>
-}
-
-export async function generatePaperCard(
-  input: GeneratePaperCardInput
-): Promise<Omit<PaperCard, 'id' | 'updatedAt' | 'readingStatus'>> {
-  const result = await input.dify.sendChatMessage({
+async function requestCard(
+  input: GeneratePaperCardInput,
+  query: string
+): Promise<ReturnType<typeof parsePaperCardResponse>> {
+  const response = await input.dify.sendChatMessage({
     user: 'local-user',
-    query: buildPaperCardAgentQuery(input.paperId, input.title),
+    query,
     inputs: buildPaperCardAgentInputs(input.paperId)
   })
+  return parsePaperCardResponse(response.answer)
+}
 
-  const parsed = parseJsonAnswer(result.answer)
-  return {
-    paperId: input.paperId,
-    authors: String(parsed.authors ?? ''),
-    year: String(parsed.year ?? ''),
-    oneSentenceSummary: String(parsed.oneSentenceSummary ?? ''),
-    researchProblem: String(parsed.researchProblem ?? ''),
-    methodSummary: String(parsed.methodSummary ?? ''),
-    contributions: parseList(parsed.contributions),
-    keywords: parseList(parsed.keywords)
-  }
+/**
+ * Generate a paper card via the Dify agent. The model answer is validated with
+ * `PaperCardSchema`; on failure, exactly one repair attempt is made by feeding
+ * the schema errors and the previous output back to the model (format-only,
+ * no new facts). If the repair also fails, this throws and the caller writes a
+ * placeholder card so the paper import is not rolled back.
+ */
+export async function generatePaperCard(input: GeneratePaperCardInput): Promise<GeneratedPaperCard> {
+  const first = await requestCard(input, buildPaperCardAgentQuery(input.paperId, input.title))
+  if (first.ok) return withPaperId(input.paperId, first.data)
+
+  const second = await requestCard(
+    input,
+    buildPaperCardRepairQuery({
+      paperId: input.paperId,
+      title: input.title,
+      errors: first.errors,
+      previousOutput: first.rawForRepair
+    })
+  )
+  if (second.ok) return withPaperId(input.paperId, second.data)
+
+  throw new Error(
+    `论文卡片生成失败（已尝试 repair）：${[...first.errors, ...second.errors].join('; ')}`
+  )
 }

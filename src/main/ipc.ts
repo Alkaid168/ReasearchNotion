@@ -1,4 +1,6 @@
 import { ipcMain } from 'electron'
+import { syncDeepseekApiKey } from './settings/modelKeySync'
+import type { UserMemory, UserMemoryInput } from '../shared/types'
 import type {
   ConversationListOptions,
   ConversationExportResult,
@@ -30,6 +32,7 @@ export type IpcServices = {
     get(): Promise<AppSettings>
     save(settings: AppSettings): Promise<AppSettings>
     testConnection(settings: AppSettings): Promise<{ ok: boolean; message: string }>
+    switchDifyApp(mode: 'workflow' | 'agent'): Promise<{ ok: boolean; message: string; settings: AppSettings }>
   }
   folders: {
     list(): Promise<Folder[]>
@@ -45,6 +48,11 @@ export type IpcServices = {
   }
   reading: {
     updateState(input: ReadingStateUpdate): Promise<ReadingState>
+  }
+  memories: {
+    list(): Promise<UserMemory[]>
+    save(input: UserMemoryInput): Promise<UserMemory>
+    delete(id: string): Promise<void>
   }
   papers: {
     list(folderId: string): Promise<Array<Paper & { card: PaperCard | null }>>
@@ -86,8 +94,17 @@ export type IpcServices = {
 export function registerIpc(services: IpcServices): void {
   ipcMain.handle('app:getEnvironmentStatus', () => services.app.getEnvironmentStatus())
   ipcMain.handle('settings:get', () => services.settings.get())
-  ipcMain.handle('settings:save', (_event, settings: AppSettings) => services.settings.save(settings))
+  ipcMain.handle('settings:save', async (_event, settings: AppSettings) => {
+    const saved = await services.settings.save(settings)
+    try {
+      syncDeepseekApiKey(settings.deepseekApiKey)
+    } catch (error) {
+      console.error('[modelKey] sync to Dify failed (best-effort, ignored):', error)
+    }
+    return saved
+  })
   ipcMain.handle('settings:testConnection', (_event, settings: AppSettings) => services.settings.testConnection(settings))
+  ipcMain.handle('settings:switchDifyApp', (_event, input: { mode: 'workflow' | 'agent' }) => services.settings.switchDifyApp(input.mode))
   ipcMain.handle('folders:list', () => services.folders.list())
   ipcMain.handle('folders:create', (_event, input: { name: string; parentId: string | null }) =>
     services.folders.create(input.name, input.parentId)
@@ -105,6 +122,12 @@ export function registerIpc(services: IpcServices): void {
     services.conversationFolders.reorder(input.folderIds)
   )
   ipcMain.handle('reading:updateState', (_event, input: ReadingStateUpdate) => services.reading.updateState(input))
+  ipcMain.handle('memories:list', () => Promise.resolve(services.memories.list()))
+  ipcMain.handle('memories:save', (_event, input: UserMemoryInput) => Promise.resolve(services.memories.save(input)))
+  ipcMain.handle('memories:delete', (_event, input: { id: string }) => {
+    services.memories.delete(input.id)
+    return Promise.resolve()
+  })
   ipcMain.handle('papers:list', (_event, input: { folderId: string }) => services.papers.list(input.folderId))
   ipcMain.handle('papers:import', (_event, input: { folderId: string }) => services.papers.import(input.folderId))
   ipcMain.handle('papers:importFiles', (_event, input: { folderId: string; filePaths: string[] }) =>

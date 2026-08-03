@@ -20,7 +20,11 @@ const expectedOperations = [
   'investigate_library',
   'list_library_papers',
   'search_current_paper',
-  'search_library'
+  'search_library',
+  'search_arxiv',
+  'search_semantic_scholar',
+  'search_openalex',
+  'save_memory'
 ]
 const toolServiceToken = readToolServiceToken()
 

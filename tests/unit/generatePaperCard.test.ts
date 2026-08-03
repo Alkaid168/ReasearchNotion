@@ -66,4 +66,38 @@ describe('generate paper card workflow', () => {
       keywords: ['RAG']
     })
   })
+
+  it('retries once with a repair prompt when the first answer is malformed, then succeeds', async () => {
+    const sendChatMessage = vi
+      .fn()
+      .mockResolvedValueOnce({ answer: '这不是一段 JSON' })
+      .mockResolvedValueOnce({
+        answer: JSON.stringify({
+          authors: 'X',
+          year: '2020',
+          oneSentenceSummary: '摘要',
+          researchProblem: '问题',
+          methodSummary: '方法',
+          contributions: ['贡献'],
+          keywords: ['关键词']
+        })
+      })
+
+    await expect(
+      generatePaperCard({ paperId: 'p1', title: 'T', dify: { sendChatMessage } })
+    ).resolves.toMatchObject({ authors: 'X', year: '2020' })
+
+    expect(sendChatMessage).toHaveBeenCalledTimes(2)
+    expect(sendChatMessage.mock.calls[1][0].query).toContain('校验失败')
+  })
+
+  it('throws when both the first and the repair answers are malformed', async () => {
+    const sendChatMessage = vi.fn().mockResolvedValue({ answer: '完全不是 JSON 的纯文本' })
+
+    await expect(
+      generatePaperCard({ paperId: 'p1', title: 'T', dify: { sendChatMessage } })
+    ).rejects.toThrow(/论文卡片生成失败/)
+
+    expect(sendChatMessage).toHaveBeenCalledTimes(2)
+  })
 })

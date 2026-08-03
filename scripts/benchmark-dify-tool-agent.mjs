@@ -1,6 +1,8 @@
 import childProcess from 'node:child_process'
+import fs from 'node:fs'
 import path from 'node:path'
 import { toolServiceHeaders } from './tool-service-auth.mjs'
+import { aggregateCaseRuns, computeRunScores, diffBaseline } from './benchmarkRunner.mjs'
 
 const root = path.resolve(import.meta.dirname, '..')
 const appName = process.env.RESEARCH_NOTION_TOOL_AGENT_NAME || 'ResearchNotion Tool Agent'
@@ -314,65 +316,130 @@ async function main() {
   try {
     const selectedCases = selectedCaseId ? cases.filter((benchmarkCase) => benchmarkCase.id === selectedCaseId) : cases
     if (selectedCases.length === 0) throw new Error(`Unknown benchmark case: ${selectedCaseId}`)
+    const k = Math.max(1, Number(process.env.RESEARCH_NOTION_BENCHMARK_K ?? 3))
     for (const benchmarkCase of selectedCases) {
-      await setReadingState({
-        activeFolderId: demoFolderId,
-        activePaperId: benchmarkCase.scope === 'paper' ? attentionPaperId : null,
-        currentPage: 1,
-        selectedText: null
-      })
-      const user = `research-notion-benchmark-${benchmarkCase.id}`
-      let result = await ask(token, benchmarkCase.query, user)
-      if (benchmarkCase.followUpQuery) {
-        if (!result.conversationId) throw new Error(`Benchmark ${benchmarkCase.id} did not return a Dify conversation id.`)
-        result = await ask(token, benchmarkCase.followUpQuery, user, result.conversationId)
+      const runs = []
+      for (let runIndex = 0; runIndex < k; runIndex += 1) {
+        await setReadingState({
+          activeFolderId: demoFolderId,
+          activePaperId: benchmarkCase.scope === 'paper' ? attentionPaperId : null,
+          currentPage: 1,
+          selectedText: null
+        })
+        const user = `research-notion-benchmark-${benchmarkCase.id}-run${runIndex}`
+        let result = await ask(token, benchmarkCase.query, user)
+        if (benchmarkCase.followUpQuery) {
+          if (!result.conversationId) throw new Error(`Benchmark ${benchmarkCase.id} did not return a Dify conversation id.`)
+          result = await ask(token, benchmarkCase.followUpQuery, user, result.conversationId)
+        }
+        const requiredToolsPass = (benchmarkCase.requiredTools ?? []).every((tool) => result.tools.includes(tool))
+        const toolPathPass = benchmarkCase.toolPath ? benchmarkCase.toolPath(result.tools) : true
+        const aspectPathPass = benchmarkCase.aspectPath ? benchmarkCase.aspectPath(result.invocations) : true
+        const evidenceStrategyPass = benchmarkCase.evidenceStrategy ? benchmarkCase.evidenceStrategy(result) : true
+        const evidenceCoveragePass = (benchmarkCase.requiredEvidencePaperIds ?? []).every((paperId) =>
+          result.evidencePaperIds.includes(paperId)
+        )
+        const answerPass = benchmarkCase.expected.test(result.answer)
+        const passed =
+          requiredToolsPass && toolPathPass && aspectPathPass && evidenceStrategyPass && evidenceCoveragePass && answerPass
+        const scores = computeRunScores(result, benchmarkCase)
+        runs.push({
+          passed,
+          toolRecall: scores.toolRecall,
+          evidenceCoverage: scores.evidenceCoverage,
+          answerQuality: scores.answerQuality,
+          score: scores.score,
+          tools: result.tools,
+          evidencePaperIds: result.evidencePaperIds,
+          answer: result.answer.replace(/\s+/g, ' ').slice(0, 300),
+          requiredToolsPass,
+          toolPathPass,
+          aspectPathPass,
+          evidenceStrategyPass,
+          evidenceCoveragePass,
+          answerPass
+        })
       }
-      const requiredToolsPass = (benchmarkCase.requiredTools ?? []).every((tool) => result.tools.includes(tool))
-      const toolPathPass = benchmarkCase.toolPath ? benchmarkCase.toolPath(result.tools) : true
-      const aspectPathPass = benchmarkCase.aspectPath ? benchmarkCase.aspectPath(result.invocations) : true
-      const evidenceStrategyPass = benchmarkCase.evidenceStrategy ? benchmarkCase.evidenceStrategy(result) : true
-      const evidenceCoveragePass = (benchmarkCase.requiredEvidencePaperIds ?? []).every((paperId) =>
-        result.evidencePaperIds.includes(paperId)
-      )
-      const answerPass = benchmarkCase.expected.test(result.answer)
-      results.push({
-        id: benchmarkCase.id,
-        passed: requiredToolsPass && toolPathPass && aspectPathPass && evidenceStrategyPass && evidenceCoveragePass && answerPass,
-        tools: result.tools,
-        evidencePaperIds: result.evidencePaperIds,
-        answer: result.answer.replace(/\s+/g, ' ').slice(0, 300),
-        requiredToolsPass,
-        toolPathPass,
-        aspectPathPass,
-        evidenceStrategyPass,
-        evidenceCoveragePass,
-        answerPass
-      })
+      const aggregate = aggregateCaseRuns(runs)
+      results.push({ id: benchmarkCase.id, runs, ...aggregate })
     }
   } finally {
     await setReadingState({ activeFolderId: null, activePaperId: null, currentPage: 1, selectedText: null })
   }
 
-  console.table(results.map(({ id, passed, tools, evidencePaperIds, requiredToolsPass, toolPathPass, aspectPathPass, evidenceStrategyPass, evidenceCoveragePass, answerPass }) => ({
-    id,
-    passed,
-    tools: tools.join(', '),
-    evidencePapers: evidencePaperIds.join(', '),
-    requiredToolsPass,
-    toolPathPass,
-    aspectPathPass,
-    evidenceStrategyPass,
-    evidenceCoveragePass,
-    answerPass
-  })))
-  const failures = results.filter((result) => !result.passed)
+  console.table(
+    results.map(({ id, passK, pass1, scoreAvg, runCount }) => ({
+      id,
+      passK,
+      pass1,
+      scoreAvg: Number(scoreAvg.toFixed(2)),
+      runCount
+    }))
+  )
+
+  const meta = {
+    timestamp: new Date().toISOString(),
+    model: process.env.RESEARCH_NOTION_BENCHMARK_MODEL || 'langgenius/deepseek/deepseek/deepseek-v4-flash',
+    k: Number(process.env.RESEARCH_NOTION_BENCHMARK_K ?? 3),
+    dify: { baseUrl: difyBaseUrl, appMode: 'agent-chat', appName }
+  }
+  const dimensionAvg = {
+    toolRecall: avg(results.flatMap((entry) => entry.runs.map((run) => run.toolRecall))),
+    evidenceCoverage: avg(results.flatMap((entry) => entry.runs.map((run) => run.evidenceCoverage))),
+    answerQuality: avg(results.flatMap((entry) => entry.runs.map((run) => run.answerQuality)))
+  }
+  const report = {
+    meta,
+    toolCases: results,
+    aggregates: {
+      tool_passK: `${results.filter((entry) => entry.passK).length}/${results.length}`,
+      tool_pass1: `${results.filter((entry) => entry.pass1).length}/${results.length}`,
+      dimensionAvg
+    }
+  }
+
+  fs.mkdirSync(path.resolve(root, 'bench'), { recursive: true })
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+  const reportPath = path.resolve(root, 'bench', `agent-eval-${stamp}.json`)
+  fs.writeFileSync(reportPath, JSON.stringify(report, null, 2), 'utf8')
+  console.log(`benchmark report written: ${reportPath}`)
+
+  const baselineEnv = process.env.RESEARCH_NOTION_BENCHMARK_BASELINE
+  if (baselineEnv) {
+    const baselinePath = path.resolve(root, baselineEnv)
+    if (fs.existsSync(baselinePath)) {
+      const baselineFile = JSON.parse(fs.readFileSync(baselinePath, 'utf8'))
+      const baselineCases = (baselineFile.toolCases ?? baselineFile.trustCases ?? []).map((entry) => ({
+        id: entry.id,
+        passK: entry.passK,
+        scoreAvg: entry.scoreAvg ?? 0
+      }))
+      const regressions = diffBaseline(
+        results.map((entry) => ({ id: entry.id, passK: entry.passK, scoreAvg: entry.scoreAvg })),
+        baselineCases,
+        Number(process.env.RESEARCH_NOTION_BENCHMARK_REGRESSION_THRESHOLD ?? 0.1)
+      )
+      if (regressions.length) {
+        throw new Error(
+          `Agent benchmark regressions vs ${baselineEnv}:\n${regressions.map((reg) => `${reg.id}: ${reg.reason}`).join('\n')}`
+        )
+      }
+      console.log(`no regressions vs ${baselineEnv}`)
+    }
+  }
+
+  const failures = results.filter((result) => !result.passK)
   if (failures.length) {
     throw new Error(
-      `Agent benchmark failed:\n${failures
-        .map((result) => `${result.id} [evidence=${result.evidencePaperIds.join(', ')}]: ${result.answer}`)
+      `Agent benchmark pass^k failures:\n${failures
+        .map((result) => `${result.id} [pass^k=false, scoreAvg=${result.scoreAvg.toFixed(2)}]: ${result.runs[0]?.answer ?? ''}`)
         .join('\n')}`
     )
   }
+}
+
+function avg(values) {
+  return values.length === 0 ? 0 : values.reduce((sum, value) => sum + value, 0) / values.length
 }
 
 main().catch((error) => {

@@ -6,7 +6,7 @@ import type {
   DesktopApi,
   SendMessageOptions
 } from '../shared/ipcTypes'
-import type { AppSettings, ReadingStateUpdate, ReadingStatus } from '../shared/types'
+import type { AppSettings, ReadingStateUpdate, ReadingStatus, UserMemoryInput } from '../shared/types'
 
 const api: DesktopApi = {
   app: {
@@ -15,7 +15,8 @@ const api: DesktopApi = {
   settings: {
     get: () => ipcRenderer.invoke('settings:get'),
     save: (settings: AppSettings) => ipcRenderer.invoke('settings:save', settings),
-    testConnection: (settings: AppSettings) => ipcRenderer.invoke('settings:testConnection', settings)
+    testConnection: (settings: AppSettings) => ipcRenderer.invoke('settings:testConnection', settings),
+    switchDifyApp: (mode: 'workflow' | 'agent') => ipcRenderer.invoke('settings:switchDifyApp', { mode })
   },
   folders: {
     list: () => ipcRenderer.invoke('folders:list'),
@@ -31,6 +32,11 @@ const api: DesktopApi = {
   },
   reading: {
     updateState: (input: ReadingStateUpdate) => ipcRenderer.invoke('reading:updateState', input)
+  },
+  memories: {
+    list: () => ipcRenderer.invoke('memories:list'),
+    save: (input: UserMemoryInput) => ipcRenderer.invoke('memories:save', input),
+    delete: (id: string) => ipcRenderer.invoke('memories:delete', { id })
   },
   papers: {
     list: (folderId: string) => ipcRenderer.invoke('papers:list', { folderId }),

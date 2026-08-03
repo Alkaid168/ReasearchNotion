@@ -348,6 +348,11 @@ function PdfCanvasViewer({
         textLayer.replaceChildren()
         textLayer.style.width = `${viewport.width}px`
         textLayer.style.height = `${viewport.height}px`
+        // pdfjs sizes each text-layer span's font-size by var(--scale-factor).
+        // Without it, spans default to factor 1 while the canvas is rendered at
+        // `scale`, so the selection rects don't line up with the glyphs and
+        // dragging to select jumps lines or snaps to the whole page.
+        textLayer.style.setProperty('--scale-factor', String(scale))
         const textContent = await page.getTextContent()
         if (cancelled) return
         await new pdfjs.TextLayer({

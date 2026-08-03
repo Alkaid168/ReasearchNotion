@@ -97,7 +97,28 @@ export type AppSettings = {
   difyBaseUrl: string
   difyAppApiKey: string
   difyKnowledgeApiKey: string
+  deepseekApiKey: string
   defaultFolderId: string | null
+}
+
+export type UserMemoryType = 'user' | 'preference' | 'feedback' | 'project' | 'reference'
+
+export type UserMemory = {
+  id: string
+  type: UserMemoryType
+  name: string
+  description: string
+  body: string
+  createdAt: string
+  updatedAt: string
+}
+
+export type UserMemoryInput = {
+  id?: string
+  type: UserMemoryType
+  name: string
+  description: string
+  body: string
 }
 
 export type ReadingState = {

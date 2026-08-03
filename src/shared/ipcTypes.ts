@@ -10,7 +10,9 @@ import type {
   PaperSearchResult,
   ReadingState,
   ReadingStateUpdate,
-  ReadingStatus
+  ReadingStatus,
+  UserMemory,
+  UserMemoryInput
 } from './types'
 
 export type SendMessageOptions = {
@@ -71,6 +73,7 @@ export type DesktopApi = {
     get(): Promise<AppSettings>
     save(settings: AppSettings): Promise<AppSettings>
     testConnection(settings: AppSettings): Promise<ConnectionTestResult>
+    switchDifyApp(mode: 'workflow' | 'agent'): Promise<{ ok: boolean; message: string; settings: AppSettings }>
   }
   folders: {
     list(): Promise<Folder[]>
@@ -86,6 +89,11 @@ export type DesktopApi = {
   }
   reading: {
     updateState(input: ReadingStateUpdate): Promise<ReadingState>
+  }
+  memories: {
+    list(): Promise<UserMemory[]>
+    save(input: UserMemoryInput): Promise<UserMemory>
+    delete(id: string): Promise<void>
   }
   papers: {
     list(folderId: string): Promise<Array<Paper & { card: PaperCard | null }>>

@@ -32,6 +32,7 @@ describe('settings service', () => {
       difyBaseUrl: '',
       difyAppApiKey: '',
       difyKnowledgeApiKey: '',
+    deepseekApiKey: '',
       defaultFolderId: null
     })
 
@@ -39,6 +40,7 @@ describe('settings service', () => {
       difyBaseUrl: 'http://localhost:8080',
       difyAppApiKey: 'app-key',
       difyKnowledgeApiKey: 'knowledge-key',
+    deepseekApiKey: '',
       defaultFolderId: 'folder-1'
     })
 
@@ -46,6 +48,7 @@ describe('settings service', () => {
       difyBaseUrl: 'http://localhost:8080',
       difyAppApiKey: 'app-key',
       difyKnowledgeApiKey: 'knowledge-key',
+    deepseekApiKey: '',
       defaultFolderId: 'folder-1'
     })
   })

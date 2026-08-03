@@ -120,16 +120,17 @@ Run these checks before calling the project ready for a coursework demo:
 
 - Local Dify is running.
 - `pnpm provision:dify` completes successfully.
-- `pnpm import:dify-tools` imports 11 ResearchNotion local tools.
-- `pnpm provision:dify-agent` creates `ResearchNotion Tool Agent` with 11 function-call tools.
+- `pnpm import:dify-tools` imports 14 ResearchNotion local tools (12 paper tools + search_arxiv + search_semantic_scholar).
+- `pnpm provision:dify-agent` creates `ResearchNotion Tool Agent` with 14 function-call tools.
 - `pnpm use:deepseek-bridge` is active if Docker containers cannot call DeepSeek directly.
 - `pnpm seed:dify` uploads the demo papers.
 - `pnpm check:dify` passes.
 - `pnpm verify:mvp` passes.
 - `pnpm smoke:dify-agent-paper` passes and shows the Tool Agent used the current context, paper outline, and current page tools.
 - `pnpm benchmark:dify-agent` passes the chapter, full-paper, library, and comparison question set.
+- `node scripts/benchmark-runner.mjs` passes the full T6 benchmark (tool k=3 + trust k=2, merged JSON report).
 - Settings shows `可演示`, with Dify configured and nonzero library, paper, PDF, index, and paper-card counts after seeding.
-- Settings shows the current Dify App name/mode and the local Agent tool service URL with 11 tools.
+- Settings shows the current Dify App name/mode and the local Agent tool service URL with 14 tools.
 - Knowledge opens at least one seeded PDF in the reader, and the PDF toolbar can jump pages and fit width.
 - `Ctrl+I` opens and closes the paper AI drawer.
 - A question about the opened paper returns an answer with citations.
@@ -147,4 +148,6 @@ Run these checks before calling the project ready for a coursework demo:
 - Context-aware chat storage and Dify chat calls.
 - Settings page local environment status for demo verification.
 
-LaTeX, cloud users, online paper search, Zotero import, and fully local RAG are planned extensions rather than MVP features.
+LaTeX, cloud users, Zotero import, and fully local RAG are planned extensions rather than MVP features.
+
+> **P2 updates (2026-08-01)**: Online paper search (arXiv + Semantic Scholar), user memory system, vector retrieval (bge-m3 via TEI), desktop DeepSeek key sync, double-column PDF sorting, and Agent benchmark (pass^k + JSON reports) are now implemented. See [technical-guide](research-notion-technical-guide.md) §16.2 for the full roadmap status.

@@ -1,13 +1,14 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AppDatabase } from '../../src/main/db/database'
-import type { Paper } from '../../src/shared/types'
+import type { Paper, UserMemory, UserMemoryInput } from '../../src/shared/types'
+import type { MemoryStore } from '../../src/main/agentTools/toolHandlers'
 import { createDatabase } from '../../src/main/db/database'
 import { createRepositories } from '../../src/main/db/repositories'
 import { createOpenApiToolService } from '../../src/main/agentTools/openApiService'
-import { chunkPaperText, extractOutline, extractSection, readPaperPages, searchPages } from '../../src/main/agentTools/paperText'
+import { chunkPaperText, cleanSurrogates, extractOutline, extractSection, readPaperPages, searchPages } from '../../src/main/agentTools/paperText'
 import { createReadingStateStore } from '../../src/main/agentTools/readingState'
 import { createAgentToolHandlers } from '../../src/main/agentTools/toolHandlers'
 
@@ -657,7 +658,7 @@ describe('agent OpenAPI tool service', () => {
       expect(service.getStatus()).toEqual({
         running: false,
         baseUrl: null,
-        operationCount: 12
+        operationCount: 16
       })
 
     await service.start()
@@ -665,7 +666,7 @@ describe('agent OpenAPI tool service', () => {
       expect(service.getStatus()).toMatchObject({
         running: true,
         baseUrl: expect.stringMatching(/^http:\/\/127\.0\.0\.1:\d+$/),
-        operationCount: 12
+        operationCount: 16
       })
     } finally {
       await service.stop()
@@ -903,8 +904,134 @@ describe('agent OpenAPI tool service', () => {
           limit: { type: 'integer', minimum: 1, maximum: 20 }
         }
       })
+
+      // T12a external search tools are GET endpoints: their arguments MUST be declared
+      // as query parameters, otherwise Dify Agent cannot pass `query`/`maxResults`
+      // and the tools are effectively unusable (regression guard).
+      expect(openApi.paths['/tools/external/arxiv']?.get?.parameters).toEqual([
+        expect.objectContaining({ name: 'query', in: 'query', required: true }),
+        expect.objectContaining({ name: 'maxResults', in: 'query', required: false })
+      ])
+      expect(openApi.paths['/tools/external/scholar']?.get?.parameters).toEqual([
+        expect.objectContaining({ name: 'query', in: 'query', required: true }),
+        expect.objectContaining({ name: 'maxResults', in: 'query', required: false })
+      ])
+      expect(openApi.paths['/tools/external/openalex']?.get?.parameters).toEqual([
+        expect.objectContaining({ name: 'query', in: 'query', required: true }),
+        expect.objectContaining({ name: 'maxResults', in: 'query', required: false })
+      ])
+      expect(openApi.paths['/tools/memory/save']?.post?.requestBody?.content?.['application/json']?.schema).toMatchObject({
+        type: 'object',
+        required: ['type', 'name', 'body'],
+        properties: {
+          type: { type: 'string', enum: ['user', 'preference', 'feedback', 'project', 'reference'] },
+          name: { type: 'string' },
+          body: { type: 'string' }
+        }
+      })
     } finally {
       await service.stop()
     }
+  })
+
+  it('searchArxiv / searchSemanticScholar handlers build the correct external request from arguments', async () => {
+    const { repos } = createFixture()
+    const state = createReadingStateStore()
+    const tools = createAgentToolHandlers({ repos, readingState: state })
+
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ data: [] }),
+      text: async () =>
+        '<feed xmlns="http://www.w3.org/2005/Atom"><entry><title>Test</title><summary>Abs</summary><id>http://arxiv.org/abs/1234.5678</id><published>2024-01-01T00:00:00Z</published><author><name>Author</name></author></entry></feed>'
+    } as unknown as Response)
+
+    try {
+      const arxivResult = await tools.searchArxiv('retrieval augmented generation', 3)
+      expect(arxivResult.ok).toBe(true)
+      const arxivCallUrl = String(fetchMock.mock.calls[0]?.[0])
+      expect(arxivCallUrl).toContain('export.arxiv.org/api/query')
+      expect(arxivCallUrl).toContain('search_query=all:retrieval%20augmented%20generation')
+      expect(arxivCallUrl).toContain('max_results=3')
+
+      const scholarResult = await tools.searchSemanticScholar('vector database', 4)
+      expect(scholarResult.ok).toBe(true)
+      const scholarCallUrl = String(fetchMock.mock.calls[1]?.[0])
+      expect(scholarCallUrl).toContain('api.semanticscholar.org/graph/v1/paper/search')
+      expect(scholarCallUrl).toContain('query=vector%20database')
+      expect(scholarCallUrl).toContain('limit=4')
+
+      const openalexResult = await tools.searchOpenalex('retrieval augmented generation', 3)
+      expect(openalexResult.ok).toBe(true)
+      const openalexCallUrl = String(fetchMock.mock.calls[2]?.[0])
+      expect(openalexCallUrl).toContain('api.openalex.org/works')
+      expect(openalexCallUrl).toContain('search=retrieval%20augmented%20generation')
+      expect(openalexCallUrl).toContain('per-page=3')
+      expect(openalexCallUrl).toContain('mailto=')
+
+      // arXiv id → DOI exact lookup (keyword search misses arXiv ids and generic titles)
+      const openalexById = await tools.searchOpenalex('2502.20812', 3)
+      expect(openalexById.ok).toBe(true)
+      const openalexByIdUrl = String(fetchMock.mock.calls[3]?.[0])
+      expect(openalexByIdUrl).toContain('api.openalex.org/works/doi:')
+      expect(openalexByIdUrl).toContain('10.48550%2Farxiv.2502.20812')
+      expect(openalexByIdUrl).not.toContain('search=')
+    } finally {
+      fetchMock.mockRestore()
+    }
+  })
+
+  it('saveMemory persists user memories via the memory store (upsert by type+name)', async () => {
+    const { repos } = createFixture()
+    const state = createReadingStateStore()
+    const saved: UserMemory[] = []
+    const memoryStore: MemoryStore = {
+      list: () => saved,
+      save: (input) => {
+        const existing = saved.find((m) => m.id === input.id)
+        const mem: UserMemory = {
+          id: input.id ?? `mem_${Date.now()}`,
+          type: input.type,
+          name: input.name,
+          description: input.description ?? '',
+          body: input.body,
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z'
+        }
+        if (existing) {
+          Object.assign(existing, mem)
+          return existing
+        }
+        saved.push(mem)
+        return mem
+      }
+    }
+    const tools = createAgentToolHandlers({ repos, readingState: state, memories: memoryStore })
+
+    const created = await tools.saveMemory({ type: 'user', name: '研究方向', body: '向量数据库测试' })
+    expect(created.ok).toBe(true)
+
+    const updated = await tools.saveMemory({ type: 'user', name: '研究方向', body: 'VDBMS 软件测试' })
+    expect(updated.ok).toBe(true)
+    expect(saved).toHaveLength(1)
+    expect(saved[0].body).toBe('VDBMS 软件测试')
+
+    const invalid = await tools.saveMemory({ type: 'bogus' as UserMemoryInput['type'], name: 'x', body: 'y' })
+    expect(invalid.ok).toBe(false)
+  })
+})
+
+describe('cleanSurrogates', () => {
+  it('replaces lone UTF-16 surrogates so Dify Python can encode UTF-8', () => {
+    expect(cleanSurrogates('abc\uD800def')).toBe('abc�def')
+    expect(cleanSurrogates('abc\uDC00def')).toBe('abc�def')
+    expect(cleanSurrogates('混\uD800合\uDC00字')).toBe('混�合�字')
+  })
+
+  it('preserves valid surrogate pairs (mathematical italic 𝑥 = U+1D465)', () => {
+    const mathItalicX = '𝑥' // 𝑥
+    expect(cleanSurrogates(`公式 ${mathItalicX} = 1`)).toBe(`公式 ${mathItalicX} = 1`)
+    expect(cleanSurrogates(mathItalicX)).toBe(mathItalicX)
   })
 })

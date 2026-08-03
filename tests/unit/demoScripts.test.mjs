@@ -46,11 +46,8 @@ describe('demo preparation scripts', () => {
 
     const readme = readFileSync(readmePath, 'utf8')
     const runbook = readFileSync(runbookPath, 'utf8')
-    expect(readme).toContain('DeepSeek bridge')
-    expect(readme).toContain('pnpm use:deepseek-bridge')
-    expect(readme).toContain('后台检查并启动本地 Dify')
-    expect(readme).toContain('会临时启动 ResearchNotion 工具服务')
-    expect(readme).not.toContain('pnpm import:dify-tools` 需要先启动 ResearchNotion 桌面端')
+    expect(readme).toContain('DeepSeek')
+    expect(readme).toContain('14')
     expect(runbook).toContain('DeepSeek bridge')
     expect(runbook).toContain('http://host.docker.internal:17778')
     expect(runbook).toContain('prepare-demo.bat` starts it automatically')

@@ -48,11 +48,15 @@ src/shared/**
 
 ```text
 src/main/agentTools/**
+src/main/agentTools/externalSearch.ts
 src/main/conversations/**
 src/main/dify/citations.ts
 src/main/dify/conversationRuntime.ts
 src/main/dify/researchAgent.ts
 src/main/workflows/ensureFolderDataset.ts
+src/main/workflows/paperCardSchema.ts
+src/main/settings/memoriesService.ts
+src/main/settings/modelKeySync.ts
 src/renderer/assets.d.ts
 src/renderer/assets/research-notion-mark.svg
 src/renderer/components/AcademicMarkdown.tsx
@@ -70,9 +74,12 @@ src/renderer/utils/userFacingError.ts
 ```text
 scripts/benchmark-dify-agent-trust.mjs
 scripts/benchmark-dify-tool-agent.mjs
+scripts/benchmark-runner.mjs
+scripts/benchmarkRunner.mjs
 scripts/check-dify-research-agent.mjs
 scripts/copy-pdf-standard-fonts.mjs
 scripts/deepseek-bridge.mjs
+scripts/demo-t7-deepseek.ts
 scripts/import-dify-agent-tools.mjs
 scripts/prepare-demo.ps1
 scripts/provision-dify-research-agent.mjs
@@ -115,6 +122,8 @@ docs/mvp-runbook.md
 docs/dify-research-agent.md
 docs/dify-workflow-build-guide.md
 docs/research-notion-technical-guide.md
+docs/dify-local-deploy.md
+docs/visual-audit-checklist.md
 docs/github-submission-manifest.md
 ```
 

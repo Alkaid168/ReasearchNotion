@@ -77,13 +77,16 @@ export function buildResearchAgentQuery(input: {
   emphasisContext?: string | null
   contextInventory?: string | null
   conversationHistory?: string | null
+  memoriesPrefix?: string | null
 }): string {
   const emphasis = input.emphasisContext?.trim()
   const inventory = input.contextInventory?.trim()
   const history = input.conversationHistory?.trim()
+  const memories = input.memoriesPrefix?.trim()
 
   return [
     'ResearchNotion runtime context for this turn:',
+    memories || null,
     contextScope(input.context),
     contextScopeGuard(input.context),
     [
@@ -195,4 +198,30 @@ export function buildPaperCardAgentQuery(paperId: string, title: string): string
 - contributions 和 keywords 必须是字符串数组。
 - 如果某个字段证据不足，使用空字符串或空数组，不要编造。
 - 不要输出 <think> 或隐藏推理过程。`
+}
+
+export function buildPaperCardRepairQuery(input: {
+  paperId: string
+  title: string
+  errors: string[]
+  previousOutput: string
+}): string {
+  return `上一次为论文《${input.title}》(paperId=${input.paperId}) 生成论文卡片时，返回内容校验失败。请只修复 JSON 格式问题，不要重新调研论文或补充新事实；证据不足的字段留空字符串或空数组。
+
+字段要求：
+- authors: string（英文人名可保留英文）
+- year: string（4 位年份，如 2020；证据不足则空字符串）
+- oneSentenceSummary: string（中文）
+- researchProblem: string（中文）
+- methodSummary: string（中文）
+- contributions: string[]（中文字符串数组）
+- keywords: string[]（中文字符串数组）
+
+上次校验错误：
+${input.errors.map((error) => `- ${error}`).join('\n')}
+
+上次输出（仅供修复格式参考，勿照抄错误内容、勿补充论文事实）：
+${input.previousOutput}
+
+只返回完整 JSON 对象，不要 Markdown 代码块、不要解释文字、不要 <think>。`
 }

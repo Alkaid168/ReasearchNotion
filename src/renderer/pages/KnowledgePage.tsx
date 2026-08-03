@@ -905,10 +905,29 @@ export function KnowledgePage({ requestedPaperId, requestedFolderId, requestedPa
                 </button>
               </div>
             ) : (
-              <button className="import-button danger-ghost" type="button" onClick={() => setDeleteConfirmPaperId(activePaper.id)}>
-                <Trash2 size={16} aria-hidden="true" />
-                删除论文
-              </button>
+              <>
+                <button
+                  className="import-button"
+                  type="button"
+                  aria-label="重新索引（重建向量）"
+                  title="重建向量索引（用于向量检索召回）"
+                  onClick={async () => {
+                    if (!activePaper) return
+                    try {
+                      await desktopApi.papers.reindex(activePaper.id)
+                      window.alert(`${activePaper.title} 已重新索引，向量检索应已恢复。`)
+                    } catch (error) {
+                      window.alert('重新索引失败: ' + (error instanceof Error ? error.message : String(error)))
+                    }
+                  }}
+                >
+                  重新索引
+                </button>
+                <button className="import-button danger-ghost" type="button" onClick={() => setDeleteConfirmPaperId(activePaper.id)}>
+                  <Trash2 size={16} aria-hidden="true" />
+                  删除论文
+                </button>
+              </>
             )
           ) : null}
           <button className="import-button" type="button" onClick={() => void importPaper()} disabled={!activeFolderId || importing}>

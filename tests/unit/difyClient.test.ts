@@ -928,4 +928,87 @@ describe('Dify client', () => {
       process_rule: { mode: 'automatic' }
     })
   })
+
+  it('drops a stale conversation_id after a blocking 404 conversation-not-exists and retries without it', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 404,
+        text: async () => '{"code":"not_found","message":"Conversation Not Exists.","status":404}'
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          answer: '已在新的 Dify 对话中恢复。',
+          conversation_id: 'new-conv',
+          metadata: { retriever_resources: [] }
+        })
+      })
+    const client = createDifyClient({
+      baseUrl: 'http://localhost:8080',
+      appApiKey: 'app-key',
+      knowledgeApiKey: 'knowledge-key',
+      fetchImpl: fetchMock
+    })
+
+    const result = await client.sendChatMessage({
+      query: '继续讨论',
+      user: 'local-user',
+      inputs: {},
+      conversationId: 'stale-conv-from-other-app'
+    })
+
+    expect(result.answer).toBe('已在新的 Dify 对话中恢复。')
+    expect(result.difyConversationId).toBe('new-conv')
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toMatchObject({
+      conversation_id: 'stale-conv-from-other-app'
+    })
+    expect(JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body))).not.toHaveProperty('conversation_id')
+  })
+
+  it('recovers from a stale conversation_id in agent-chat streaming mode', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 400,
+        text: async () => '{"message":"Agent Chat App does not support blocking mode"}'
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 404,
+        text: async () => '{"code":"not_found","message":"Conversation Not Exists.","status":404}'
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 400,
+        text: async () => '{"message":"Agent Chat App does not support blocking mode"}'
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () =>
+          'data: {"event":"agent_message","conversation_id":"new-agent-conv","answer":"已在新对话恢复。"}\n\n'
+      })
+    const client = createDifyClient({
+      baseUrl: 'http://localhost:8080',
+      appApiKey: 'agent-app-key',
+      knowledgeApiKey: 'knowledge-key',
+      fetchImpl: fetchMock
+    })
+
+    const result = await client.sendChatMessage({
+      query: '继续讨论',
+      user: 'local-user',
+      inputs: {},
+      conversationId: 'stale-conv-from-workflow-app'
+    })
+
+    expect(result.answer).toBe('已在新对话恢复。')
+    expect(result.difyConversationId).toBe('new-agent-conv')
+    expect(JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body))).toMatchObject({
+      conversation_id: 'stale-conv-from-workflow-app'
+    })
+    expect(JSON.parse(String(fetchMock.mock.calls[3]?.[1]?.body))).not.toHaveProperty('conversation_id')
+  })
 })

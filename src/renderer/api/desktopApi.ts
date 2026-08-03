@@ -4,7 +4,7 @@ import type {
   DesktopApi,
   SendMessageOptions
 } from '../../shared/ipcTypes'
-import type { AppSettings, ReadingStateUpdate, ReadingStatus } from '../../shared/types'
+import type { AppSettings, ReadingStateUpdate, ReadingStatus, UserMemoryInput } from '../../shared/types'
 
 declare global {
   interface Window {
@@ -26,7 +26,8 @@ export const desktopApi: DesktopApi = {
   settings: {
     get: () => getBridge().settings.get(),
     save: (settings: AppSettings) => getBridge().settings.save(settings),
-    testConnection: (settings: AppSettings) => getBridge().settings.testConnection(settings)
+    testConnection: (settings: AppSettings) => getBridge().settings.testConnection(settings),
+    switchDifyApp: (mode: 'workflow' | 'agent') => getBridge().settings.switchDifyApp(mode)
   },
   folders: {
     list: () => getBridge().folders.list(),
@@ -42,6 +43,11 @@ export const desktopApi: DesktopApi = {
   },
   reading: {
     updateState: (input: ReadingStateUpdate) => getBridge().reading.updateState(input)
+  },
+  memories: {
+    list: () => getBridge().memories.list(),
+    save: (input: UserMemoryInput) => getBridge().memories.save(input),
+    delete: (id: string) => getBridge().memories.delete(id)
   },
   papers: {
     list: (folderId: string) => getBridge().papers.list(folderId),

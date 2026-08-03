@@ -17,7 +17,11 @@ const expectedOperations = [
   'investigate_library',
   'list_library_papers',
   'search_current_paper',
-  'search_library'
+  'search_library',
+  'search_arxiv',
+  'search_semantic_scholar',
+  'search_openalex',
+  'save_memory'
 ]
 
 function execFile(file, args, options = {}) {
@@ -82,6 +86,7 @@ AGENT_PROMPT = """你是 ResearchNotion 科研学术问答智能体，面向论�
 6. 跨论文比较、综述、共识/冲突判断先 list_library_papers 确认候选论文，优先调用 investigate_library 逐篇调查论文库。若改用 investigate_paper 逐篇深读，每次只读一篇并且必须覆盖所有参与结论的论文；跨论文比较必须形成每篇独立正文证据，不能用一次全库搜索、标题、年份、目录或模型常识替代。工具未为某篇论文返回证据时，只能说明该篇尚未确认，不能把没有证据当作否定事实。
 7. 工具返回错误时检查 paperId、folderId 和当前阅读状态，换用可替代工具继续；只有多条路径都失败后才说明具体缺口。
 8. 对用户给出的断言、比较性结论或因果说法，先拆成可核验的子命题并分别取证；不要顺着用户前提作答。每个子命题必须标为“支持、反驳或尚未确认”，并说明对应论文证据或证据缺口。
+9. 你拥有外部论文搜索工具 search_arxiv、search_semantic_scholar 和 search_openalex，可以检索本地论文库之外的文献。当问题明确需要本地库之外的研究（“最新论文”“arXiv”“外网”“有没有别人做过”“最新进展”“state of the art”），或本地论文库多次检索后仍无相关证据且问题不是纯通用知识时，调用这些工具补证据。引用数、被引量、影响力分析优先用 search_openalex（开放学术图谱，免费无 key、配额宽松、不易限流，含 cited_by_count）；search_semantic_scholar 作为备份（公共配额易 HTTP 429 限流，工具会自动重试但仍可能失败）。**查 arXiv 论文的引用数时，直接把 arXiv id（如 2502.20812）作为 search_openalex 的 query——工具会自动按 DOI 精确查，命中率最高；用标题或长句搜 OpenAlex 经常不命中。**中文关键词先改写为简短英文 query 再调用。引用外部结果时标注 arXiv 链接/DOI 和发表年份；不要编造未在结果中出现的作者、引用数或结论。
 
 意图判断：
 1. 问“当前论文、这篇论文、当前页、这一节、这部分、选中内容”时，先调用 get_current_context；它会返回 activePaper.id、activeFolder.id、selectedText 等状态。只要要回答当前页正文、摘要或主要内容，必须紧接着调用 get_current_page_text，不能根据页码、标题、选中内容或模型常识补全；其他问题再按需调用 get_paper_page_text、get_paper_section、get_paper_outline 或 get_paper_text_chunk。
@@ -91,6 +96,14 @@ AGENT_PROMPT = """你是 ResearchNotion 科研学术问答智能体，面向论�
 5. 问“刚刚、上面、继续、它、第一篇、那篇”时，结合桌面端传入的最近对话历史和当前阅读状态消解指代。历史中的 paperId、页码和章节只是定位线索；若追问依赖上轮论文证据，必须用该 paperId 重新读取对应论文证据，不能把上轮回答本身当成原文依据。
 6. 如果用户问的是通用科研概念、算法原理、论文写作建议、展示话术或研究方案，不需要强行要求本地论文证据。
 7. 当用户要求生成论文卡片，且消息中给出 paperId 时，必须先用 get_paper_metadata 读取该 paperId，再用 investigate_paper 或 get_paper_outline 和 get_paper_text_chunk 补充证据。最后只输出 JSON，字段固定为 authors、year、oneSentenceSummary、researchProblem、methodSummary、contributions、keywords；证据不足的字段保留空值，不得用其他论文替代。
+8. 用户问“搜一下 arXiv”“找最新论文”“有没有相关研究”“外部”“最新进展”“state of the art”或任何需要本地库之外文献的问题时，调用 search_arxiv（预印本、覆盖面广）或 search_openalex（开放图谱、含引用数、推荐首选）。需要引用数/被引量/影响力时优先 search_openalex，避免 search_semantic_scholar 限流。绝对不要回答“我没有联网权限”“我无法访问互联网”“本地论文库中没有”就停下——你确实具备这三个外部搜索工具。本地库检索命中不足时，也要主动补一次外部搜索再回答。
+
+长期记忆（自动学习）：
+1. 当用户明确要求记住某事（“记住”“记得我”“以后都用”“别忘了”），或主动分享稳定事实（研究领域、身份角色、语言或写作偏好、当前项目与截止日期、外部参考链接、可复用的方法或约定），或对你的上一轮回答做纠正（“上次说错”“应该是”“不对，正确的是”），调用 save_memory(type, name, body) 把它存入长期记忆。
+2. type 选择：身份/角色/研究领域用 user；语言/格式/写作偏好用 preference；对先前回答的纠正用 feedback；当前在做的工作、论文、截止日期用 project；外部链接、文献、数据源用 reference。拿不准时按内容本质判断，不要勉强归类。
+3. name 用简短标签（如“研究方向”“语言偏好”“上次把 X 记成 Y”），body 写清具体内容。同 type+name 的记忆会自动更新，不必担心重复。
+4. 不要每句话都记。只记明显值得长期记住的稳定事实；一次性问题、临时细节、论文里会变的内容不要记。存完用一句话告诉用户“已记住 X”，不要复述全部内容。
+5. 这些记忆从下一轮起会自动注入你的上下文，用户不必重复说明；用户可在「设置」页查看或删除记忆。
 
 回答风格：
 1. 默认使用中文，除非用户要求英文。
@@ -139,6 +152,10 @@ def tool_label(operation_id):
         "list_library_papers": "列出论文库文献",
         "search_current_paper": "检索当前论文",
         "search_library": "检索论文库",
+        "search_arxiv": "在 arXiv 搜索外部论文",
+        "search_semantic_scholar": "在 Semantic Scholar 搜索外部论文",
+        "search_openalex": "在 OpenAlex 搜索外部论文（引用数首选）",
+        "save_memory": "保存用户长期记忆（自动学习身份/偏好/反馈/项目）",
     }
     return labels.get(operation_id, operation_id)
 
@@ -197,6 +214,7 @@ with flask_app.app_context():
                 icon_background="#EAF2FF",
             ),
             account,
+            session=db.session,
         )
         action = "created"
 
@@ -274,8 +292,8 @@ with flask_app.app_context():
     config["chat_prompt_config"] = {}
     config["completion_prompt_config"] = {}
 
-    validated = AppModelConfigService.validate_configuration(tenant_id=tenant_id, config=config, app_mode=AppMode.AGENT_CHAT)
-    AgentChatAppConfigManager.get_app_config(app, AppModelConfig(app_id=app.id).from_model_config_dict(validated))
+    validated = AppModelConfigService.validate_configuration(tenant_id=tenant_id, config=config, app_mode=AppMode.AGENT_CHAT, session=db.session)
+    AgentChatAppConfigManager.get_app_config(app, AppModelConfig(app_id=app.id).from_model_config_dict(validated), annotation_reply=None)
 
     for tool_config in agent_tools:
         ToolManager.get_agent_tool_runtime(
@@ -296,6 +314,17 @@ with flask_app.app_context():
     app.updated_by = account_id
     app.description = "ResearchNotion 工具调用型科研学术问答智能体。它会自主读取当前论文、页面、章节和本地论文库。"
     token = ensure_app_token(app.id, tenant_id)
+    # Migrate existing conversations to the latest config so they pick up newly
+    # added tools. Dify snapshots app_model_config_id per-conversation at creation
+    # time; without this, conversations created before a tool was added keep using
+    # the old tool list forever (e.g. "I don't have an OpenAlex tool").
+    db.session.execute(
+        text(
+            "update conversations set app_model_config_id = :config_id "
+            "where app_id = :app_id and app_model_config_id is distinct from :config_id"
+        ),
+        {"config_id": new_config.id, "app_id": app.id},
+    )
     db.session.commit()
 
     print(json.dumps({

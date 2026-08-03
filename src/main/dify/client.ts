@@ -311,6 +311,13 @@ function isBlockingModeUnsupported(error: unknown): boolean {
   return error instanceof DifyApiError && error.status === 400 && /does not support blocking mode|blocking mode/i.test(error.body)
 }
 
+function isConversationNotFound(error: unknown): boolean {
+  // Dify returns 404 "Conversation Not Exists" when a conversation_id from one app
+  // (e.g. Workflow) is replayed against another app (e.g. Tool Agent). This happens
+  // after switching Dify apps mid-session; recover by dropping the stale id.
+  return error instanceof DifyApiError && error.status === 404 && /conversation not exists/i.test(error.body)
+}
+
 function parseStreamingDataLine(line: string): Record<string, unknown> | null {
   if (!line.startsWith('data:')) return null
   const payload = line.slice(5).trim()
@@ -606,11 +613,19 @@ export function createDifyClient(options: DifyClientOptions) {
           return await send('blocking')
         } catch (error) {
           lastError = error
+          if (input.conversationId && isConversationNotFound(error)) {
+            input.conversationId = undefined
+            if (attempt === 0) continue
+          }
           if (isBlockingModeUnsupported(error)) {
             try {
               return await send('streaming')
             } catch (streamingError) {
               lastError = streamingError
+              if (input.conversationId && isConversationNotFound(streamingError)) {
+                input.conversationId = undefined
+                if (attempt === 0) continue
+              }
               if (attempt === 0 && isTransientDifyFailure(streamingError)) {
                 await wait(1600)
                 continue

@@ -1,13 +1,21 @@
 import type { createRepositories } from '../db/repositories'
-import type { Paper, PaperOutlineItem } from '../../shared/types'
+import type { Paper, PaperOutlineItem, UserMemory, UserMemoryInput } from '../../shared/types'
 import type { ReadingStateStore } from './readingState'
 import { chunkPaperText, collectPaperEvidence, extractOutline, extractSection, readPaperPages, searchPages } from './paperText'
+import { searchArxiv, searchOpenalex, searchSemanticScholar } from './externalSearch'
 
 type Repositories = ReturnType<typeof createRepositories>
+
+/** Memory store subset (memoriesService satisfies this). */
+export type MemoryStore = {
+  list(): UserMemory[]
+  save(input: UserMemoryInput): UserMemory
+}
 
 type ToolDeps = {
   repos: Repositories
   readingState: ReadingStateStore
+  memories?: MemoryStore
 }
 
 type ToolOk<T> = T & { ok: true }
@@ -98,7 +106,7 @@ async function pageTextFor(paper: Paper, pageNumber: number) {
   return { pages, page }
 }
 
-export function createAgentToolHandlers({ repos, readingState }: ToolDeps) {
+export function createAgentToolHandlers({ repos, readingState, memories }: ToolDeps) {
   return {
     async getCurrentContext(): Promise<
       ToolOk<{
@@ -347,6 +355,42 @@ export function createAgentToolHandlers({ repos, readingState }: ToolDeps) {
         evidenceByPaper,
         noEvidencePaperIds: evidenceByPaper.filter((item) => item.evidence.length === 0).map((item) => item.paper.id)
       }
+    },
+
+    // T12a: External search tools
+    async searchArxiv(query: string, maxResults = 5) {
+      return searchArxiv(query, maxResults)
+    },
+    async searchSemanticScholar(query: string, maxResults = 5) {
+      return searchSemanticScholar(query, maxResults)
+    },
+    async searchOpenalex(query: string, maxResults = 5) {
+      return searchOpenalex(query, maxResults)
+    },
+    // T12b: agent self-writes user memories (Claude Code-style). Upsert by type+name.
+    async saveMemory(input: {
+      type: UserMemoryInput['type']
+      name: string
+      body: string
+      description?: string
+    }): Promise<ToolOk<{ memory: UserMemory; action: 'created' | 'updated' }> | ToolError> {
+      if (!memories) return { ok: false, error: '记忆库未配置。' }
+      const validTypes: UserMemoryInput['type'][] = ['user', 'preference', 'feedback', 'project', 'reference']
+      if (!validTypes.includes(input.type)) {
+        return { ok: false, error: `无效的记忆类型 ${input.type}；必须是 user/preference/feedback/project/reference。` }
+      }
+      const name = input.name.trim()
+      const body = input.body.trim()
+      if (!name || !body) return { ok: false, error: 'name 和 body 不能为空。' }
+      const existing = memories.list().find((m) => m.type === input.type && m.name === name)
+      const memory = memories.save({
+        id: existing?.id,
+        type: input.type,
+        name,
+        description: input.description?.trim() ?? existing?.description ?? '',
+        body
+      })
+      return { ok: true, memory, action: existing ? 'updated' : 'created' }
     }
   }
 }

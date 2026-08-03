@@ -8,6 +8,7 @@ const emptySettings: AppSettings = {
   difyBaseUrl: '',
   difyAppApiKey: '',
   difyKnowledgeApiKey: '',
+    deepseekApiKey: '',
   defaultFolderId: null
 }
 
@@ -36,7 +37,7 @@ function createApiMock(status: EnvironmentStatus = unconfiguredStatus): DesktopA
     settings: {
       get: vi.fn().mockResolvedValue(emptySettings),
       save: vi.fn().mockImplementation(async (settings: AppSettings) => settings),
-      testConnection: vi.fn().mockResolvedValue({ ok: true, message: 'connection configured' })
+      testConnection: vi.fn(), switchDifyApp: vi.fn().mockResolvedValue({ ok: true, message: "", settings: { difyBaseUrl: "", difyAppApiKey: "", difyKnowledgeApiKey: "", deepseekApiKey: "", defaultFolderId: null } }).mockResolvedValue({ ok: true, message: 'connection configured' })
     },
     folders: { list: vi.fn(), create: vi.fn(), rename: vi.fn(), delete: vi.fn() },
     conversationFolders: { list: vi.fn(), create: vi.fn(), rename: vi.fn(), reorder: vi.fn() },
@@ -49,6 +50,7 @@ function createApiMock(status: EnvironmentStatus = unconfiguredStatus): DesktopA
         updatedAt: '2026-07-08T00:00:00.000Z'
       })
     },
+    memories: { list: vi.fn().mockResolvedValue([]), save: vi.fn(), delete: vi.fn() },
     papers: {
       list: vi.fn(),
       import: vi.fn(),
@@ -101,6 +103,7 @@ describe('SettingsPage', () => {
         difyBaseUrl: 'http://localhost:8080/',
         difyAppApiKey: 'app-key',
         difyKnowledgeApiKey: 'knowledge-key',
+    deepseekApiKey: '',
         defaultFolderId: null
       })
     })
@@ -119,6 +122,7 @@ describe('SettingsPage', () => {
         difyBaseUrl: 'http://localhost:8080',
         difyAppApiKey: 'app-key',
         difyKnowledgeApiKey: 'knowledge-key',
+    deepseekApiKey: '',
         defaultFolderId: null
       })
     })

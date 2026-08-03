@@ -8,6 +8,7 @@ const emptySettings: AppSettings = {
   difyBaseUrl: '',
   difyAppApiKey: '',
   difyKnowledgeApiKey: '',
+    deepseekApiKey: '',
   defaultFolderId: null
 }
 
@@ -114,7 +115,7 @@ function createApiMock(): DesktopApi {
     settings: {
       get: vi.fn().mockResolvedValue(emptySettings),
       save: vi.fn().mockImplementation(async (settings: AppSettings) => settings),
-      testConnection: vi.fn().mockResolvedValue({ ok: true, message: '连接配置有效。' })
+      testConnection: vi.fn(), switchDifyApp: vi.fn().mockResolvedValue({ ok: true, message: "", settings: { difyBaseUrl: "", difyAppApiKey: "", difyKnowledgeApiKey: "", deepseekApiKey: "", defaultFolderId: null } }).mockResolvedValue({ ok: true, message: '连接配置有效。' })
     },
     folders: {
       list: vi.fn().mockResolvedValue([folder]),
@@ -132,6 +133,7 @@ function createApiMock(): DesktopApi {
         updatedAt: '2026-07-08T00:00:00.000Z'
       })
     },
+    memories: { list: vi.fn().mockResolvedValue([]), save: vi.fn(), delete: vi.fn() },
     papers: {
       list: vi.fn().mockResolvedValue([{ ...paper, card }]),
       import: vi.fn(),

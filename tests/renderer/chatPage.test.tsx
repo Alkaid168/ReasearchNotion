@@ -9,6 +9,7 @@ const emptySettings: AppSettings = {
   difyBaseUrl: '',
   difyAppApiKey: '',
   difyKnowledgeApiKey: '',
+    deepseekApiKey: '',
   defaultFolderId: null
 }
 
@@ -20,7 +21,8 @@ function createApiMock(): DesktopApi {
     settings: {
       get: vi.fn().mockResolvedValue(emptySettings),
       save: vi.fn().mockImplementation(async (settings: AppSettings) => settings),
-      testConnection: vi.fn().mockResolvedValue({ ok: true, message: 'valid' })
+      testConnection: vi.fn().mockResolvedValue({ ok: true, message: 'valid' }),
+      switchDifyApp: vi.fn().mockResolvedValue({ ok: true, message: '已切换', settings: emptySettings })
     },
     folders: { list: vi.fn().mockResolvedValue([]), create: vi.fn(), rename: vi.fn(), delete: vi.fn() },
     conversationFolders: { list: vi.fn().mockResolvedValue([]), create: vi.fn(), rename: vi.fn(), reorder: vi.fn() },
@@ -33,6 +35,7 @@ function createApiMock(): DesktopApi {
         updatedAt: '2026-07-08T00:00:00.000Z'
       })
     },
+    memories: { list: vi.fn().mockResolvedValue([]), save: vi.fn(), delete: vi.fn() },
     papers: { list: vi.fn().mockResolvedValue([]), import: vi.fn(), importFiles: vi.fn(), updateReadingStatus: vi.fn(), reindex: vi.fn(), delete: vi.fn(), getOutline: vi.fn().mockResolvedValue([]), searchText: vi.fn().mockResolvedValue([]), read: vi.fn() },
     conversations: {
       list: vi.fn().mockResolvedValue([]),

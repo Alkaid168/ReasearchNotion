@@ -1,13 +1,14 @@
 import { useEffect, useState, type FormEvent, type JSX } from 'react'
-import { CheckCircle2, Database, FileText, Folder, KeyRound, Loader2, MessageSquare, Plug, RefreshCw, Save, Server, XCircle } from 'lucide-react'
+import { Brain, CheckCircle2, Database, FileText, Folder, KeyRound, Loader2, MessageSquare, Pencil, Plug, Plus, RefreshCw, Save, Server, Trash2, X, XCircle, Zap } from 'lucide-react'
 import { desktopApi } from '../api/desktopApi'
 import type { ConnectionTestResult, EnvironmentStatus } from '../../shared/ipcTypes'
-import type { AppSettings } from '../../shared/types'
+import type { AppSettings, UserMemory, UserMemoryInput, UserMemoryType } from '../../shared/types'
 
 const emptySettings: AppSettings = {
   difyBaseUrl: '',
   difyAppApiKey: '',
   difyKnowledgeApiKey: '',
+  deepseekApiKey: '',
   defaultFolderId: null
 }
 
@@ -29,15 +30,18 @@ export function SettingsPage({ onSettingsSaved, onConnectionTested }: SettingsPa
   const [refreshingStatus, setRefreshingStatus] = useState(false)
   const [environmentStatus, setEnvironmentStatus] = useState<EnvironmentStatus | null>(null)
   const [notice, setNotice] = useState<Notice | null>(null)
+  const [memories, setMemories] = useState<UserMemory[]>([])
+  const [editingMemory, setEditingMemory] = useState<UserMemoryInput | null>(null)
 
   useEffect(() => {
     let alive = true
 
-    void Promise.all([desktopApi.settings.get(), desktopApi.app.getEnvironmentStatus()])
-      .then(([storedSettings, status]) => {
+    void Promise.all([desktopApi.settings.get(), desktopApi.app.getEnvironmentStatus(), desktopApi.memories.list()])
+      .then(([storedSettings, status, storedMemories]) => {
         if (!alive) return
         setSettings(storedSettings)
         setEnvironmentStatus(status)
+        setMemories(storedMemories)
         setNotice(null)
       })
       .catch(() => {
@@ -97,6 +101,45 @@ export function SettingsPage({ onSettingsSaved, onConnectionTested }: SettingsPa
     }
   }
 
+  async function saveMemory(input: UserMemoryInput): Promise<void> {
+    const saved = await desktopApi.memories.save(input)
+    setMemories(await desktopApi.memories.list())
+    setEditingMemory(null)
+    setNotice({ tone: 'success', message: `记忆「${saved.name}」已保存。` })
+  }
+
+  async function deleteMemory(id: string): Promise<void> {
+    await desktopApi.memories.delete(id)
+    setMemories(await desktopApi.memories.list())
+    setNotice({ tone: 'neutral', message: '记忆已删除。' })
+  }
+
+  const [switchingApp, setSwitchingApp] = useState(false)
+  const difyMode: 'workflow' | 'agent' | null = environmentStatus?.difyAppMode === 'agent-chat' ? 'agent' : environmentStatus?.difyAppMode ? 'workflow' : null
+
+  async function switchDifyApp(mode: 'workflow' | 'agent'): Promise<void> {
+    setSwitchingApp(true)
+    setNotice(null)
+    try {
+      const result = await desktopApi.settings.switchDifyApp(mode)
+      setSettings(result.settings)
+      setEnvironmentStatus(await desktopApi.app.getEnvironmentStatus())
+      setNotice({ tone: result.ok ? 'success' : 'error', message: result.message })
+    } catch {
+      setNotice({ tone: 'error', message: '切换 App 模式失败。' })
+    } finally {
+      setSwitchingApp(false)
+    }
+  }
+
+  const memoryTypeLabels: Record<UserMemoryType, string> = {
+    user: '身份',
+    preference: '偏好',
+    feedback: '纠正',
+    project: '课题',
+    reference: '资源'
+  }
+
   return (
     <main className="settings-page">
       <section className="settings-header">
@@ -154,6 +197,20 @@ export function SettingsPage({ onSettingsSaved, onConnectionTested }: SettingsPa
           />
         </label>
 
+        <label className="settings-field">
+          <span>
+            <KeyRound size={16} aria-hidden="true" />
+            DeepSeek API Key（模型密钥，保存时自动同步到 Dify）
+          </span>
+          <input
+            value={settings.deepseekApiKey}
+            onChange={(event) => updateField('deepseekApiKey', event.target.value)}
+            placeholder="sk-..."
+            type="password"
+            disabled={loading}
+          />
+        </label>
+
         <div className="settings-actions">
           <button className="secondary-action" type="button" onClick={() => void testConnection()} disabled={loading || testing}>
             {testing ? <Loader2 className="spin" size={16} aria-hidden="true" /> : <Plug size={16} aria-hidden="true" />}
@@ -165,6 +222,42 @@ export function SettingsPage({ onSettingsSaved, onConnectionTested }: SettingsPa
           </button>
         </div>
       </form>
+
+      <div className="settings-app-mode">
+        <span className="settings-field-label">
+          <Zap size={16} aria-hidden="true" />
+          AI 引擎模式
+        </span>
+        <div className="settings-app-mode-buttons">
+          <button
+            className={difyMode === 'agent' ? 'settings-mode-btn active' : 'settings-mode-btn'}
+            type="button"
+            onClick={() => void switchDifyApp('agent')}
+            disabled={switchingApp || !environmentStatus?.difyConfigured}
+          >
+            <Brain size={15} aria-hidden="true" />
+            <div>
+              <strong>Tool Agent</strong>
+              <small>16 个工具 · 外网搜索 · 自主多轮 · 自动记忆</small>
+            </div>
+          </button>
+          <button
+            className={difyMode === 'workflow' ? 'settings-mode-btn active' : 'settings-mode-btn'}
+            type="button"
+            onClick={() => void switchDifyApp('workflow')}
+            disabled={switchingApp || !environmentStatus?.difyConfigured}
+          >
+            <Server size={15} aria-hidden="true" />
+            <div>
+              <strong>Workflow</strong>
+              <small>知识库检索 · 稳定模式</small>
+            </div>
+          </button>
+        </div>
+        <p className="settings-app-mode-hint">
+          Tool Agent = 全功能（14 工具含 arXiv/S2 搜索、跨论文取证）。Workflow = 稳定路径（仅知识库检索）。切换不需要重启。
+        </p>
+      </div>
 
       <section className="settings-status-panel" aria-label="本地状态">
         <div className="settings-status-head">
@@ -217,6 +310,121 @@ export function SettingsPage({ onSettingsSaved, onConnectionTested }: SettingsPa
         </div>
 
       </section>
+
+      <section className="settings-status-panel" aria-label="研究偏好">
+        <div className="settings-status-head">
+          <div>
+            <span className="settings-kicker">用户记忆</span>
+            <h2>研究偏好</h2>
+          </div>
+          <button
+            className="secondary-action compact"
+            type="button"
+            onClick={() => setEditingMemory({ type: 'user', name: '', description: '', body: '' })}
+          >
+            <Plus size={15} aria-hidden="true" />
+            添加记忆
+          </button>
+        </div>
+
+        {editingMemory ? (
+          <MemoryEditor
+            input={editingMemory}
+            onCancel={() => setEditingMemory(null)}
+            onSave={(input) => void saveMemory(input)}
+          />
+        ) : null}
+
+        {memories.length === 0 && !editingMemory ? (
+          <p className="settings-memories-empty">
+            还没有保存任何研究偏好。添加后，Agent 将在每次对话中记住你的研究方向、回答偏好和常用纠正。
+          </p>
+        ) : null}
+
+        <div className="settings-memories-list">
+          {memories.map((mem) => (
+            <div key={mem.id} className="settings-memory-card">
+              <div className="settings-memory-head">
+                <span className={`settings-memory-badge ${mem.type}`}>{memoryTypeLabels[mem.type]}</span>
+                <strong>{mem.name}</strong>
+                {mem.description ? <span className="settings-memory-desc">{mem.description}</span> : null}
+              </div>
+              <p className="settings-memory-body">{mem.body}</p>
+              <div className="settings-memory-actions">
+                <button className="secondary-action compact" type="button" onClick={() => setEditingMemory({ id: mem.id, type: mem.type, name: mem.name, description: mem.description, body: mem.body })}>
+                  <Pencil size={13} aria-hidden="true" />
+                  编辑
+                </button>
+                <button className="secondary-action compact danger" type="button" onClick={() => void deleteMemory(mem.id)}>
+                  <Trash2 size={13} aria-hidden="true" />
+                  删除
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
     </main>
+  )
+}
+
+type MemoryEditorProps = {
+  input: UserMemoryInput
+  onSave: (input: UserMemoryInput) => void
+  onCancel: () => void
+}
+
+function MemoryEditor({ input, onSave, onCancel }: MemoryEditorProps): JSX.Element {
+  const [type, setType] = useState<UserMemoryType>(input.type)
+  const [name, setName] = useState(input.name)
+  const [description, setDescription] = useState(input.description)
+  const [body, setBody] = useState(input.body)
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>): void {
+    event.preventDefault()
+    onSave({ id: input.id, type, name: name.trim(), description: description.trim(), body: body.trim() })
+  }
+
+  return (
+    <form className="settings-memory-editor" onSubmit={handleSubmit}>
+      <label className="settings-field">
+        <span><Brain size={16} aria-hidden="true" /> 类型</span>
+        <select value={type} onChange={(e) => setType(e.target.value as UserMemoryType)} className="settings-memory-select">
+          <option value="user">身份（角色、研究方向、母语）</option>
+          <option value="preference">偏好（回答语言、写作风格、术语）</option>
+          <option value="feedback">纠正（用户纠正过的行为）</option>
+          <option value="project">课题（当前研究、活跃论文库）</option>
+          <option value="reference">资源（arXiv 收藏、外部链接）</option>
+        </select>
+      </label>
+      <label className="settings-field">
+        <span>名称（简短标识）</span>
+        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="如 research-field" />
+      </label>
+      <label className="settings-field">
+        <span>描述（可选，一句话）</span>
+        <input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="如 用户的研究方向" />
+      </label>
+      <label className="settings-field">
+        <span>内容</span>
+        <textarea
+          value={body}
+          onChange={(e) => setBody(e.target.value)}
+          placeholder="如 NLP 方向硕士生，母语中文，偏好学术正式风格的回答"
+          rows={3}
+          className="settings-memory-textarea"
+        />
+      </label>
+      <div className="settings-actions">
+        <button className="secondary-action" type="button" onClick={onCancel}>
+          <X size={16} aria-hidden="true" />
+          取消
+        </button>
+        <button className="primary-action" type="submit" disabled={!name.trim() || !body.trim()}>
+          <Save size={16} aria-hidden="true" />
+          保存记忆
+        </button>
+      </div>
+    </form>
   )
 }
