@@ -19,6 +19,7 @@ import { desktopApi } from '../api/desktopApi'
 import { AiDrawer, createEmptyAiDrawerSession, type AiDrawerSession } from '../components/AiDrawer'
 import { PaperReader } from '../components/PaperReader'
 import { readWorkspacePreferences, updateWorkspacePreferences, type PaperViewPreference } from '../state/workspacePreferences'
+import { normalizedPaperTitle, supportedPaperFile } from './paperImportUtils'
 import type { Folder, Paper, PaperCard, PaperOutlineItem, PaperSearchResult } from '../../shared/types'
 
 type PaperRow = Paper & { card: PaperCard | null }
@@ -367,14 +368,6 @@ export function KnowledgePage({ requestedPaperId, requestedFolderId, requestedPa
 
   function containsFiles(event: DragEvent<HTMLElement>): boolean {
     return Array.from(event.dataTransfer.types).includes('Files')
-  }
-
-  function supportedPaperFile(file: File): boolean {
-    return /\.(pdf|md|markdown)$/i.test(file.name)
-  }
-
-  function normalizedPaperTitle(value: string): string {
-    return value.replace(/\.(pdf|md|markdown)$/i, '').trim().replace(/\s+/g, ' ').toLowerCase()
   }
 
   function updateImportQueueItem(id: string, update: Partial<ImportQueueItem>): void {

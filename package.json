@@ -5,7 +5,8 @@
   "type": "module",
   "main": "dist/main/main.js",
   "scripts": {
-    "dev": "electron-rebuild -f -w better-sqlite3 && electron-vite dev",
+    "dev": "electron-vite dev",
+    "postinstall": "electron-rebuild -f -w better-sqlite3",
     "build": "tsc -p tsconfig.json && electron-vite build && node scripts/copy-pdf-standard-fonts.mjs",
     "build:win": "tsc -p tsconfig.json && electron-vite build && node scripts/copy-pdf-standard-fonts.mjs && electron-builder --win --config",
     "test": "vitest run",
