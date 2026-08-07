@@ -5,5 +5,5 @@ export function supportedPaperFile(file: Pick<File, 'name'>): boolean {
 }
 
 export function normalizedPaperTitle(value: string): string {
-  return value.replace(supportedPaperExtension, '').trim().replace(/\s+/g, ' ').toLowerCase()
+  return value.trim().replace(supportedPaperExtension, '').trim().replace(/\s+/g, ' ').toLowerCase()
 }

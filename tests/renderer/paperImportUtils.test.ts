@@ -12,5 +12,6 @@ describe('paper import utilities', () => {
 
   it('normalizes extensions, whitespace, and case for duplicate detection', () => {
     expect(normalizedPaperTitle('  A   Research Paper.PDF  ')).toBe('a research paper')
+    expect(normalizedPaperTitle('Paper.markdown   ')).toBe('paper')
   })
 })
