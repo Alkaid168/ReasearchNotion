@@ -1,10 +1,9 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type FormEvent, type JSX, type PointerEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type JSX, type PointerEvent } from 'react'
 import {
   BookOpenText,
   Check,
   ChevronRight,
   FilePlus2,
-  FileText,
   FolderClosed,
   FolderOpen,
   FolderPlus,
@@ -19,12 +18,10 @@ import { desktopApi } from '../api/desktopApi'
 import { AiDrawer, createEmptyAiDrawerSession, type AiDrawerSession } from '../components/AiDrawer'
 import { PaperReader } from '../components/PaperReader'
 import { readWorkspacePreferences, updateWorkspacePreferences, type PaperViewPreference } from '../state/workspacePreferences'
-import { normalizedPaperTitle, supportedPaperFile } from './paperImportUtils'
-import type { Folder, Paper, PaperCard, PaperOutlineItem, PaperSearchResult } from '../../shared/types'
-
-type PaperRow = Paper & { card: PaperCard | null }
-type ImportQueueStatus = 'queued' | 'importing' | 'imported' | 'skipped' | 'failed'
-type ImportQueueItem = { id: string; fileName: string; status: ImportQueueStatus; detail?: string }
+import { LibraryPaperBranch } from './LibraryPaperBranch'
+import type { PaperRow } from './paperLibraryUtils'
+import { usePaperImport } from './usePaperImport'
+import type { Folder, Paper, PaperOutlineItem, PaperSearchResult } from '../../shared/types'
 
 type KnowledgePageProps = {
   requestedPaperId?: string
@@ -75,17 +72,13 @@ export function KnowledgePage({ requestedPaperId, requestedFolderId, requestedPa
   const [editingFolderName, setEditingFolderName] = useState('')
   const [deleteConfirmFolderId, setDeleteConfirmFolderId] = useState<string | null>(null)
   const [deletingFolderId, setDeletingFolderId] = useState<string | null>(null)
-  const [importing, setImporting] = useState(false)
   const [importError, setImportError] = useState<string | null>(null)
-  const [importQueue, setImportQueue] = useState<ImportQueueItem[]>([])
-  const [dropActive, setDropActive] = useState(false)
   const [deleteConfirmPaperId, setDeleteConfirmPaperId] = useState<string | null>(null)
   const [deletingPaperId, setDeletingPaperId] = useState<string | null>(null)
   const [paperSearchQuery, setPaperSearchQuery] = useState('')
   const activePaperRef = useRef<Paper | null>(null)
   const currentPageRef = useRef(1)
   const drawerOpenRef = useRef(false)
-  const dragDepthRef = useRef(0)
   const knowledgeResizeCleanupRef = useRef<(() => void) | null>(null)
 
   activePaperRef.current = activePaper
@@ -110,22 +103,23 @@ export function KnowledgePage({ requestedPaperId, requestedFolderId, requestedPa
     [activeFolderId, folders]
   )
   const activeFolderPapers = activeFolderId ? (papersByFolderId[activeFolderId] ?? []) : []
-
-  function filteredPapersFor(folderId: string): PaperRow[] {
-    const query = paperSearchQuery.trim().toLowerCase()
-    return (papersByFolderId[folderId] ?? []).filter((paper) => {
-      const searchableValues = [
-        paper.title,
-        paper.card?.oneSentenceSummary,
-        paper.card?.authors,
-        paper.card?.year,
-        ...(paper.card?.keywords ?? [])
-      ]
-      const matchesQuery =
-        !query || searchableValues.filter(Boolean).some((value) => String(value).toLowerCase().includes(query))
-      return matchesQuery
-    })
-  }
+  const {
+    importing,
+    importQueue,
+    dropActive,
+    importPaper,
+    clearImportQueue,
+    onPaperDragEnter,
+    onPaperDragOver,
+    onPaperDragLeave,
+    onPaperDrop
+  } = usePaperImport({
+    activeFolderId,
+    activeFolderPapers,
+    loadFolderPapers,
+    onNotify,
+    onError: setImportError
+  })
 
   async function loadFolderPapers(folderId: string): Promise<PaperRow[]> {
     setLoadingFolderIds((current) => new Set(current).add(folderId))
@@ -347,112 +341,6 @@ export function KnowledgePage({ requestedPaperId, requestedFolderId, requestedPa
     }
   }
 
-  async function importPaper(): Promise<void> {
-    if (!activeFolderId || importing) return
-
-    setImporting(true)
-    setImportError(null)
-    try {
-      const importedPapers = await desktopApi.papers.import(activeFolderId)
-      await loadFolderPapers(activeFolderId)
-      if (importedPapers.length === 1) onNotify?.(`已导入「${importedPapers[0].title}」`, 'success')
-      else onNotify?.(`已导入 ${importedPapers.length} 篇论文`, 'success')
-    } catch (error) {
-      const message = error instanceof Error ? error.message : '导入论文失败。'
-      setImportError(message)
-      onNotify?.(message, 'error')
-    } finally {
-      setImporting(false)
-    }
-  }
-
-  function containsFiles(event: DragEvent<HTMLElement>): boolean {
-    return Array.from(event.dataTransfer.types).includes('Files')
-  }
-
-  function updateImportQueueItem(id: string, update: Partial<ImportQueueItem>): void {
-    setImportQueue((current) => current.map((item) => (item.id === id ? { ...item, ...update } : item)))
-  }
-
-  async function importDroppedFiles(folderId: string, files: File[]): Promise<void> {
-    const existingTitles = new Set(activeFolderPapers.map((paper) => normalizedPaperTitle(paper.title)))
-    const incomingTitles = new Set<string>()
-    const items = files.map((file, index) => {
-      const title = normalizedPaperTitle(file.name)
-      const duplicate = existingTitles.has(title) || incomingTitles.has(title)
-      incomingTitles.add(title)
-      return {
-        id: `import-${Date.now()}-${index}`,
-        fileName: file.name,
-        status: duplicate ? 'skipped' : 'queued',
-        detail: duplicate ? '当前论文库或本次导入中已有同名论文。' : undefined
-      } satisfies ImportQueueItem
-    })
-    setImportQueue(items)
-
-    let importedCount = 0
-    let failedCount = 0
-    for (const [index, file] of files.entries()) {
-      const item = items[index]
-      if (item.status === 'skipped') continue
-      updateImportQueueItem(item.id, { status: 'importing' })
-      try {
-        const imported = await desktopApi.papers.importFiles(folderId, [file])
-        const importedPaper = imported[0]
-        if (!importedPaper) throw new Error('导入没有返回论文记录。')
-        existingTitles.add(normalizedPaperTitle(importedPaper.title))
-        importedCount += 1
-        updateImportQueueItem(item.id, { status: 'imported' })
-      } catch (error) {
-        failedCount += 1
-        updateImportQueueItem(item.id, {
-          status: 'failed',
-          detail: error instanceof Error ? error.message : '导入失败。'
-        })
-      }
-    }
-
-    await loadFolderPapers(folderId)
-    if (failedCount > 0) setImportError(`${failedCount} 个文件导入失败。`)
-    if (importedCount > 0) onNotify?.(importedCount === 1 ? '已导入 1 篇论文' : `已导入 ${importedCount} 篇论文`, 'success')
-  }
-
-  function onPaperDragEnter(event: DragEvent<HTMLElement>): void {
-    if (!containsFiles(event)) return
-    event.preventDefault()
-    dragDepthRef.current += 1
-    setDropActive(true)
-  }
-
-  function onPaperDragLeave(event: DragEvent<HTMLElement>): void {
-    if (!containsFiles(event)) return
-    event.preventDefault()
-    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1)
-    if (dragDepthRef.current === 0) setDropActive(false)
-  }
-
-  async function onPaperDrop(event: DragEvent<HTMLElement>): Promise<void> {
-    event.preventDefault()
-    dragDepthRef.current = 0
-    setDropActive(false)
-    if (!activeFolderId || importing) return
-
-    const files = Array.from(event.dataTransfer.files)
-    if (files.length === 0) return
-    if (files.some((file) => !supportedPaperFile(file))) {
-      setImportError('仅支持 PDF、Markdown（.md / .markdown）文件。')
-      return
-    }
-
-    setImporting(true)
-    setImportError(null)
-    try {
-      await importDroppedFiles(activeFolderId, files)
-    } finally {
-      setImporting(false)
-    }
-  }
-
   function clearActivePaper(): void {
     setActivePaper(null)
     setMarkdownText(null)
@@ -609,11 +497,6 @@ export function KnowledgePage({ requestedPaperId, requestedFolderId, requestedPa
     })
   }
 
-  function paperMeta(paper: PaperRow): string {
-    const fileTypeLabel = paper.fileType === 'markdown' ? 'Markdown' : 'PDF'
-    return [fileTypeLabel, paper.card?.year].filter(Boolean).join(' ? ')
-  }
-
   return (
     <div
       className={`knowledge-layout${focusMode ? ' focus-mode' : ''}${knowledgeSidebarCollapsed ? ' sidebar-collapsed' : ''}`}
@@ -623,11 +506,7 @@ export function KnowledgePage({ requestedPaperId, requestedFolderId, requestedPa
         className={dropActive ? 'knowledge-list drag-active' : 'knowledge-list'}
         aria-label="论文拖放导入区"
         onDragEnter={onPaperDragEnter}
-        onDragOver={(event) => {
-          if (!containsFiles(event)) return
-          event.preventDefault()
-          event.dataTransfer.dropEffect = 'copy'
-        }}
+        onDragOver={onPaperDragOver}
         onDragLeave={onPaperDragLeave}
         onDrop={(event) => void onPaperDrop(event)}
       >
@@ -720,7 +599,6 @@ export function KnowledgePage({ requestedPaperId, requestedFolderId, requestedPa
             const isActive = folder.id === activeFolderId
             const isExpanded = expandedFolderIds.has(folder.id)
             const folderPapers = papersByFolderId[folder.id] ?? []
-            const filteredPapers = filteredPapersFor(folder.id)
             const isLoadingFolder = loadingFolderIds.has(folder.id)
             return (
               <div className="library-folder-block" key={folder.id}>
@@ -809,30 +687,13 @@ export function KnowledgePage({ requestedPaperId, requestedFolderId, requestedPa
                 ) : null}
 
                 {isExpanded ? (
-                  <div className="library-paper-branch">
-                    {isLoadingFolder ? <p className="subtle-text compact">正在载入论文...</p> : null}
-                    {!isLoadingFolder && folderPapers.length === 0 ? (
-                      <p className="subtle-text compact">当前文件夹还没有论文。</p>
-                    ) : null}
-                    {!isLoadingFolder && folderPapers.length > 0 && filteredPapers.length === 0 ? (
-                      <p className="subtle-text compact">没有匹配的论文。</p>
-                    ) : null}
-                    {filteredPapers.map((paper) => (
-                      <button
-                        key={paper.id}
-                        className={activePaper?.id === paper.id ? 'library-paper-row active' : 'library-paper-row'}
-                        data-paper-row-id={paper.id}
-                        type="button"
-                        onClick={() => void openPaper(paper.id)}
-                      >
-                        <FileText size={15} aria-hidden="true" />
-                        <span>
-                          <strong>{paper.title}</strong>
-                          <small>{paperMeta(paper)}</small>
-                        </span>
-                      </button>
-                    ))}
-                  </div>
+                  <LibraryPaperBranch
+                    papers={folderPapers}
+                    query={paperSearchQuery}
+                    loading={isLoadingFolder}
+                    activePaperId={activePaper?.id ?? null}
+                    onOpenPaper={(paperId) => void openPaper(paperId)}
+                  />
                 ) : null}
               </div>
             )
@@ -857,7 +718,7 @@ export function KnowledgePage({ requestedPaperId, requestedFolderId, requestedPa
                 aria-label="清除导入记录"
                 title="清除导入记录"
                 disabled={importing}
-                onClick={() => setImportQueue([])}
+                onClick={clearImportQueue}
               >
                 <X size={14} aria-hidden="true" />
               </button>

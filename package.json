@@ -10,6 +10,7 @@
     "build": "tsc -p tsconfig.json && electron-vite build && node scripts/copy-pdf-standard-fonts.mjs",
     "build:win": "tsc -p tsconfig.json && electron-vite build && node scripts/copy-pdf-standard-fonts.mjs && electron-builder --win --config",
     "test": "vitest run",
+    "test:renderer": "vitest run --config vitest.renderer.config.ts",
     "test:watch": "vitest",
     "lint:types": "tsc -p tsconfig.json --noEmit",
     "rebuild:node": "node scripts/rebuild-node.cjs",
