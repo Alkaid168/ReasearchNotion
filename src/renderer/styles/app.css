@@ -3236,7 +3236,6 @@ button {
   height: 2px;
   min-width: 0;
   background: var(--rn-text);
-  transition: width 0.18s ease;
   z-index: 5;
   border-radius: 0 2px 2px 0;
 }
