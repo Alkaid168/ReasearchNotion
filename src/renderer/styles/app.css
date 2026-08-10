@@ -3773,6 +3773,7 @@ button {
   flex-wrap: wrap;
   gap: 6px;
   padding: 0 12px 8px;
+  margin-top: auto;
 }
 
 .drawer-chip {
@@ -3799,7 +3800,6 @@ button {
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: end;
   gap: 8px;
-  margin-top: auto;
   border-top: 1px solid var(--rn-border);
   padding: 12px;
   color: var(--rn-muted);

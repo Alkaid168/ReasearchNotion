@@ -287,22 +287,22 @@ export function AiDrawer({
       ) : null}
       {sending ? <DrawerProgress activeIndex={progressIndex} startedAt={progressStartedAt} detail={progressDetail} /> : null}
 
+      <div className="drawer-quick-actions" aria-label="快捷操作">
+        {(emphasisContext ? drawerQuickActions.selection : drawerQuickActions.full).map((action) => (
+          <button
+            key={action.label}
+            type="button"
+            className="drawer-chip"
+            onClick={() => {
+              updateDraft(action.prompt)
+              if (error) setError(null)
+            }}
+          >
+            {action.label}
+          </button>
+        ))}
+      </div>
       <form className="drawer-composer" onSubmit={(event) => void send(event)}>
-        <div className="drawer-quick-actions" aria-label="快捷操作">
-          {(emphasisContext ? drawerQuickActions.selection : drawerQuickActions.full).map((action) => (
-            <button
-              key={action.label}
-              type="button"
-              className="drawer-chip"
-              onClick={() => {
-                updateDraft(action.prompt)
-                if (error) setError(null)
-              }}
-            >
-              {action.label}
-            </button>
-          ))}
-        </div>
         <MessageSquare size={16} aria-hidden="true" />
         <textarea
           aria-label="论文提问输入"
