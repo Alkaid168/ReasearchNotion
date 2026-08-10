@@ -521,7 +521,7 @@ function Composer({
         <button
           className="send-button"
           type="button"
-          aria-label={sending ? '停止生成' : '发送'}
+          aria-label={sending ? '停止' : '发送'}
           disabled={!sending && !draft.trim()}
           onClick={sending ? onCancel : onSend}
         >

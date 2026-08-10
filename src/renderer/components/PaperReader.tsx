@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent, type JSX, type ReactNode } from 'react'
-import { ChevronLeft, ChevronRight, ListTree, Maximize2, PanelLeftClose, PanelLeftOpen, Search, X, ZoomIn, ZoomOut } from 'lucide-react'
+import { ChevronLeft, ChevronRight, ListTree, Maximize2, PanelLeftClose, PanelLeftOpen, Search, Sparkles, X, ZoomIn, ZoomOut } from 'lucide-react'
 import { AcademicMarkdown } from './AcademicMarkdown'
 import type { PDFDocumentProxy, RenderTask } from 'pdfjs-dist'
 import type { Paper, PaperOutlineItem, PaperSearchResult } from '../../shared/types'
@@ -18,6 +18,7 @@ type PaperReaderProps = {
   onViewStateChange?: (view: { page: number; scale: number }) => void
   focusMode?: boolean
   onFocusModeChange?: (focusMode: boolean) => void
+  onAskAi?: () => void
   outline?: PaperOutlineItem[]
   searchResults?: PaperSearchResult[]
   searching?: boolean
@@ -153,6 +154,7 @@ function PdfCanvasViewer({
   onViewStateChange,
   focusMode,
   onFocusModeChange,
+  onAskAi,
   navigationControls,
   navigationPanel
 }: {
@@ -166,6 +168,7 @@ function PdfCanvasViewer({
   onViewStateChange?: (view: { page: number; scale: number }) => void
   focusMode?: boolean
   onFocusModeChange?: (focusMode: boolean) => void
+  onAskAi?: () => void
   navigationControls?: ReactNode
   navigationPanel?: ReactNode
 }): JSX.Element {
@@ -427,6 +430,18 @@ function PdfCanvasViewer({
               {focusMode ? <PanelLeftOpen size={16} aria-hidden="true" /> : <PanelLeftClose size={16} aria-hidden="true" />}
             </button>
           ) : null}
+          {onAskAi ? (
+            <button
+              type="button"
+              className="reader-ask-ai-button"
+              aria-label="问 AI（Ctrl+I）"
+              title="问 AI（Ctrl+I）"
+              onClick={onAskAi}
+            >
+              <Sparkles size={15} aria-hidden="true" />
+              <span>问 AI</span>
+            </button>
+          ) : null}
           {navigationControls}
         </div>
       </div>
@@ -469,7 +484,8 @@ export function PaperReader({
   searchResults = [],
   searching = false,
   searchError = null,
-  onSearch
+  onSearch,
+  onAskAi
 }: PaperReaderProps): JSX.Element {
   const markdownContentRef = useRef<HTMLElement | null>(null)
   const [navigationMode, setNavigationMode] = useState<ReaderNavigationMode>(null)
@@ -583,6 +599,7 @@ export function PaperReader({
           onViewStateChange={onViewStateChange}
           focusMode={focusMode}
           onFocusModeChange={onFocusModeChange}
+          onAskAi={onAskAi}
           navigationControls={navigationControls}
           navigationPanel={navigationPanel}
         />

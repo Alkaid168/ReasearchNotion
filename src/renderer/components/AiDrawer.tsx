@@ -32,6 +32,20 @@ export function createEmptyAiDrawerSession(): AiDrawerSession {
 const suggestions = ['解释当前论文的核心创新点', '把 Method 部分转成中文阅读笔记', '分析实验指标和局限性']
 const drawerProgressSteps = ['准备论文上下文', '发送选中文本', 'Dify 检索与生成', '写入回答']
 
+/** 抽屉快捷操作：有选中文字时用 selection 集，否则用 full-paper 集。点击预填到输入框。 */
+const drawerQuickActions = {
+  selection: [
+    { label: '解释这段', prompt: '请解释下面这段内容的含义、背景和关键概念：' },
+    { label: '翻译这段', prompt: '请把下面这段内容翻译成通顺的中文：' },
+    { label: '总结这段', prompt: '请用 3-5 个要点总结下面这段内容：' }
+  ],
+  full: [
+    { label: '总结全文', prompt: '请总结这篇论文的核心内容，按研究问题、方法、结论和局限性组织。' },
+    { label: '解释术语', prompt: '请解释这篇论文中的关键术语，给出适合初学者理解的中文说明。' },
+    { label: '找创新点', prompt: '请提取这篇论文可能的创新点，并说明它们与已有工作的差异。' }
+  ]
+}
+
 function createProgressRequestId(): string {
   return `progress-${Date.now()}-${Math.random().toString(36).slice(2)}`
 }
@@ -274,6 +288,21 @@ export function AiDrawer({
       {sending ? <DrawerProgress activeIndex={progressIndex} startedAt={progressStartedAt} detail={progressDetail} /> : null}
 
       <form className="drawer-composer" onSubmit={(event) => void send(event)}>
+        <div className="drawer-quick-actions" aria-label="快捷操作">
+          {(emphasisContext ? drawerQuickActions.selection : drawerQuickActions.full).map((action) => (
+            <button
+              key={action.label}
+              type="button"
+              className="drawer-chip"
+              onClick={() => {
+                updateDraft(action.prompt)
+                if (error) setError(null)
+              }}
+            >
+              {action.label}
+            </button>
+          ))}
+        </div>
         <MessageSquare size={16} aria-hidden="true" />
         <textarea
           aria-label="论文提问输入"

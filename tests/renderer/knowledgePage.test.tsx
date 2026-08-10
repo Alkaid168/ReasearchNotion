@@ -774,7 +774,7 @@ describe('KnowledgePage', () => {
       return element!
     })
     fireEvent.change(input, { target: { value: 'Explain this passage' } })
-    fireEvent.click(document.querySelector<HTMLButtonElement>('.drawer-composer button')!)
+    fireEvent.click(screen.getByRole('button', { name: /发送问题/ }))
 
     await waitFor(() => expect(api.conversations.sendMessage).toHaveBeenCalled())
     const copyButton = await waitFor(() => {
