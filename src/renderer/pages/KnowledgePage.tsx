@@ -19,11 +19,16 @@ import { desktopApi } from '../api/desktopApi'
 import { AiDrawer, createEmptyAiDrawerSession, type AiDrawerSession } from '../components/AiDrawer'
 import { PaperReader } from '../components/PaperReader'
 import { readWorkspacePreferences, updateWorkspacePreferences, type PaperViewPreference } from '../state/workspacePreferences'
-import type { Folder, Paper, PaperCard, PaperOutlineItem, PaperSearchResult } from '../../shared/types'
+import type { Folder, Paper, PaperOutlineItem, PaperSearchResult } from '../../shared/types'
 
-type PaperRow = Paper & { card: PaperCard | null }
-type ImportQueueStatus = 'queued' | 'importing' | 'imported' | 'skipped' | 'failed'
-type ImportQueueItem = { id: string; fileName: string; status: ImportQueueStatus; detail?: string }
+import {
+  type ImportQueueItem,
+  type PaperRow,
+  containsFiles,
+  normalizedPaperTitle,
+  paperMeta,
+  supportedPaperFile
+} from './knowledgeHelpers'
 
 type KnowledgePageProps = {
   requestedPaperId?: string
@@ -365,18 +370,6 @@ export function KnowledgePage({ requestedPaperId, requestedFolderId, requestedPa
     }
   }
 
-  function containsFiles(event: DragEvent<HTMLElement>): boolean {
-    return Array.from(event.dataTransfer.types).includes('Files')
-  }
-
-  function supportedPaperFile(file: File): boolean {
-    return /\.(pdf|md|markdown)$/i.test(file.name)
-  }
-
-  function normalizedPaperTitle(value: string): string {
-    return value.replace(/\.(pdf|md|markdown)$/i, '').trim().replace(/\s+/g, ' ').toLowerCase()
-  }
-
   function updateImportQueueItem(id: string, update: Partial<ImportQueueItem>): void {
     setImportQueue((current) => current.map((item) => (item.id === id ? { ...item, ...update } : item)))
   }
@@ -614,11 +607,6 @@ export function KnowledgePage({ requestedPaperId, requestedFolderId, requestedPa
       updateWorkspacePreferences({ knowledge: { activeFolderId: folderId, expandedFolderIds: [...next] } })
       return next
     })
-  }
-
-  function paperMeta(paper: PaperRow): string {
-    const fileTypeLabel = paper.fileType === 'markdown' ? 'Markdown' : 'PDF'
-    return [fileTypeLabel, paper.card?.year].filter(Boolean).join(' ? ')
   }
 
   return (
