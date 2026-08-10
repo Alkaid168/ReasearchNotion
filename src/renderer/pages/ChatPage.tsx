@@ -589,7 +589,10 @@ function AgentProgress({
                 ? `Dify · ${toolCalls.length} 工具`
                 : item.label
           return (
-            <span key={item.step} className={index < activeIndex ? 'done' : isActive ? 'active' : ''}>
+            <span
+              key={item.step}
+              className={index < activeIndex ? 'done' : isActive ? (isDifyCell && runningTool ? 'active running' : 'active') : ''}
+            >
               {cellLabel}
             </span>
           )

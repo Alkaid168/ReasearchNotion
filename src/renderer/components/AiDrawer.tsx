@@ -393,7 +393,10 @@ function DrawerProgress({
                 ? `Dify · ${toolCalls.length} 工具`
                 : step
           return (
-            <span key={step} className={index < activeIndex ? 'done' : isActive ? 'active' : ''}>
+            <span
+              key={step}
+              className={index < activeIndex ? 'done' : isActive ? (isDifyCell && runningTool ? 'active running' : 'active') : ''}
+            >
               {cellLabel}
             </span>
           )
