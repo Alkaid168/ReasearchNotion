@@ -3774,6 +3774,7 @@ button {
   flex-wrap: wrap;
   gap: 6px;
   padding: 12px 12px 8px;
+  border-top: 1px solid var(--rn-border);
   margin-top: auto;
 }
 
@@ -3801,7 +3802,6 @@ button {
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: end;
   gap: 8px;
-  border-top: 1px solid var(--rn-border);
   padding: 12px;
   color: var(--rn-muted);
 }
