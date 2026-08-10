@@ -578,11 +578,22 @@ function AgentProgress({
         <em>{elapsedSeconds}s</em>
       </div>
       <div className="agent-progress-steps" aria-hidden="true">
-        {progressSteps.map((item, index) => (
-          <span key={item.step} className={index < activeIndex ? 'done' : index === activeIndex ? 'active' : ''}>
-            {item.label}
-          </span>
-        ))}
+        {progressSteps.map((item, index) => {
+          const isActive = index === activeIndex
+          const isDifyCell = item.step === 'dify'
+          const runningTool = toolCalls.find((call) => call.status === 'running')
+          const cellLabel =
+            isDifyCell && isActive && runningTool
+              ? `${runningTool.label}…`
+              : isDifyCell && toolCalls.length
+                ? `Dify · ${toolCalls.length} 工具`
+                : item.label
+          return (
+            <span key={item.step} className={index < activeIndex ? 'done' : isActive ? 'active' : ''}>
+              {cellLabel}
+            </span>
+          )
+        })}
       </div>
       {toolCalls.length ? (
         <div className="agent-progress-tools" aria-label="工具调用轨迹">
