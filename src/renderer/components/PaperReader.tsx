@@ -373,6 +373,11 @@ function PdfCanvasViewer({
 
   return (
     <section className="pdf-canvas-viewer" aria-label={`${title} PDF 阅读器`}>
+      <div
+        className="reader-progress-bar"
+        aria-hidden="true"
+        style={{ width: `${pageCount ? Math.min(100, (pageNumber / pageCount) * 100) : 0}%` }}
+      />
       <div className="pdf-toolbar">
         <div className="pdf-page-controls">
           <button type="button" aria-label="上一页" disabled={pageNumber <= 1} onClick={() => setPageNumber((page) => Math.max(1, page - 1))}>

@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent, type JSX } from 'react'
-import { Brain, CheckCircle2, Database, FileText, Folder, KeyRound, Loader2, MessageSquare, Pencil, Plug, Plus, RefreshCw, Save, Server, Trash2, X, XCircle, Zap } from 'lucide-react'
+import { Brain, CheckCircle2, Database, Eye, EyeOff, FileText, Folder, KeyRound, Loader2, MessageSquare, Pencil, Plug, Plus, RefreshCw, Save, Server, Trash2, X, XCircle, Zap } from 'lucide-react'
 import { desktopApi } from '../api/desktopApi'
 import type { ConnectionTestResult, EnvironmentStatus } from '../../shared/ipcTypes'
 import type { AppSettings, UserMemory, UserMemoryInput, UserMemoryType } from '../../shared/types'
@@ -10,6 +10,40 @@ const emptySettings: AppSettings = {
   difyKnowledgeApiKey: '',
   deepseekApiKey: '',
   defaultFolderId: null
+}
+
+type SecretInputProps = {
+  value: string
+  onChange: (value: string) => void
+  placeholder?: string
+  disabled?: boolean
+}
+
+function SecretInput({ value, onChange, placeholder, disabled }: SecretInputProps): JSX.Element {
+  const [visible, setVisible] = useState(false)
+  return (
+    <div className="secret-input">
+      <input
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        type={visible ? 'text' : 'password'}
+        disabled={disabled}
+        autoComplete="off"
+        spellCheck={false}
+      />
+      <button
+        type="button"
+        className="secret-toggle"
+        aria-label={visible ? '隐藏' : '显示'}
+        title={visible ? '隐藏' : '显示'}
+        onClick={() => setVisible((current) => !current)}
+        tabIndex={-1}
+      >
+        {visible ? <EyeOff size={15} aria-hidden="true" /> : <Eye size={15} aria-hidden="true" />}
+      </button>
+    </div>
+  )
 }
 
 type Notice = {
@@ -156,11 +190,10 @@ export function SettingsPage({ onSettingsSaved, onConnectionTested }: SettingsPa
             <KeyRound size={16} aria-hidden="true" />
             Dify App API Key
           </span>
-          <input
+          <SecretInput
             value={settings.difyAppApiKey}
-            onChange={(event) => updateField('difyAppApiKey', event.target.value)}
+            onChange={(value) => updateField('difyAppApiKey', value)}
             placeholder="app-..."
-            type="password"
             disabled={loading}
           />
         </label>
@@ -170,11 +203,10 @@ export function SettingsPage({ onSettingsSaved, onConnectionTested }: SettingsPa
             <KeyRound size={16} aria-hidden="true" />
             Dify Knowledge API Key（论文归档同步，可选）
           </span>
-          <input
+          <SecretInput
             value={settings.difyKnowledgeApiKey}
-            onChange={(event) => updateField('difyKnowledgeApiKey', event.target.value)}
+            onChange={(value) => updateField('difyKnowledgeApiKey', value)}
             placeholder="dataset-..."
-            type="password"
             disabled={loading}
           />
         </label>
@@ -184,11 +216,10 @@ export function SettingsPage({ onSettingsSaved, onConnectionTested }: SettingsPa
             <KeyRound size={16} aria-hidden="true" />
             DeepSeek API Key（模型密钥，保存时自动同步到 Dify）
           </span>
-          <input
+          <SecretInput
             value={settings.deepseekApiKey}
-            onChange={(event) => updateField('deepseekApiKey', event.target.value)}
+            onChange={(value) => updateField('deepseekApiKey', value)}
             placeholder="sk-..."
-            type="password"
             disabled={loading}
           />
         </label>
