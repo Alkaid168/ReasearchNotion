@@ -41,6 +41,7 @@ function createApiMock(): DesktopApi {
       create: vi.fn(),
       moveToFolder: vi.fn(),
       rename: vi.fn(),
+      updateContext: vi.fn(),
       delete: vi.fn(),
       reorder: vi.fn(),
       sendMessage: vi.fn()
@@ -1175,7 +1176,7 @@ describe('App shell', () => {
     })
   })
 
-  it('shows an existing conversation context as read-only text', async () => {
+  it('lets the user switch context in an existing conversation', async () => {
     const api = createApiMock()
     const contextConversation: Conversation = {
       ...outsideConversation,
@@ -1192,15 +1193,13 @@ describe('App shell', () => {
     fireEvent.click(await screen.findByText(contextConversation.title))
     expect(await screen.findByText('Explain attention')).toBeInTheDocument()
 
-    const contextInput = await screen.findByLabelText('问答上下文')
-    expect(contextInput).toHaveAttribute('readonly')
-    expect(contextInput).toHaveValue(paperFolder.name)
-    expect(screen.queryByRole('combobox', { name: '问答上下文' })).not.toBeInTheDocument()
-    expect(screen.queryByText(/当前对话上下文已固定/)).not.toBeInTheDocument()
+    const contextSelect = await screen.findByRole('combobox', { name: '问答上下文' })
+    expect(contextSelect).toHaveValue(`folder:${paperFolder.id}`)
+    expect(contextSelect).not.toHaveAttribute('readonly')
 
-    fireEvent.click(screen.getByRole('button', { name: '新对话' }))
+    fireEvent.change(contextSelect, { target: { value: 'free' } })
 
-    expect(await screen.findByRole('combobox', { name: '问答上下文' })).toBeInTheDocument()
+    expect(api.conversations.updateContext).toHaveBeenCalledWith(contextConversation.id, { type: 'free' })
   })
 
   it('shows a compact agent progress state while waiting for the answer', async () => {

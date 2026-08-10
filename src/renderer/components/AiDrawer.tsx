@@ -32,6 +32,20 @@ export function createEmptyAiDrawerSession(): AiDrawerSession {
 const suggestions = ['解释当前论文的核心创新点', '把 Method 部分转成中文阅读笔记', '分析实验指标和局限性']
 const drawerProgressSteps = ['准备论文上下文', '发送选中文本', 'Dify 检索与生成', '写入回答']
 
+/** 抽屉快捷操作：有选中文字时用 selection 集，否则用 full-paper 集。点击预填到输入框。 */
+const drawerQuickActions = {
+  selection: [
+    { label: '解释这段', prompt: '请解释下面这段内容的含义、背景和关键概念：' },
+    { label: '翻译这段', prompt: '请把下面这段内容翻译成通顺的中文：' },
+    { label: '总结这段', prompt: '请用 3-5 个要点总结下面这段内容：' }
+  ],
+  full: [
+    { label: '总结全文', prompt: '请总结这篇论文的核心内容，按研究问题、方法、结论和局限性组织。' },
+    { label: '解释术语', prompt: '请解释这篇论文中的关键术语，给出适合初学者理解的中文说明。' },
+    { label: '找创新点', prompt: '请提取这篇论文可能的创新点，并说明它们与已有工作的差异。' }
+  ]
+}
+
 function createProgressRequestId(): string {
   return `progress-${Date.now()}-${Math.random().toString(36).slice(2)}`
 }
@@ -52,6 +66,7 @@ export function AiDrawer({
   const [progressIndex, setProgressIndex] = useState(0)
   const [progressStartedAt, setProgressStartedAt] = useState<number | null>(null)
   const [progressDetail, setProgressDetail] = useState<string | null>(null)
+  const [toolCalls, setToolCalls] = useState<Array<{ name: string; label: string; status: 'running' | 'done' }>>([])
   const [error, setError] = useState<string | null>(null)
   const [streamingAnswer, setStreamingAnswer] = useState('')
   const [activeProgressRequestId, setActiveProgressRequestId] = useState<string | null>(null)
@@ -97,6 +112,7 @@ export function AiDrawer({
     setError(null)
     setStreamingAnswer('')
     updateDraft('')
+    setToolCalls([])
     let optimisticMessageId: string | null = null
     const progressRequestId = desktopApi.conversations.onSendProgress ? createProgressRequestId() : null
     setActiveProgressRequestId(progressRequestId)
@@ -105,6 +121,15 @@ export function AiDrawer({
           if (event.requestId !== progressRequestId) return
           if (event.phase === 'delta') {
             setStreamingAnswer((current) => (event.replaceAnswer ? event.delta ?? '' : `${current}${event.delta ?? ''}`))
+          }
+          if (event.phase === 'tool' && event.toolName) {
+            const toolLabel = event.label || event.toolName
+            setToolCalls((current) => {
+              const completed = current.map((call) => (call.status === 'running' ? { ...call, status: 'done' as const } : call))
+              return [...completed, { name: event.toolName!, label: toolLabel, status: 'running' as const }]
+            })
+          } else if (event.phase === 'answer' || event.phase === 'done') {
+            setToolCalls((current) => current.map((call) => (call.status === 'running' ? { ...call, status: 'done' as const } : call)))
           }
           setProgressIndex(event.phase === 'done' ? 3 : 2)
           setProgressDetail(event.label)
@@ -271,8 +296,23 @@ export function AiDrawer({
           {error}
         </p>
       ) : null}
-      {sending ? <DrawerProgress activeIndex={progressIndex} startedAt={progressStartedAt} detail={progressDetail} /> : null}
+      {sending ? <DrawerProgress activeIndex={progressIndex} startedAt={progressStartedAt} detail={progressDetail} toolCalls={toolCalls} /> : null}
 
+      <div className="drawer-quick-actions" aria-label="快捷操作">
+        {(emphasisContext ? drawerQuickActions.selection : drawerQuickActions.full).map((action) => (
+          <button
+            key={action.label}
+            type="button"
+            className="drawer-chip"
+            onClick={() => {
+              updateDraft(action.prompt)
+              if (error) setError(null)
+            }}
+          >
+            {action.label}
+          </button>
+        ))}
+      </div>
       <form className="drawer-composer" onSubmit={(event) => void send(event)}>
         <MessageSquare size={16} aria-hidden="true" />
         <textarea
@@ -311,11 +351,13 @@ export function AiDrawer({
 function DrawerProgress({
   activeIndex,
   startedAt,
-  detail: liveDetail
+  detail: liveDetail,
+  toolCalls
 }: {
   activeIndex: number
   startedAt: number | null
   detail: string | null
+  toolCalls: Array<{ name: string; label: string; status: 'running' | 'done' }>
 }): JSX.Element {
   const [now, setNow] = useState(Date.now())
 
@@ -346,6 +388,16 @@ function DrawerProgress({
           </span>
         ))}
       </div>
+      {toolCalls.length ? (
+        <div className="agent-progress-tools" aria-label="工具调用轨迹">
+          {toolCalls.map((call, index) => (
+            <span key={`${call.name}-${index}`} className={`tool-call-chip ${call.status}`}>
+              {call.status === 'done' ? <Check size={11} aria-hidden="true" /> : null}
+              {call.label}
+            </span>
+          ))}
+        </div>
+      ) : null}
     </div>
   )
 }

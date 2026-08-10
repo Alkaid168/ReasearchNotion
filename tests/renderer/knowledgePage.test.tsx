@@ -153,7 +153,7 @@ function createApiMock(): DesktopApi {
         previewUrl: null
       })
     },
-    conversations: { list: vi.fn().mockResolvedValue([]), create: vi.fn(), moveToFolder: vi.fn(), rename: vi.fn(), delete: vi.fn(), reorder: vi.fn(), sendMessage: vi.fn() },
+    conversations: { list: vi.fn().mockResolvedValue([]), create: vi.fn(), moveToFolder: vi.fn(), rename: vi.fn(), updateContext: vi.fn(), delete: vi.fn(), reorder: vi.fn(), sendMessage: vi.fn() },
     messages: { list: vi.fn() }
   }
 }
@@ -774,7 +774,7 @@ describe('KnowledgePage', () => {
       return element!
     })
     fireEvent.change(input, { target: { value: 'Explain this passage' } })
-    fireEvent.click(document.querySelector<HTMLButtonElement>('.drawer-composer button')!)
+    fireEvent.click(screen.getByRole('button', { name: /发送问题/ }))
 
     await waitFor(() => expect(api.conversations.sendMessage).toHaveBeenCalled())
     const copyButton = await waitFor(() => {

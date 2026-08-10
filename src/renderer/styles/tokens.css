@@ -1,17 +1,43 @@
+/* Design tokens — ChatGPT 风格"石墨墨 × 纯白"无彩色体系。
+ * 参考 chatgpt.com 设计提取（refero, 2026-07-03）：
+ * 层级靠字重与 1px 发丝边表达，不用阴影、不用彩色强调。 */
 :root {
-  --rn-bg: #fbfaf8;
-  --rn-surface: #ffffff;
-  --rn-sidebar: #f7f6f3;
-  --rn-border: #ebe7df;
-  --rn-border-strong: #d8d1c7;
-  --rn-text: #2d2925;
-  --rn-muted: #817970;
-  --rn-muted-2: #aaa39b;
-  --rn-accent: #256f5b;
-  --rn-accent-soft: #e5f0ec;
-  --rn-blue-soft: #eef6fb;
-  --rn-blue-text: #376d92;
-  --rn-radius: 8px;
-  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  /* 表面 */
+  --rn-bg: #ffffff; /* 对话画布 */
+  --rn-surface: #ffffff; /* 浮起面板 */
+  --rn-sidebar: #f9f9f9; /* 侧栏薄雾 */
+
+  /* 边框：1px 发丝边是唯一结构分隔 */
+  --rn-border: rgba(0, 0, 0, 0.1); /* hairline #0000001a */
+  --rn-border-strong: rgba(0, 0, 0, 0.15); /* 加重发丝边 */
+
+  /* 文字 */
+  --rn-text: #0d0d0d; /* graphite ink：正文与图标 */
+  --rn-muted: #5d5d5d; /* mid ash：次要文字 */
+  --rn-muted-2: #8f8f8f; /* hollow：辅助/禁用 */
+
+  /* 动作色：无彩色强调，主操作即石墨墨 */
+  --rn-accent: #0d0d0d;
+  --rn-accent-soft: rgba(0, 0, 0, 0.05); /* hover veil #0000000d */
+
+  /* 提示色：原蓝色提示改为中性 */
+  --rn-blue-soft: #f9f9f9;
+  --rn-blue-text: #5d5d5d;
+
+  --rn-radius: 10px;
+
+  /* GPT 专用补充 token */
+  --rn-hover: rgba(0, 0, 0, 0.05); /* 统一 hover 黑纱 */
+  --rn-user-bubble: #f4f4f4; /* 用户消息气泡 */
+  --rn-error-text: #b91c1c; /* 唯一保留的语义色：错误红 */
+  --rn-error-soft: #fef2f2;
+  --rn-error-border: rgba(185, 28, 28, 0.25);
+  --rn-scrim: rgba(0, 0, 0, 0.5); /* 模态遮罩 deep charcoal */
+  --rn-link: #2563eb; /* 唯一保留的链接蓝 */
+  --rn-code-header: #0d0d0d; /* 代码块头栏底色 */
+
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, ui-sans-serif, sans-serif;
+  /* 根字号保持 15px 紧凑桌面刻度（desktopUxStyles.test.mjs 锁定）；
+   * GPT 的 16px 正文字号在 .markdown-content/.composer textarea 局部落实。 */
   font-size: 15px;
 }

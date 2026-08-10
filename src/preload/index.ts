@@ -6,7 +6,7 @@ import type {
   DesktopApi,
   SendMessageOptions
 } from '../shared/ipcTypes'
-import type { AppSettings, ReadingStateUpdate, ReadingStatus, UserMemoryInput } from '../shared/types'
+import type { AppSettings, ChatContext, ReadingStateUpdate, ReadingStatus, UserMemoryInput } from '../shared/types'
 
 const api: DesktopApi = {
   app: {
@@ -58,6 +58,8 @@ const api: DesktopApi = {
       options === undefined ? ipcRenderer.invoke('conversations:list') : ipcRenderer.invoke('conversations:list', options),
     create: (input: CreateConversationInput) => ipcRenderer.invoke('conversations:create', input),
     rename: (conversationId: string, title: string) => ipcRenderer.invoke('conversations:rename', { conversationId, title }),
+    updateContext: (conversationId: string, context: ChatContext) =>
+      ipcRenderer.invoke('conversations:updateContext', { conversationId, context }),
     delete: (conversationId: string) => ipcRenderer.invoke('conversations:delete', { conversationId }),
     moveToFolder: (conversationId: string, conversationFolderId: string | null) =>
       ipcRenderer.invoke('conversations:moveToFolder', { conversationId, conversationFolderId }),

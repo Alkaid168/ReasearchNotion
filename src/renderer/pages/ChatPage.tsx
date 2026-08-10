@@ -61,12 +61,6 @@ function contextValue(context: ChatContext): string {
   return 'free'
 }
 
-function contextLabel(context: ChatContext): string {
-  if (context.type === 'folder') return context.folderName || '论文库'
-  if (context.type === 'paper') return context.paperTitle || '论文'
-  return '不限资料'
-}
-
 function folderContext(folder: Folder): ChatContext {
   return { type: 'folder', folderId: folder.id, folderName: folder.name }
 }
@@ -96,7 +90,19 @@ export function ChatPage({
   const [activeProgressRequestId, setActiveProgressRequestId] = useState<string | null>(null)
   const [followLatest, setFollowLatest] = useState(true)
   const [showJumpToLatest, setShowJumpToLatest] = useState(false)
+  const [contextSwitchNotice, setContextSwitchNotice] = useState<string | null>(null)
+  const [toolCalls, setToolCalls] = useState<Array<{ name: string; label: string; status: 'running' | 'done' }>>([])
   const messageListRef = useRef<HTMLElement | null>(null)
+
+  function handleContextChange(context: ChatContext): void {
+    setSelectedContext(context)
+    if (conversationId) {
+      void desktopApi.conversations.updateContext(conversationId, context).then(() => {
+        setContextSwitchNotice('上下文已切换，后续消息将基于新上下文生成。')
+        window.setTimeout(() => setContextSwitchNotice(null), 4000)
+      })
+    }
+  }
 
   const contextOptions = useMemo(() => {
     const folderOptions = availableFolders.map((folder) => ({
@@ -210,6 +216,7 @@ export function ChatPage({
     setSendProgress({ step: conversationId ? 'context' : 'prepare', startedAt: Date.now() })
     setSendError(null)
     setDraft('')
+    setToolCalls([])
     let id = conversationId
     let createdConversation: Conversation | null = null
     let optimisticMessageId: string | null = null
@@ -223,6 +230,15 @@ export function ChatPage({
               requestId: progressRequestId,
               content: event.replaceAnswer ? event.delta ?? '' : current?.requestId === progressRequestId ? `${current.content}${event.delta ?? ''}` : event.delta ?? ''
             }))
+          }
+          if (event.phase === 'tool' && event.toolName) {
+            const toolLabel = event.label || event.toolName
+            setToolCalls((current) => {
+              const completed = current.map((call) => (call.status === 'running' ? { ...call, status: 'done' as const } : call))
+              return [...completed, { name: event.toolName!, label: toolLabel, status: 'running' }]
+            })
+          } else if (event.phase === 'answer' || event.phase === 'done') {
+            setToolCalls((current) => current.map((call) => (call.status === 'running' ? { ...call, status: 'done' as const } : call)))
           }
           setSendProgress((current) => ({
             step: event.phase === 'done' ? 'save' : 'dify',
@@ -289,8 +305,7 @@ export function ChatPage({
       error={sendError}
       selectedContext={selectedContext}
       contextOptions={contextOptions}
-      disabledContext={Boolean(conversationId)}
-      onContextChange={setSelectedContext}
+      onContextChange={handleContextChange}
       onDraftChange={(value) => {
         setDraft(value)
         if (sendError) setSendError(null)
@@ -317,35 +332,43 @@ export function ChatPage({
         <section ref={messageListRef} className="message-list" aria-label="对话消息" onScroll={handleMessageListScroll}>
           {messages.map((message) => (
             <article key={message.id} className={`message ${message.role}`}>
-              <div className="markdown-content">
-                <AcademicMarkdown>{message.content}</AcademicMarkdown>
-              </div>
               {message.role === 'assistant' ? (
-                <>
-                  <CitationStatus messageId={message.id} citations={message.citations} onOpenCitation={onOpenCitation} />
-                  <div className="message-actions">
-                    <button
-                      type="button"
-                      aria-label={copiedMessageId === message.id ? '已复制' : '复制回答'}
-                      onClick={() => void copyAnswer(message)}
-                    >
-                      {copiedMessageId === message.id ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}
-                    </button>
-                  </div>
-                </>
+                <img className="message-avatar" src={researchNotionMark} alt="" aria-hidden="true" />
               ) : null}
+              <div className={message.role === 'assistant' ? 'message-body' : ''}>
+                <div className="markdown-content">
+                  <AcademicMarkdown>{message.content}</AcademicMarkdown>
+                </div>
+                {message.role === 'assistant' ? (
+                  <>
+                    <CitationStatus messageId={message.id} citations={message.citations} onOpenCitation={onOpenCitation} />
+                    <div className="message-actions">
+                      <button
+                        type="button"
+                        aria-label={copiedMessageId === message.id ? '已复制' : '复制回答'}
+                        onClick={() => void copyAnswer(message)}
+                      >
+                        {copiedMessageId === message.id ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}
+                      </button>
+                    </div>
+                  </>
+                ) : null}
+              </div>
             </article>
           ))}
           {streamingAnswer?.content ? (
             <article className="message assistant streaming" aria-live="polite">
-              <div className="markdown-content">
-                <AcademicMarkdown>{streamingAnswer.content}</AcademicMarkdown>
+              <img className="message-avatar" src={researchNotionMark} alt="" aria-hidden="true" />
+              <div className="message-body">
+                <div className="markdown-content">
+                  <AcademicMarkdown>{streamingAnswer.content}</AcademicMarkdown>
+                </div>
               </div>
             </article>
           ) : null}
           {sending ? (
             <div className="timeline-progress">
-              <AgentProgress progress={sendProgress} />
+              <AgentProgress progress={sendProgress} toolCalls={toolCalls} />
             </div>
           ) : null}
           <div className="message-list-end" aria-hidden="true" />
@@ -357,11 +380,31 @@ export function ChatPage({
             <img src={researchNotionMark} alt="" />
           </div>
           <h1>今天研究点什么？</h1>
+          <Suggestions onSelect={setDraft} />
           {composer}
         </section>
       )}
 
-      {hasTimeline ? <section className="chat-dock">{composer}</section> : null}
+      {hasTimeline ? (
+        <section className="chat-dock">
+          {contextSwitchNotice ? <div className="context-switch-notice">{contextSwitchNotice}</div> : null}
+          {sending && activeProgressRequestId ? (
+            <div className="dock-stop-row">
+              <button
+                type="button"
+                className="stop-generate-pill"
+                onClick={() => {
+                  if (activeProgressRequestId) void desktopApi.conversations.cancelSend?.(activeProgressRequestId)
+                }}
+              >
+                <Square size={12} aria-hidden="true" fill="currentColor" />
+                停止生成
+              </button>
+            </div>
+          ) : null}
+          {composer}
+        </section>
+      ) : null}
       {showJumpToLatest ? (
         <button className="jump-to-latest" type="button" aria-label="跳到最新回答" onClick={() => scrollToLatest()}>
           <ArrowDown size={16} aria-hidden="true" />
@@ -380,7 +423,6 @@ type ComposerProps = {
     folderOptions: ContextOption[]
     paperOptions: ContextOption[]
   }
-  disabledContext: boolean
   onContextChange: (context: ChatContext) => void
   onDraftChange: (value: string) => void
   onSend: () => void
@@ -394,7 +436,6 @@ function Composer({
   error,
   selectedContext,
   contextOptions,
-  disabledContext,
   onContextChange,
   onDraftChange,
   onSend,
@@ -418,37 +459,33 @@ function Composer({
       <label className="composer-context">
         <LibraryBig size={14} aria-hidden="true" />
         <span>上下文</span>
-        {disabledContext ? (
-          <input aria-label="问答上下文" value={contextLabel(selectedContext)} readOnly />
-        ) : (
-          <select
-            aria-label="问答上下文"
-            value={contextValue(selectedContext)}
-            onChange={(event) => {
-              onContextChange(options.find((option) => option.value === event.target.value)?.context ?? freeContext)
-            }}
-          >
-            <option value="free">不限定</option>
-            {contextOptions.folderOptions.length ? (
-              <optgroup label="论文库">
-                {contextOptions.folderOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </optgroup>
-            ) : null}
-            {contextOptions.paperOptions.length ? (
-              <optgroup label="论文">
-                {contextOptions.paperOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </optgroup>
-            ) : null}
-          </select>
-        )}
+        <select
+          aria-label="问答上下文"
+          value={contextValue(selectedContext)}
+          onChange={(event) => {
+            onContextChange(options.find((option) => option.value === event.target.value)?.context ?? freeContext)
+          }}
+        >
+          <option value="free">不限定</option>
+          {contextOptions.folderOptions.length ? (
+            <optgroup label="论文库">
+              {contextOptions.folderOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </optgroup>
+          ) : null}
+          {contextOptions.paperOptions.length ? (
+            <optgroup label="论文">
+              {contextOptions.paperOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </optgroup>
+          ) : null}
+        </select>
       </label>
 
       <textarea
@@ -495,18 +532,25 @@ function Composer({
         <button
           className="send-button"
           type="button"
-          aria-label={sending ? '停止生成' : '发送'}
+          aria-label={sending ? '停止' : '发送'}
           disabled={!sending && !draft.trim()}
           onClick={sending ? onCancel : onSend}
         >
           {sending ? <Square size={15} aria-hidden="true" /> : <ArrowUp size={17} aria-hidden="true" />}
         </button>
       </div>
+      <p className="composer-disclaimer">AI 可能出错。请核实重要信息。</p>
     </div>
   )
 }
 
-function AgentProgress({ progress }: { progress: SendProgress }): JSX.Element {
+function AgentProgress({
+  progress,
+  toolCalls
+}: {
+  progress: SendProgress
+  toolCalls: Array<{ name: string; label: string; status: 'running' | 'done' }>
+}): JSX.Element {
   const [now, setNow] = useState(Date.now())
 
   useEffect(() => {
@@ -540,6 +584,45 @@ function AgentProgress({ progress }: { progress: SendProgress }): JSX.Element {
           </span>
         ))}
       </div>
+      {toolCalls.length ? (
+        <div className="agent-progress-tools" aria-label="工具调用轨迹">
+          {toolCalls.map((call, index) => (
+            <span key={`${call.name}-${index}`} className={`tool-call-chip ${call.status}`}>
+              {call.status === 'done' ? <Check size={11} aria-hidden="true" /> : null}
+              {call.label}
+            </span>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+type SuggestionsProps = {
+  onSelect: (prompt: string) => void
+}
+
+const suggestions = [
+  { title: '总结论文', desc: '梳理研究问题、方法、结论和局限性' },
+  { title: '术语解释', desc: '用初学者能理解的中文说明关键术语' },
+  { title: '方法对比', desc: '比较主要方法的适用场景、优势和局限' },
+  { title: '发现创新点', desc: '提取当前上下文中的创新点与差异' }
+]
+
+function Suggestions({ onSelect }: SuggestionsProps): JSX.Element {
+  return (
+    <div className="suggestion-cards" aria-label="示例研究方向">
+      {suggestions.map((card) => (
+        <button
+          key={card.title}
+          type="button"
+          className="suggestion-card"
+          onClick={() => onSelect(card.desc)}
+        >
+          <span className="suggestion-card-title">{card.title}</span>
+          <span className="suggestion-card-desc">{card.desc}</span>
+        </button>
+      ))}
     </div>
   )
 }

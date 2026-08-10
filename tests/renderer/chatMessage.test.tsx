@@ -60,6 +60,7 @@ function createApiMock(): DesktopApi {
       create: vi.fn().mockResolvedValue(conversation),
       moveToFolder: vi.fn(),
       rename: vi.fn(),
+      updateContext: vi.fn(),
       delete: vi.fn(),
       reorder: vi.fn(),
       sendMessage: vi.fn().mockResolvedValue(assistantMessage)

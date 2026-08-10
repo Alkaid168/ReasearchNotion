@@ -11,6 +11,7 @@ import type {
 } from '../shared/ipcTypes'
 import type {
   AppSettings,
+  ChatContext,
   Conversation,
   ConversationFolder,
   Folder,
@@ -73,6 +74,7 @@ export type IpcServices = {
     list(options?: ConversationListOptions): Promise<Conversation[]>
     create(input: CreateConversationInput): Promise<Conversation>
     rename(conversationId: string, title: string): Promise<Conversation>
+    updateContext(conversationId: string, context: ChatContext): Promise<Conversation>
     delete(conversationId: string): Promise<Conversation>
     moveToFolder(conversationId: string, conversationFolderId: string | null): Promise<Conversation>
     reorder(conversationIds: string[]): Promise<Conversation[]>
@@ -145,6 +147,9 @@ export function registerIpc(services: IpcServices): void {
   ipcMain.handle('conversations:create', (_event, input: CreateConversationInput) => services.conversations.create(input))
   ipcMain.handle('conversations:rename', (_event, input: { conversationId: string; title: string }) =>
     services.conversations.rename(input.conversationId, input.title)
+  )
+  ipcMain.handle('conversations:updateContext', (_event, input: { conversationId: string; context: ChatContext }) =>
+    services.conversations.updateContext(input.conversationId, input.context)
   )
   ipcMain.handle('conversations:delete', (_event, input: { conversationId: string }) =>
     services.conversations.delete(input.conversationId)

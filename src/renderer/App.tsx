@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type JSX } from 'react'
+import { X } from 'lucide-react'
 import { AppShell, type AppTab } from './components/AppShell'
 import { Sidebar } from './components/Sidebar'
 import { WorkspaceSearch } from './components/WorkspaceSearch'
@@ -37,6 +38,7 @@ export function App(): JSX.Element {
   const [conversationSidebar, setConversationSidebar] = useState(initialPreferences.conversationSidebar)
   const [conversationRefreshKey, setConversationRefreshKey] = useState(0)
   const [searchOpen, setSearchOpen] = useState(false)
+  const [shortcutsOpen, setShortcutsOpen] = useState(false)
   const [knowledgeRequest, setKnowledgeRequest] = useState<{ paperId?: string; folderId?: string; page?: number; nonce: number } | null>(null)
   const [difyStatus, setDifyStatus] = useState<DifyStatus>({ label: 'Dify 未配置', tone: 'neutral' })
   const [toasts, setToasts] = useState<ToastItem[]>([])
@@ -95,6 +97,20 @@ export function App(): JSX.Element {
       if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== 'k') return
       event.preventDefault()
       setSearchOpen(true)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [])
+
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent): void {
+      const target = event.target as HTMLElement | null
+      const tag = target?.tagName
+      const inEditor = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target?.isContentEditable
+      if (inEditor || event.ctrlKey || event.metaKey || event.altKey) return
+      if (event.key !== '?' && event.key !== '/') return
+      event.preventDefault()
+      setShortcutsOpen(true)
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
@@ -224,7 +240,83 @@ export function App(): JSX.Element {
           setActiveTab('knowledge')
         }}
       />
+      <ShortcutsModal open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
       <ToastRegion items={toasts} onDismiss={dismissToast} />
     </>
+  )
+}
+
+type ShortcutsModalProps = {
+  open: boolean
+  onClose: () => void
+}
+
+const shortcutGroups = [
+  {
+    title: '通用',
+    items: [
+      { keys: ['Ctrl', 'K'], label: '搜索对话 / 论文 / 文件夹' },
+      { keys: ['Ctrl', 'B'], label: '收起 / 展开侧栏（对话页）' },
+      { keys: ['?'], label: '打开本快捷键面板' },
+      { keys: ['Esc'], label: '关闭弹层 / 通知' }
+    ]
+  },
+  {
+    title: '对话',
+    items: [
+      { keys: ['Enter'], label: '发送消息' },
+      { keys: ['Shift', 'Enter'], label: '输入框换行' }
+    ]
+  },
+  {
+    title: '知识库 / 阅读',
+    items: [
+      { keys: ['Ctrl', 'I'], label: '打开 / 关闭 AI 抽屉（阅读时）' },
+      { keys: ['←', '→'], label: '上一页 / 下一页' }
+    ]
+  }
+]
+
+function ShortcutsModal({ open, onClose }: ShortcutsModalProps): JSX.Element | null {
+  useEffect(() => {
+    if (!open) return
+    function onKey(event: KeyboardEvent): void {
+      if (event.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open, onClose])
+
+  if (!open) return null
+  return (
+    <div className="shortcuts-backdrop" onClick={onClose}>
+      <div className="shortcuts-modal" role="dialog" aria-label="快捷键速查" onClick={(event) => event.stopPropagation()}>
+        <div className="shortcuts-header">
+          <h2>快捷键</h2>
+          <button type="button" aria-label="关闭" onClick={onClose}>
+            <X size={18} aria-hidden="true" />
+          </button>
+        </div>
+        <div className="shortcuts-body">
+          {shortcutGroups.map((group) => (
+            <section key={group.title} className="shortcuts-group">
+              <h3>{group.title}</h3>
+              <dl>
+                {group.items.map((item) => (
+                  <div key={item.label} className="shortcuts-row">
+                    <dt>{item.label}</dt>
+                    <dd>
+                      {item.keys.map((key, index) => (
+                        <kbd key={`${key}-${index}`}>{key}</kbd>
+                      ))}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            </section>
+          ))}
+        </div>
+      </div>
+    </div>
   )
 }

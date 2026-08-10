@@ -1,5 +1,6 @@
 import type {
   AppSettings,
+  ChatContext,
   Conversation,
   ConversationFolder,
   Folder,
@@ -115,6 +116,7 @@ export type DesktopApi = {
     list(options?: ConversationListOptions): Promise<Conversation[]>
     create(input: CreateConversationInput): Promise<Conversation>
     rename(conversationId: string, title: string): Promise<Conversation>
+    updateContext(conversationId: string, context: ChatContext): Promise<Conversation>
     delete(conversationId: string): Promise<Conversation>
     moveToFolder(conversationId: string, conversationFolderId: string | null): Promise<Conversation>
     reorder(conversationIds: string[]): Promise<Conversation[]>
