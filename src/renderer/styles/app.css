@@ -2025,7 +2025,6 @@ button {
 .knowledge-layout.sidebar-collapsed .knowledge-sidebar-resize-handle {
   display: none;
 }
-}
 
 .knowledge-list.drag-active {
   box-shadow: inset 0 0 0 2px rgba(13, 13, 13, 0.5);
