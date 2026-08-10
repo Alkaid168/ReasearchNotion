@@ -33,6 +33,8 @@
   --rn-error-soft: #fef2f2;
   --rn-error-border: rgba(185, 28, 28, 0.25);
   --rn-scrim: rgba(0, 0, 0, 0.5); /* 模态遮罩 deep charcoal */
+  --rn-link: #2563eb; /* 唯一保留的链接蓝 */
+  --rn-code-header: #0d0d0d; /* 代码块头栏底色 */
 
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, ui-sans-serif, sans-serif;
   /* 根字号保持 15px 紧凑桌面刻度（desktopUxStyles.test.mjs 锁定）；

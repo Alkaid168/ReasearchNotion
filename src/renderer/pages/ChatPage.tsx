@@ -317,29 +317,37 @@ export function ChatPage({
         <section ref={messageListRef} className="message-list" aria-label="对话消息" onScroll={handleMessageListScroll}>
           {messages.map((message) => (
             <article key={message.id} className={`message ${message.role}`}>
-              <div className="markdown-content">
-                <AcademicMarkdown>{message.content}</AcademicMarkdown>
-              </div>
               {message.role === 'assistant' ? (
-                <>
-                  <CitationStatus messageId={message.id} citations={message.citations} onOpenCitation={onOpenCitation} />
-                  <div className="message-actions">
-                    <button
-                      type="button"
-                      aria-label={copiedMessageId === message.id ? '已复制' : '复制回答'}
-                      onClick={() => void copyAnswer(message)}
-                    >
-                      {copiedMessageId === message.id ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}
-                    </button>
-                  </div>
-                </>
+                <img className="message-avatar" src={researchNotionMark} alt="" aria-hidden="true" />
               ) : null}
+              <div className={message.role === 'assistant' ? 'message-body' : ''}>
+                <div className="markdown-content">
+                  <AcademicMarkdown>{message.content}</AcademicMarkdown>
+                </div>
+                {message.role === 'assistant' ? (
+                  <>
+                    <CitationStatus messageId={message.id} citations={message.citations} onOpenCitation={onOpenCitation} />
+                    <div className="message-actions">
+                      <button
+                        type="button"
+                        aria-label={copiedMessageId === message.id ? '已复制' : '复制回答'}
+                        onClick={() => void copyAnswer(message)}
+                      >
+                        {copiedMessageId === message.id ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}
+                      </button>
+                    </div>
+                  </>
+                ) : null}
+              </div>
             </article>
           ))}
           {streamingAnswer?.content ? (
             <article className="message assistant streaming" aria-live="polite">
-              <div className="markdown-content">
-                <AcademicMarkdown>{streamingAnswer.content}</AcademicMarkdown>
+              <img className="message-avatar" src={researchNotionMark} alt="" aria-hidden="true" />
+              <div className="message-body">
+                <div className="markdown-content">
+                  <AcademicMarkdown>{streamingAnswer.content}</AcademicMarkdown>
+                </div>
               </div>
             </article>
           ) : null}
@@ -357,6 +365,7 @@ export function ChatPage({
             <img src={researchNotionMark} alt="" />
           </div>
           <h1>今天研究点什么？</h1>
+          <Suggestions onSelect={setDraft} />
           {composer}
         </section>
       )}
@@ -502,6 +511,7 @@ function Composer({
           {sending ? <Square size={15} aria-hidden="true" /> : <ArrowUp size={17} aria-hidden="true" />}
         </button>
       </div>
+      <p className="composer-disclaimer">AI 可能出错。请核实重要信息。</p>
     </div>
   )
 }
@@ -540,6 +550,35 @@ function AgentProgress({ progress }: { progress: SendProgress }): JSX.Element {
           </span>
         ))}
       </div>
+    </div>
+  )
+}
+
+type SuggestionsProps = {
+  onSelect: (prompt: string) => void
+}
+
+const suggestions = [
+  { title: '总结论文', desc: '梳理研究问题、方法、结论和局限性' },
+  { title: '术语解释', desc: '用初学者能理解的中文说明关键术语' },
+  { title: '方法对比', desc: '比较主要方法的适用场景、优势和局限' },
+  { title: '发现创新点', desc: '提取当前上下文中的创新点与差异' }
+]
+
+function Suggestions({ onSelect }: SuggestionsProps): JSX.Element {
+  return (
+    <div className="suggestion-cards" aria-label="示例研究方向">
+      {suggestions.map((card) => (
+        <button
+          key={card.title}
+          type="button"
+          className="suggestion-card"
+          onClick={() => onSelect(card.desc)}
+        >
+          <span className="suggestion-card-title">{card.title}</span>
+          <span className="suggestion-card-desc">{card.desc}</span>
+        </button>
+      ))}
     </div>
   )
 }
