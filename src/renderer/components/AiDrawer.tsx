@@ -382,11 +382,25 @@ function DrawerProgress({
         <em>{elapsedSeconds}s</em>
       </div>
       <div className="agent-progress-steps" aria-hidden="true">
-        {drawerProgressSteps.map((step, index) => (
-          <span key={step} className={index < activeIndex ? 'done' : index === activeIndex ? 'active' : ''}>
-            {step}
-          </span>
-        ))}
+        {drawerProgressSteps.map((step, index) => {
+          const isActive = index === activeIndex
+          const isDifyCell = index === 2
+          const runningTool = toolCalls.find((call) => call.status === 'running')
+          const cellLabel =
+            isDifyCell && isActive && runningTool
+              ? `${runningTool.label}…`
+              : isDifyCell && toolCalls.length
+                ? `Dify · ${toolCalls.length} 工具`
+                : step
+          return (
+            <span
+              key={step}
+              className={index < activeIndex ? 'done' : isActive ? (isDifyCell && runningTool ? 'active running' : 'active') : ''}
+            >
+              {cellLabel}
+            </span>
+          )
+        })}
       </div>
       {toolCalls.length ? (
         <div className="agent-progress-tools" aria-label="工具调用轨迹">
