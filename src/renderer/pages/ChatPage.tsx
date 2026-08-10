@@ -91,6 +91,7 @@ export function ChatPage({
   const [followLatest, setFollowLatest] = useState(true)
   const [showJumpToLatest, setShowJumpToLatest] = useState(false)
   const [contextSwitchNotice, setContextSwitchNotice] = useState<string | null>(null)
+  const [toolCalls, setToolCalls] = useState<Array<{ name: string; label: string; status: 'running' | 'done' }>>([])
   const messageListRef = useRef<HTMLElement | null>(null)
 
   function handleContextChange(context: ChatContext): void {
@@ -215,6 +216,7 @@ export function ChatPage({
     setSendProgress({ step: conversationId ? 'context' : 'prepare', startedAt: Date.now() })
     setSendError(null)
     setDraft('')
+    setToolCalls([])
     let id = conversationId
     let createdConversation: Conversation | null = null
     let optimisticMessageId: string | null = null
@@ -228,6 +230,15 @@ export function ChatPage({
               requestId: progressRequestId,
               content: event.replaceAnswer ? event.delta ?? '' : current?.requestId === progressRequestId ? `${current.content}${event.delta ?? ''}` : event.delta ?? ''
             }))
+          }
+          if (event.phase === 'tool' && event.toolName) {
+            const toolLabel = event.label || event.toolName
+            setToolCalls((current) => {
+              const completed = current.map((call) => (call.status === 'running' ? { ...call, status: 'done' as const } : call))
+              return [...completed, { name: event.toolName!, label: toolLabel, status: 'running' }]
+            })
+          } else if (event.phase === 'answer' || event.phase === 'done') {
+            setToolCalls((current) => current.map((call) => (call.status === 'running' ? { ...call, status: 'done' as const } : call)))
           }
           setSendProgress((current) => ({
             step: event.phase === 'done' ? 'save' : 'dify',
@@ -357,7 +368,7 @@ export function ChatPage({
           ) : null}
           {sending ? (
             <div className="timeline-progress">
-              <AgentProgress progress={sendProgress} />
+              <AgentProgress progress={sendProgress} toolCalls={toolCalls} />
             </div>
           ) : null}
           <div className="message-list-end" aria-hidden="true" />
@@ -533,7 +544,13 @@ function Composer({
   )
 }
 
-function AgentProgress({ progress }: { progress: SendProgress }): JSX.Element {
+function AgentProgress({
+  progress,
+  toolCalls
+}: {
+  progress: SendProgress
+  toolCalls: Array<{ name: string; label: string; status: 'running' | 'done' }>
+}): JSX.Element {
   const [now, setNow] = useState(Date.now())
 
   useEffect(() => {
@@ -567,6 +584,16 @@ function AgentProgress({ progress }: { progress: SendProgress }): JSX.Element {
           </span>
         ))}
       </div>
+      {toolCalls.length ? (
+        <div className="agent-progress-tools" aria-label="工具调用轨迹">
+          {toolCalls.map((call, index) => (
+            <span key={`${call.name}-${index}`} className={`tool-call-chip ${call.status}`}>
+              {call.status === 'done' ? <Check size={11} aria-hidden="true" /> : null}
+              {call.label}
+            </span>
+          ))}
+        </div>
+      ) : null}
     </div>
   )
 }

@@ -66,6 +66,7 @@ export function AiDrawer({
   const [progressIndex, setProgressIndex] = useState(0)
   const [progressStartedAt, setProgressStartedAt] = useState<number | null>(null)
   const [progressDetail, setProgressDetail] = useState<string | null>(null)
+  const [toolCalls, setToolCalls] = useState<Array<{ name: string; label: string; status: 'running' | 'done' }>>([])
   const [error, setError] = useState<string | null>(null)
   const [streamingAnswer, setStreamingAnswer] = useState('')
   const [activeProgressRequestId, setActiveProgressRequestId] = useState<string | null>(null)
@@ -111,6 +112,7 @@ export function AiDrawer({
     setError(null)
     setStreamingAnswer('')
     updateDraft('')
+    setToolCalls([])
     let optimisticMessageId: string | null = null
     const progressRequestId = desktopApi.conversations.onSendProgress ? createProgressRequestId() : null
     setActiveProgressRequestId(progressRequestId)
@@ -119,6 +121,15 @@ export function AiDrawer({
           if (event.requestId !== progressRequestId) return
           if (event.phase === 'delta') {
             setStreamingAnswer((current) => (event.replaceAnswer ? event.delta ?? '' : `${current}${event.delta ?? ''}`))
+          }
+          if (event.phase === 'tool' && event.toolName) {
+            const toolLabel = event.label || event.toolName
+            setToolCalls((current) => {
+              const completed = current.map((call) => (call.status === 'running' ? { ...call, status: 'done' as const } : call))
+              return [...completed, { name: event.toolName!, label: toolLabel, status: 'running' as const }]
+            })
+          } else if (event.phase === 'answer' || event.phase === 'done') {
+            setToolCalls((current) => current.map((call) => (call.status === 'running' ? { ...call, status: 'done' as const } : call)))
           }
           setProgressIndex(event.phase === 'done' ? 3 : 2)
           setProgressDetail(event.label)
@@ -285,7 +296,7 @@ export function AiDrawer({
           {error}
         </p>
       ) : null}
-      {sending ? <DrawerProgress activeIndex={progressIndex} startedAt={progressStartedAt} detail={progressDetail} /> : null}
+      {sending ? <DrawerProgress activeIndex={progressIndex} startedAt={progressStartedAt} detail={progressDetail} toolCalls={toolCalls} /> : null}
 
       <div className="drawer-quick-actions" aria-label="快捷操作">
         {(emphasisContext ? drawerQuickActions.selection : drawerQuickActions.full).map((action) => (
@@ -340,11 +351,13 @@ export function AiDrawer({
 function DrawerProgress({
   activeIndex,
   startedAt,
-  detail: liveDetail
+  detail: liveDetail,
+  toolCalls
 }: {
   activeIndex: number
   startedAt: number | null
   detail: string | null
+  toolCalls: Array<{ name: string; label: string; status: 'running' | 'done' }>
 }): JSX.Element {
   const [now, setNow] = useState(Date.now())
 
@@ -375,6 +388,16 @@ function DrawerProgress({
           </span>
         ))}
       </div>
+      {toolCalls.length ? (
+        <div className="agent-progress-tools" aria-label="工具调用轨迹">
+          {toolCalls.map((call, index) => (
+            <span key={`${call.name}-${index}`} className={`tool-call-chip ${call.status}`}>
+              {call.status === 'done' ? <Check size={11} aria-hidden="true" /> : null}
+              {call.label}
+            </span>
+          ))}
+        </div>
+      ) : null}
     </div>
   )
 }

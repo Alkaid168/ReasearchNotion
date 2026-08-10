@@ -4234,3 +4234,34 @@ button {
 .selection-toolbar-action:hover {
   background: var(--rn-hover);
 }
+
+.agent-progress-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.tool-call-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: 4px;
+  font-size: 11px;
+  line-height: 1;
+  background: #f4f4f4;
+  color: var(--rn-muted-2);
+}
+
+.tool-call-chip.done {
+  background: #f4f4f4;
+  color: var(--rn-muted);
+}
+
+.tool-call-chip.running {
+  background: var(--rn-text);
+  color: #ffffff;
+  font-weight: 500;
+}
