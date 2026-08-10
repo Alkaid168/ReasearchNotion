@@ -324,6 +324,10 @@ button {
   grid-template-columns: minmax(0, 1fr);
 }
 
+.app-layout.no-sidebar .main-panel {
+  grid-column: 1;
+}
+
 .sidebar {
   min-width: 0;
   min-height: 0;
@@ -1023,6 +1027,7 @@ button {
 }
 
 .main-panel {
+  grid-column: 3;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
@@ -1963,6 +1968,10 @@ button {
   grid-template-columns: minmax(0, 1fr);
 }
 
+.knowledge-layout.focus-mode .reader-panel {
+  grid-column: 1;
+}
+
 .knowledge-layout.sidebar-collapsed {
   grid-template-columns: 0 0 minmax(0, 1fr);
 }
@@ -2752,6 +2761,7 @@ button {
 }
 
 .reader-panel {
+  grid-column: 3;
   position: relative;
   min-width: 0;
   min-height: 0;
