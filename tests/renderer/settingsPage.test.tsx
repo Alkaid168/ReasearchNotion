@@ -67,6 +67,7 @@ function createApiMock(status: EnvironmentStatus = unconfiguredStatus): DesktopA
       create: vi.fn(),
       moveToFolder: vi.fn(),
       rename: vi.fn(),
+      updateContext: vi.fn(),
       delete: vi.fn(),
       reorder: vi.fn(),
       sendMessage: vi.fn()

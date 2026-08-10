@@ -399,6 +399,7 @@ void app.whenReady().then(async () => {
       list: async (options) => repos.conversations.list(options),
       create: async (input) => repos.conversations.create(input),
       rename: async (conversationId, title) => repos.conversations.rename(conversationId, title),
+      updateContext: async (conversationId, context) => repos.conversations.updateContext(conversationId, context),
       delete: async (conversationId) => repos.conversations.delete(conversationId),
       moveToFolder: async (conversationId, conversationFolderId) =>
         repos.conversations.moveToFolder(conversationId, conversationFolderId),

@@ -1423,6 +1423,18 @@ button {
   padding: 14px 24px 18px;
 }
 
+.context-switch-notice {
+  width: min(768px, 100%);
+  margin: 0 0 8px;
+  padding: 6px 12px;
+  border: 1px solid var(--rn-border);
+  border-radius: 8px;
+  background: #f9f9f9;
+  color: var(--rn-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
 .chat-dock .composer {
   width: min(768px, 100%);
   min-width: 0;

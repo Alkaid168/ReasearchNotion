@@ -153,7 +153,7 @@ function createApiMock(): DesktopApi {
         previewUrl: null
       })
     },
-    conversations: { list: vi.fn().mockResolvedValue([]), create: vi.fn(), moveToFolder: vi.fn(), rename: vi.fn(), delete: vi.fn(), reorder: vi.fn(), sendMessage: vi.fn() },
+    conversations: { list: vi.fn().mockResolvedValue([]), create: vi.fn(), moveToFolder: vi.fn(), rename: vi.fn(), updateContext: vi.fn(), delete: vi.fn(), reorder: vi.fn(), sendMessage: vi.fn() },
     messages: { list: vi.fn() }
   }
 }

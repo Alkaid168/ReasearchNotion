@@ -61,12 +61,6 @@ function contextValue(context: ChatContext): string {
   return 'free'
 }
 
-function contextLabel(context: ChatContext): string {
-  if (context.type === 'folder') return context.folderName || '论文库'
-  if (context.type === 'paper') return context.paperTitle || '论文'
-  return '不限资料'
-}
-
 function folderContext(folder: Folder): ChatContext {
   return { type: 'folder', folderId: folder.id, folderName: folder.name }
 }
@@ -96,7 +90,18 @@ export function ChatPage({
   const [activeProgressRequestId, setActiveProgressRequestId] = useState<string | null>(null)
   const [followLatest, setFollowLatest] = useState(true)
   const [showJumpToLatest, setShowJumpToLatest] = useState(false)
+  const [contextSwitchNotice, setContextSwitchNotice] = useState<string | null>(null)
   const messageListRef = useRef<HTMLElement | null>(null)
+
+  function handleContextChange(context: ChatContext): void {
+    setSelectedContext(context)
+    if (conversationId) {
+      void desktopApi.conversations.updateContext(conversationId, context).then(() => {
+        setContextSwitchNotice('上下文已切换，后续消息将基于新上下文生成。')
+        window.setTimeout(() => setContextSwitchNotice(null), 4000)
+      })
+    }
+  }
 
   const contextOptions = useMemo(() => {
     const folderOptions = availableFolders.map((folder) => ({
@@ -289,8 +294,7 @@ export function ChatPage({
       error={sendError}
       selectedContext={selectedContext}
       contextOptions={contextOptions}
-      disabledContext={Boolean(conversationId)}
-      onContextChange={setSelectedContext}
+      onContextChange={handleContextChange}
       onDraftChange={(value) => {
         setDraft(value)
         if (sendError) setSendError(null)
@@ -370,7 +374,12 @@ export function ChatPage({
         </section>
       )}
 
-      {hasTimeline ? <section className="chat-dock">{composer}</section> : null}
+      {hasTimeline ? (
+        <section className="chat-dock">
+          {contextSwitchNotice ? <div className="context-switch-notice">{contextSwitchNotice}</div> : null}
+          {composer}
+        </section>
+      ) : null}
       {showJumpToLatest ? (
         <button className="jump-to-latest" type="button" aria-label="跳到最新回答" onClick={() => scrollToLatest()}>
           <ArrowDown size={16} aria-hidden="true" />
@@ -389,7 +398,6 @@ type ComposerProps = {
     folderOptions: ContextOption[]
     paperOptions: ContextOption[]
   }
-  disabledContext: boolean
   onContextChange: (context: ChatContext) => void
   onDraftChange: (value: string) => void
   onSend: () => void
@@ -403,7 +411,6 @@ function Composer({
   error,
   selectedContext,
   contextOptions,
-  disabledContext,
   onContextChange,
   onDraftChange,
   onSend,
@@ -427,37 +434,33 @@ function Composer({
       <label className="composer-context">
         <LibraryBig size={14} aria-hidden="true" />
         <span>上下文</span>
-        {disabledContext ? (
-          <input aria-label="问答上下文" value={contextLabel(selectedContext)} readOnly />
-        ) : (
-          <select
-            aria-label="问答上下文"
-            value={contextValue(selectedContext)}
-            onChange={(event) => {
-              onContextChange(options.find((option) => option.value === event.target.value)?.context ?? freeContext)
-            }}
-          >
-            <option value="free">不限定</option>
-            {contextOptions.folderOptions.length ? (
-              <optgroup label="论文库">
-                {contextOptions.folderOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </optgroup>
-            ) : null}
-            {contextOptions.paperOptions.length ? (
-              <optgroup label="论文">
-                {contextOptions.paperOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </optgroup>
-            ) : null}
-          </select>
-        )}
+        <select
+          aria-label="问答上下文"
+          value={contextValue(selectedContext)}
+          onChange={(event) => {
+            onContextChange(options.find((option) => option.value === event.target.value)?.context ?? freeContext)
+          }}
+        >
+          <option value="free">不限定</option>
+          {contextOptions.folderOptions.length ? (
+            <optgroup label="论文库">
+              {contextOptions.folderOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </optgroup>
+          ) : null}
+          {contextOptions.paperOptions.length ? (
+            <optgroup label="论文">
+              {contextOptions.paperOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </optgroup>
+          ) : null}
+        </select>
       </label>
 
       <textarea

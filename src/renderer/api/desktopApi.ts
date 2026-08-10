@@ -4,7 +4,7 @@ import type {
   DesktopApi,
   SendMessageOptions
 } from '../../shared/ipcTypes'
-import type { AppSettings, ReadingStateUpdate, ReadingStatus, UserMemoryInput } from '../../shared/types'
+import type { AppSettings, ChatContext, ReadingStateUpdate, ReadingStatus, UserMemoryInput } from '../../shared/types'
 
 declare global {
   interface Window {
@@ -65,6 +65,8 @@ export const desktopApi: DesktopApi = {
       options === undefined ? getBridge().conversations.list() : getBridge().conversations.list(options),
     create: (input: CreateConversationInput) => getBridge().conversations.create(input),
     rename: (conversationId: string, title: string) => getBridge().conversations.rename(conversationId, title),
+    updateContext: (conversationId: string, context: ChatContext) =>
+      getBridge().conversations.updateContext(conversationId, context),
     delete: (conversationId: string) => getBridge().conversations.delete(conversationId),
     moveToFolder: (conversationId: string, conversationFolderId: string | null) =>
       getBridge().conversations.moveToFolder(conversationId, conversationFolderId),

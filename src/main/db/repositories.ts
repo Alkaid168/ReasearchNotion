@@ -468,6 +468,16 @@ export function createRepositories(db: Database.Database) {
         if (!conversation) throw new Error('Conversation not found.')
         return conversation
       },
+      updateContext(conversationId: string, context: ChatContext): Conversation {
+        // 切换上下文时同步清空 dify_conversation_id：历史消息是旧上下文生成的，
+        // 若续 Dify 线程会语义错乱；本地消息保留展示，下一条走新线程。
+        db.prepare(
+          `UPDATE conversations SET context_json = ?, dify_conversation_id = NULL, updated_at = ? WHERE id = ?`
+        ).run(JSON.stringify(context), now(), conversationId)
+        const conversation = getConversation(conversationId)
+        if (!conversation) throw new Error('对话不存在。')
+        return conversation
+      },
       clearDifyConversationIds(): number {
         // Dify conversation_ids are scoped to one app; clear them when switching apps
         // so the next message starts a fresh conversation instead of 404-ing.
