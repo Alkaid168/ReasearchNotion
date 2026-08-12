@@ -6,7 +6,7 @@ import { AcademicMarkdown } from '../components/AcademicMarkdown'
 import { CitationStatus } from '../components/CitationStatus'
 import { ModelSelector } from '../components/ModelSelector'
 import { userFacingSendError } from '../utils/userFacingError'
-import type { ChatContext, Citation, Conversation, Folder, Message, ModelProfile, Paper } from '../../shared/types'
+import type { ChatContext, Citation, Conversation, Folder, Message, ModelProfile, Paper, TokenUsage } from '../../shared/types'
 
 type ChatPageProps = {
   selectedConversationId?: string | null
@@ -99,6 +99,12 @@ export function ChatPage({
   const [showJumpToLatest, setShowJumpToLatest] = useState(false)
   const [contextSwitchNotice, setContextSwitchNotice] = useState<string | null>(null)
   const [toolCalls, setToolCalls] = useState<Array<{ name: string; label: string; status: 'running' | 'done' }>>([])
+  const [tokenUsage, setTokenUsage] = useState<TokenUsage | null>(null)
+
+  useEffect(() => {
+    const lastAssistant = [...messages].reverse().find((message) => message.role === 'assistant' && message.tokenUsage)
+    setTokenUsage(lastAssistant?.tokenUsage ?? null)
+  }, [messages])
   const messageListRef = useRef<HTMLElement | null>(null)
 
   function handleContextChange(context: ChatContext): void {
@@ -247,6 +253,9 @@ export function ChatPage({
           } else if (event.phase === 'answer' || event.phase === 'done') {
             setToolCalls((current) => current.map((call) => (call.status === 'running' ? { ...call, status: 'done' as const } : call)))
           }
+          if (event.phase === 'usage' && event.usage) {
+            setTokenUsage(event.usage)
+          }
           setSendProgress((current) => ({
             step: event.phase === 'done' ? 'save' : 'dify',
             startedAt: current?.startedAt ?? Date.now(),
@@ -312,6 +321,8 @@ export function ChatPage({
       error={sendError}
       selectedContext={selectedContext}
       contextOptions={contextOptions}
+      tokenUsage={tokenUsage}
+      contextWindowTokens={activeModelProfile?.contextWindowTokens}
       onContextChange={handleContextChange}
       onDraftChange={(value) => {
         setDraft(value)
@@ -445,6 +456,8 @@ type ComposerProps = {
     folderOptions: ContextOption[]
     paperOptions: ContextOption[]
   }
+  tokenUsage?: TokenUsage | null
+  contextWindowTokens?: number
   onContextChange: (context: ChatContext) => void
   onDraftChange: (value: string) => void
   onSend: () => void
@@ -458,6 +471,8 @@ function Composer({
   error,
   selectedContext,
   contextOptions,
+  tokenUsage,
+  contextWindowTokens,
   onContextChange,
   onDraftChange,
   onSend,
@@ -561,7 +576,17 @@ function Composer({
           {sending ? <Square size={15} aria-hidden="true" /> : <ArrowUp size={17} aria-hidden="true" />}
         </button>
       </div>
-      <p className="composer-disclaimer">AI 可能出错。请核实重要信息。</p>
+      <div className="composer-footer">
+        <p className="composer-disclaimer">AI 可能出错。请核实重要信息。</p>
+        {tokenUsage && contextWindowTokens ? (
+          <span
+            className={`token-counter ${tokenUsage.totalTokens / contextWindowTokens >= 0.8 ? 'danger' : ''}`}
+            title={`提示 ${tokenUsage.promptTokens} · 补全 ${tokenUsage.completionTokens}`}
+          >
+            {(tokenUsage.totalTokens / 1000).toFixed(1)}k / {(contextWindowTokens / 1000).toFixed(0)}k
+          </span>
+        ) : null}
+      </div>
     </div>
   )
 }

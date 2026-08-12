@@ -4472,3 +4472,33 @@ button {
   border: 1px solid var(--rn-border, rgba(0, 0, 0, 0.1));
   border-radius: 9999px;
 }
+
+/* ============ token 计数（composer 底部） ============ */
+.composer-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 6px;
+}
+
+.composer-footer .composer-disclaimer {
+  margin: 0;
+}
+
+.token-counter {
+  font-size: 11px;
+  color: var(--rn-muted, rgba(13, 13, 13, 0.5));
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.token-counter.danger {
+  color: #c0392b;
+}
+
+.drawer-token-row {
+  display: flex;
+  justify-content: flex-end;
+  padding: 4px 16px 8px;
+}
