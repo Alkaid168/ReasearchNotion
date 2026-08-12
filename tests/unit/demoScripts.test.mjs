@@ -36,7 +36,7 @@ describe('demo preparation scripts', () => {
 
     const launcher = readFileSync(launcherPath, 'utf8')
     const prepareScript = readFileSync(scriptPath, 'utf8')
-    expect(launcher).toContain('deepseek:bridge')
+    expect(launcher).toContain('deepseek-bridge.mjs')
     expect(launcher).toContain('http://127.0.0.1:17778/health')
     expect(launcher).toContain('Test-Dify')
     expect(launcher).toContain('scripts\\start-dify.ps1')

@@ -123,7 +123,7 @@ function activityNarrative(events: ResearchProgressEvent[]): string {
 
   const activities = toolEvents.map(naturalToolAction)
   const activityText = activities.map((activity, index) => {
-    if (index === 0) return `我先${activity}`
+    if (index === 0) return activity.startsWith('先') ? `我${activity}` : `我先${activity}`
     if (index === activities.length - 1) return `然后${activity}`
     return `接着${activity}`
   }).join('；')

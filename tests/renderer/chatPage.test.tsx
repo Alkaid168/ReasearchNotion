@@ -1243,9 +1243,9 @@ describe('App shell', () => {
 
     const processButton = screen.getByRole('button', { name: /已思考（用时 \d+ 秒）/ })
     expect(processButton).toHaveAttribute('aria-expanded', 'true')
-    expect(screen.getByLabelText('思考过程')).toHaveTextContent('用户真正要解决的是')
-    expect(screen.getByLabelText('思考过程')).toHaveTextContent('回答范围和证据要求')
-    expect(screen.getByLabelText('思考过程')).toHaveTextContent('最后进入回答组织阶段')
+    expect(screen.getByLabelText('思考过程')).toHaveTextContent('我重新看了一遍这个问题')
+    expect(screen.getByLabelText('思考过程')).toHaveTextContent('我本来也可以去搜一圈资料')
+    expect(screen.getByLabelText('思考过程')).toHaveTextContent('所以我最后会先把最直接的结论说出来')
   })
 
   it('updates the waiting state from Dify streaming progress events', async () => {
@@ -1300,7 +1300,7 @@ describe('App shell', () => {
     })
 
     expect(screen.getByRole('button', { name: /已思考（用时 \d+ 秒）/ })).toHaveAttribute('aria-expanded', 'true')
-    expect(screen.getByLabelText('思考过程')).toHaveTextContent('读取论文大纲')
+    expect(screen.getByLabelText('思考过程')).toHaveTextContent('顺着大纲找到问题可能落在哪里')
   })
 
   it('restores the saved research process when reopening a conversation', async () => {
@@ -1328,7 +1328,7 @@ describe('App shell', () => {
     expect(processButton).toHaveAttribute('aria-expanded', 'true')
 
     expect(screen.getByLabelText('思考过程')).toHaveTextContent('先确认论文范围，再读取原文证据，最后核对出处。')
-    expect(screen.getByLabelText('思考过程')).toHaveTextContent('公开思考摘要、实际研究动作与证据结果')
+    expect(screen.getByLabelText('思考过程')).toHaveTextContent('可展开的研究过程记录')
   })
 
   it('renders streamed answer text before the final assistant message is saved', async () => {
