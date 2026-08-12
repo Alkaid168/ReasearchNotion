@@ -88,6 +88,7 @@ export type IpcServices = {
     ): Promise<Message>
     cancelSend(requestId: string): Promise<boolean>
     exportMarkdown(conversationId: string): Promise<ConversationExportResult>
+    compressContext(conversationId: string): Promise<Message>
   }
   messages: {
     list(conversationId: string): Promise<Message[]>
@@ -182,6 +183,9 @@ export function registerIpc(services: IpcServices): void {
   )
   ipcMain.handle('conversations:exportMarkdown', (_event, input: { conversationId: string }) =>
     services.conversations.exportMarkdown(input.conversationId)
+  )
+  ipcMain.handle('conversations:compressContext', (_event, input: { conversationId: string }) =>
+    services.conversations.compressContext(input.conversationId)
   )
   ipcMain.handle('messages:list', (_event, input: { conversationId: string }) => services.messages.list(input.conversationId))
   ipcMain.handle('modelProfiles:list', () => services.modelProfiles.list())

@@ -127,6 +127,7 @@ export type DesktopApi = {
     sendMessage(conversationId: string, content: string, options?: SendMessageOptions): Promise<Message>
     cancelSend?(requestId: string): Promise<boolean>
     exportMarkdown?(conversationId: string): Promise<ConversationExportResult>
+    compressContext?(conversationId: string): Promise<Message>
     onSendProgress?(listener: (event: ConversationProgressEvent) => void): () => void
   }
   messages: {

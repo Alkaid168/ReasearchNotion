@@ -527,6 +527,40 @@ void app.whenReady().then(async () => {
         if (result.canceled || !result.filePath) return { canceled: true, filePath: null }
         await fs.writeFile(result.filePath, formatConversationMarkdown(conversation, repos.messages.listByConversation(conversationId)), 'utf8')
         return { canceled: false, filePath: result.filePath }
+      },
+      compressContext: async (conversationId) => {
+        const conversation = repos.conversations.getById(conversationId)
+        if (!conversation) throw new Error('对话不存在。')
+
+        const history = repos.messages.listByConversation(conversationId)
+        if (history.length === 0) throw new Error('对话无历史消息可压缩。')
+
+        const settings = await settingsService.get()
+        const dify = createConfiguredDifyClient(settings)
+        const formatted = history
+          .map((message) => `${message.role === 'user' ? '用户' : '助手'}：${message.content}`)
+          .join('\n\n')
+        const summaryQuery = `请将以下对话历史总结为简洁的上下文摘要，保留关键研究事实、用户意图、已得结论，便于后续对话延续。直接输出摘要正文，不要前言或致歉：\n\n${formatted}`
+
+        // 在新 Dify 线程发总结请求（不带 conversationId，开新线程）
+        const result = await dify.sendChatMessage({
+          query: summaryQuery,
+          user: 'local-user',
+          inputs: {}
+        })
+
+        // 把新 Dify 线程 id 挂到当前对话，后续基于摘要线程延续
+        if (result.difyConversationId) {
+          repos.conversations.setDifyConversationId(conversationId, result.difyConversationId)
+        }
+
+        return repos.messages.create({
+          conversationId,
+          role: 'assistant',
+          content: `【上下文摘要】\n${result.answer}`,
+          citations: [],
+          tokenUsage: result.usage
+        })
       }
     },
     messages: {

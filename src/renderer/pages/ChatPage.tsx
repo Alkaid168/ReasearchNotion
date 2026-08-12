@@ -100,6 +100,7 @@ export function ChatPage({
   const [contextSwitchNotice, setContextSwitchNotice] = useState<string | null>(null)
   const [toolCalls, setToolCalls] = useState<Array<{ name: string; label: string; status: 'running' | 'done' }>>([])
   const [tokenUsage, setTokenUsage] = useState<TokenUsage | null>(null)
+  const [compressing, setCompressing] = useState(false)
 
   useEffect(() => {
     const lastAssistant = [...messages].reverse().find((message) => message.role === 'assistant' && message.tokenUsage)
@@ -349,6 +350,26 @@ export function ChatPage({
       </div>
     ) : null
 
+  const contextWindowTokens = activeModelProfile?.contextWindowTokens
+  const tokenRatio = tokenUsage && contextWindowTokens ? tokenUsage.totalTokens / contextWindowTokens : 0
+  const showCompressNotice = tokenRatio >= 0.7 && Boolean(conversationId)
+  const ratioPercent = Math.round(tokenRatio * 100)
+
+  async function handleCompress(): Promise<void> {
+    if (!conversationId || compressing) return
+    setCompressing(true)
+    try {
+      await desktopApi.conversations.compressContext?.(conversationId)
+      const updated = await desktopApi.messages.list(conversationId)
+      setMessages(updated)
+      onNotify?.('已压缩上下文，后续消息基于摘要。', 'success')
+    } catch {
+      onNotify?.('压缩失败，请重试。', 'error')
+    } finally {
+      setCompressing(false)
+    }
+  }
+
   const hasTimeline = messages.length > 0 || sending
 
   return (
@@ -435,6 +456,14 @@ export function ChatPage({
             </div>
           ) : null}
           {modelSelectorRow}
+          {showCompressNotice ? (
+            <div className="compress-notice">
+              <span>上下文较满（{ratioPercent}%）</span>
+              <button type="button" onClick={() => void handleCompress()} disabled={compressing}>
+                {compressing ? '压缩中…' : '压缩上下文'}
+              </button>
+            </div>
+          ) : null}
           {composer}
         </section>
       ) : null}

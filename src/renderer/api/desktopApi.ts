@@ -81,6 +81,9 @@ export const desktopApi: DesktopApi = {
     get exportMarkdown() {
       return getBridge().conversations.exportMarkdown
     },
+    get compressContext() {
+      return getBridge().conversations.compressContext
+    },
     get onSendProgress() {
       return getBridge().conversations.onSendProgress
     }
