@@ -7,7 +7,8 @@ const keys = {
   difyAppApiKey: 'difyAppApiKey',
   difyKnowledgeApiKey: 'difyKnowledgeApiKey',
   deepseekApiKey: 'deepseekApiKey',
-  defaultFolderId: 'defaultFolderId'
+  defaultFolderId: 'defaultFolderId',
+  activeModelProfileId: 'activeModelProfileId'
 } as const
 
 export function createSettingsService(db: Database.Database, secretBox: SecretBox) {
@@ -29,7 +30,8 @@ export function createSettingsService(db: Database.Database, secretBox: SecretBo
       difyAppApiKey: secretBox.unseal(getRaw(keys.difyAppApiKey)),
       difyKnowledgeApiKey: secretBox.unseal(getRaw(keys.difyKnowledgeApiKey)),
       deepseekApiKey: secretBox.unseal(getRaw(keys.deepseekApiKey)),
-      defaultFolderId: getRaw(keys.defaultFolderId) || null
+      defaultFolderId: getRaw(keys.defaultFolderId) || null,
+      activeModelProfileId: getRaw(keys.activeModelProfileId) || null
     }
   }
 
@@ -41,6 +43,7 @@ export function createSettingsService(db: Database.Database, secretBox: SecretBo
       setRaw(keys.difyKnowledgeApiKey, secretBox.seal(settings.difyKnowledgeApiKey.trim()))
       setRaw(keys.deepseekApiKey, secretBox.seal(settings.deepseekApiKey.trim()))
       setRaw(keys.defaultFolderId, settings.defaultFolderId ?? '')
+      setRaw(keys.activeModelProfileId, settings.activeModelProfileId ?? '')
       return readSettings()
     }
   }

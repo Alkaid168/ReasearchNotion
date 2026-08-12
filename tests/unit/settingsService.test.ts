@@ -33,7 +33,8 @@ describe('settings service', () => {
       difyAppApiKey: '',
       difyKnowledgeApiKey: '',
     deepseekApiKey: '',
-      defaultFolderId: null
+      defaultFolderId: null,
+      activeModelProfileId: null
     })
 
     await service.save({
@@ -41,7 +42,8 @@ describe('settings service', () => {
       difyAppApiKey: 'app-key',
       difyKnowledgeApiKey: 'knowledge-key',
     deepseekApiKey: '',
-      defaultFolderId: 'folder-1'
+      defaultFolderId: 'folder-1',
+      activeModelProfileId: null
     })
 
     await expect(service.get()).resolves.toEqual({
@@ -49,7 +51,8 @@ describe('settings service', () => {
       difyAppApiKey: 'app-key',
       difyKnowledgeApiKey: 'knowledge-key',
     deepseekApiKey: '',
-      defaultFolderId: 'folder-1'
+      defaultFolderId: 'folder-1',
+      activeModelProfileId: null
     })
   })
 })

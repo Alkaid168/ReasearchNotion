@@ -19,7 +19,7 @@ import { desktopApi } from '../api/desktopApi'
 import { AiDrawer, createEmptyAiDrawerSession, type AiDrawerSession } from '../components/AiDrawer'
 import { PaperReader } from '../components/PaperReader'
 import { readWorkspacePreferences, updateWorkspacePreferences, type PaperViewPreference } from '../state/workspacePreferences'
-import type { Folder, Paper, PaperOutlineItem, PaperSearchResult } from '../../shared/types'
+import type { Folder, ModelProfile, Paper, PaperOutlineItem, PaperSearchResult } from '../../shared/types'
 
 import {
   type ImportQueueItem,
@@ -36,9 +36,12 @@ type KnowledgePageProps = {
   requestedPage?: number
   requestNonce?: number
   onNotify?: (message: string, tone?: 'success' | 'error') => void
+  modelProfiles?: ModelProfile[]
+  activeModelProfile?: ModelProfile | null
+  onActivateModel?: (id: string) => void | Promise<void>
 }
 
-export function KnowledgePage({ requestedPaperId, requestedFolderId, requestedPage, requestNonce, onNotify }: KnowledgePageProps = {}): JSX.Element {
+export function KnowledgePage({ requestedPaperId, requestedFolderId, requestedPage, requestNonce, onNotify, modelProfiles, activeModelProfile, onActivateModel }: KnowledgePageProps = {}): JSX.Element {
   const [initialPreferences] = useState(readWorkspacePreferences)
   const [folders, setFolders] = useState<Folder[]>([])
   const [activeFolderId, setActiveFolderId] = useState<string | null>(initialPreferences.knowledge.activeFolderId)
@@ -1037,6 +1040,9 @@ export function KnowledgePage({ requestedPaperId, requestedFolderId, requestedPa
           open={drawerOpen}
           paper={activePaper}
           emphasisContext={emphasisContext}
+          modelProfiles={modelProfiles}
+          activeModelProfile={activeModelProfile ?? null}
+          onActivateModel={onActivateModel}
           session={activePaper ? (drawerSessions[activePaper.id] ?? createEmptyAiDrawerSession()) : createEmptyAiDrawerSession()}
           setSession={(update) => {
             if (!activePaperRef.current) return

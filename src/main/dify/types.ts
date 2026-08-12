@@ -1,4 +1,4 @@
-import type { Citation } from '../../shared/types'
+import type { Citation, TokenUsage } from '../../shared/types'
 
 export type DifyDataset = {
   id: string
@@ -18,14 +18,16 @@ export type SendChatResult = {
   answer: string
   difyConversationId: string | null
   citations: Citation[]
+  usage?: TokenUsage
 }
 
 export type DifyChatProgressEvent = {
-  phase: 'tool' | 'answer' | 'delta' | 'done'
+  phase: 'tool' | 'answer' | 'delta' | 'done' | 'usage'
   label: string
   toolName?: string
   delta?: string
   replaceAnswer?: boolean
+  usage?: TokenUsage
 }
 
 export type DifyConnectionCheck = {

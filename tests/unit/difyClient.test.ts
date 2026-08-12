@@ -328,6 +328,43 @@ describe('Dify client', () => {
     expect(JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body))).toMatchObject({ response_mode: 'streaming' })
   })
 
+  it('parses token usage from streaming message_end metadata', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 400,
+        text: async () => '{"message":"Agent Chat App does not support blocking mode"}'
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () =>
+          [
+            'data: {"event":"agent_message","conversation_id":"dify-conv","answer":"短回答"}',
+            '',
+            'data: {"event":"message_end","conversation_id":"dify-conv","metadata":{"retriever_resources":[],"usage":{"prompt_tokens":1200,"completion_tokens":80,"total_tokens":1280}}}',
+            ''
+          ].join('\n')
+      })
+    const client = createDifyClient({
+      baseUrl: 'http://localhost:8080',
+      appApiKey: 'app-key',
+      knowledgeApiKey: 'knowledge-key',
+      fetchImpl: fetchMock
+    })
+
+    const progress: Array<{ phase: string; usage?: { totalTokens: number } }> = []
+    const result = await client.sendChatMessage({
+      query: '测试',
+      user: 'local-user',
+      inputs: {},
+      onProgress: (event) => progress.push({ phase: event.phase, ...(event.usage ? { usage: event.usage } : {}) })
+    })
+
+    expect(result.usage).toEqual({ promptTokens: 1200, completionTokens: 80, totalTokens: 1280 })
+    expect(progress.some((event) => event.phase === 'usage' && event.usage?.totalTokens === 1280)).toBe(true)
+  })
+
   it('parses Dify agent_message chunks and message_end citations in streaming mode', async () => {
     const fetchMock = vi
       .fn()

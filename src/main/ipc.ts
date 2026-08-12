@@ -16,6 +16,8 @@ import type {
   ConversationFolder,
   Folder,
   Message,
+  ModelProfile,
+  ModelProfileInput,
   Paper,
   PaperCard,
   PaperOutlineItem,
@@ -86,9 +88,16 @@ export type IpcServices = {
     ): Promise<Message>
     cancelSend(requestId: string): Promise<boolean>
     exportMarkdown(conversationId: string): Promise<ConversationExportResult>
+    compressContext(conversationId: string): Promise<Message>
   }
   messages: {
     list(conversationId: string): Promise<Message[]>
+  }
+  modelProfiles: {
+    list(): Promise<ModelProfile[]>
+    save(input: ModelProfileInput): Promise<ModelProfile>
+    delete(id: string): Promise<void>
+    setActive(id: string): Promise<ModelProfile>
   }
 }
 
@@ -175,5 +184,12 @@ export function registerIpc(services: IpcServices): void {
   ipcMain.handle('conversations:exportMarkdown', (_event, input: { conversationId: string }) =>
     services.conversations.exportMarkdown(input.conversationId)
   )
+  ipcMain.handle('conversations:compressContext', (_event, input: { conversationId: string }) =>
+    services.conversations.compressContext(input.conversationId)
+  )
   ipcMain.handle('messages:list', (_event, input: { conversationId: string }) => services.messages.list(input.conversationId))
+  ipcMain.handle('modelProfiles:list', () => services.modelProfiles.list())
+  ipcMain.handle('modelProfiles:save', (_event, input: ModelProfileInput) => services.modelProfiles.save(input))
+  ipcMain.handle('modelProfiles:delete', (_event, input: { id: string }) => services.modelProfiles.delete(input.id))
+  ipcMain.handle('modelProfiles:setActive', (_event, input: { id: string }) => services.modelProfiles.setActive(input.id))
 }

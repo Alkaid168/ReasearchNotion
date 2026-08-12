@@ -9,9 +9,13 @@ import type {
   Folder,
   IndexStatus,
   Message,
+  ModelProfile,
+  ModelProfileInput,
+  ModelProvider,
   Paper,
   PaperCard,
-  ReadingStatus
+  ReadingStatus,
+  TokenUsage
 } from '../../shared/types'
 
 function now(): string {
@@ -29,7 +33,7 @@ type CreateConversationInput = Pick<Conversation, 'title' | 'folderId' | 'contex
   conversationFolderId?: string | null
 }
 type ListConversationsOptions = { conversationFolderId?: string | null }
-type CreateMessageInput = Pick<Message, 'conversationId' | 'role' | 'content' | 'citations'>
+type CreateMessageInput = Pick<Message, 'conversationId' | 'role' | 'content' | 'citations' | 'tokenUsage'>
 
 export function createRepositories(db: Database.Database) {
   function nextFolderSortOrder(): number {
@@ -120,11 +124,56 @@ export function createRepositories(db: Database.Database) {
     return row ? mapConversation(row) : null
   }
 
-  function mapMessage(row: Omit<Message, 'citations'> & { citationsJson: string }): Message {
+  type MessageRow = Omit<Message, 'citations' | 'tokenUsage'> & {
+    citationsJson: string
+    tokenUsageJson: string | null
+  }
+
+  function mapMessage(row: MessageRow): Message {
     return {
       ...row,
-      citations: JSON.parse(row.citationsJson) as Citation[]
+      citations: JSON.parse(row.citationsJson) as Citation[],
+      tokenUsage: row.tokenUsageJson ? (JSON.parse(row.tokenUsageJson) as TokenUsage) : undefined
     }
+  }
+
+  type ModelProfileRow = {
+    id: string
+    provider: string
+    modelName: string
+    displayName: string
+    llmApiKey: string
+    contextWindowTokens: number
+    isActive: number
+    sortOrder: number
+    createdAt: string
+    updatedAt: string
+  }
+
+  const modelProfileSelect = `SELECT id, provider, model_name as modelName, display_name as displayName,
+        llm_api_key as llmApiKey, context_window_tokens as contextWindowTokens,
+        is_active as isActive, sort_order as sortOrder,
+        created_at as createdAt, updated_at as updatedAt
+ FROM model_profiles`
+
+  function mapModelProfile(row: ModelProfileRow): ModelProfile {
+    return {
+      id: row.id,
+      provider: row.provider as ModelProvider,
+      modelName: row.modelName,
+      displayName: row.displayName,
+      llmApiKey: row.llmApiKey,
+      contextWindowTokens: row.contextWindowTokens,
+      isActive: row.isActive === 1,
+      sortOrder: row.sortOrder,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt
+    }
+  }
+
+  function getModelProfile(profileId: string): ModelProfile | null {
+    const row = db.prepare(`${modelProfileSelect} WHERE id = ?`).get(profileId) as ModelProfileRow | undefined
+    return row ? mapModelProfile(row) : null
   }
 
   return {
@@ -505,14 +554,16 @@ export function createRepositories(db: Database.Database) {
           role: input.role,
           content: input.content,
           citations: input.citations,
+          tokenUsage: input.tokenUsage,
           createdAt: timestamp
         }
         db.prepare(
-          `INSERT INTO messages (id, conversation_id, role, content, citations_json, created_at)
-           VALUES (@id, @conversationId, @role, @content, @citationsJson, @createdAt)`
+          `INSERT INTO messages (id, conversation_id, role, content, citations_json, token_usage_json, created_at)
+           VALUES (@id, @conversationId, @role, @content, @citationsJson, @tokenUsageJson, @createdAt)`
         ).run({
           ...row,
-          citationsJson: JSON.stringify(row.citations)
+          citationsJson: JSON.stringify(row.citations),
+          tokenUsageJson: row.tokenUsage ? JSON.stringify(row.tokenUsage) : null
         })
         db.prepare(`UPDATE conversations SET updated_at = ? WHERE id = ?`).run(timestamp, input.conversationId)
         return row
@@ -521,11 +572,89 @@ export function createRepositories(db: Database.Database) {
         const rows = db
           .prepare(
             `SELECT id, conversation_id as conversationId, role, content,
-                    citations_json as citationsJson, created_at as createdAt
+                    citations_json as citationsJson, token_usage_json as tokenUsageJson,
+                    created_at as createdAt
              FROM messages WHERE conversation_id = ? ORDER BY created_at ASC`
           )
-          .all(conversationId) as Array<Omit<Message, 'citations'> & { citationsJson: string }>
+          .all(conversationId) as MessageRow[]
         return rows.map(mapMessage)
+      }
+    },
+    modelProfiles: {
+      // 注：llm_api_key 在 model_profiles 表中明文存储（DB 文件位于本机 userDataDir，
+      // 桌面应用场景；与 settings 表的 sealed 存储策略不同，这里优先实现简洁）。
+      list(): ModelProfile[] {
+        const rows = db
+          .prepare(`${modelProfileSelect} ORDER BY sort_order ASC, created_at ASC`)
+          .all() as ModelProfileRow[]
+        return rows.map(mapModelProfile)
+      },
+      getById(profileId: string): ModelProfile | null {
+        return getModelProfile(profileId)
+      },
+      getActive(): ModelProfile | null {
+        const row = db.prepare(`${modelProfileSelect} WHERE is_active = 1 LIMIT 1`).get() as
+          | ModelProfileRow
+          | undefined
+        return row ? mapModelProfile(row) : null
+      },
+      create(input: ModelProfileInput): ModelProfile {
+        const timestamp = now()
+        const profileId = id('model')
+        const next = db.prepare(`SELECT COALESCE(MAX(sort_order), -1) + 1 as next FROM model_profiles`).get() as {
+          next: number
+        }
+        db.prepare(
+          `INSERT INTO model_profiles
+             (id, provider, model_name, display_name, llm_api_key, context_window_tokens,
+              is_active, sort_order, created_at, updated_at)
+           VALUES (@id, @provider, @modelName, @displayName, @llmApiKey, @contextWindowTokens,
+                   0, @sortOrder, @createdAt, @updatedAt)`
+        ).run({
+          id: profileId,
+          provider: input.provider,
+          modelName: input.modelName,
+          displayName: input.displayName,
+          llmApiKey: input.llmApiKey,
+          contextWindowTokens: input.contextWindowTokens,
+          sortOrder: next.next,
+          createdAt: timestamp,
+          updatedAt: timestamp
+        })
+        const profile = getModelProfile(profileId)
+        if (!profile) throw new Error('模型档创建失败。')
+        return profile
+      },
+      update(input: ModelProfileInput): ModelProfile {
+        if (!input.id) throw new Error('模型档 id 缺失。')
+        db.prepare(
+          `UPDATE model_profiles SET provider = ?, model_name = ?, display_name = ?,
+                  llm_api_key = ?, context_window_tokens = ?, updated_at = ? WHERE id = ?`
+        ).run(
+          input.provider,
+          input.modelName,
+          input.displayName,
+          input.llmApiKey,
+          input.contextWindowTokens,
+          now(),
+          input.id
+        )
+        const profile = getModelProfile(input.id)
+        if (!profile) throw new Error('模型档不存在。')
+        return profile
+      },
+      delete(profileId: string): void {
+        db.prepare(`DELETE FROM model_profiles WHERE id = ?`).run(profileId)
+      },
+      setActive(profileId: string): ModelProfile {
+        const applyActive = db.transaction(() => {
+          db.prepare(`UPDATE model_profiles SET is_active = 0`).run()
+          db.prepare(`UPDATE model_profiles SET is_active = 1, updated_at = ? WHERE id = ?`).run(now(), profileId)
+        })
+        applyActive()
+        const profile = getModelProfile(profileId)
+        if (!profile) throw new Error('模型档不存在。')
+        return profile
       }
     }
   }

@@ -3,8 +3,10 @@ import { ArrowUp, Check, Copy, Lightbulb, MessageSquare, Square, X } from 'lucid
 import { desktopApi } from '../api/desktopApi'
 import { AcademicMarkdown } from './AcademicMarkdown'
 import { CitationStatus } from './CitationStatus'
+import { ModelSelector } from './ModelSelector'
 import { userFacingSendError } from '../utils/userFacingError'
-import type { Citation, Message, Paper } from '../../shared/types'
+import { formatTokenCount } from '../utils/formatToken'
+import type { Citation, Message, ModelProfile, Paper, TokenUsage } from '../../shared/types'
 
 type AiDrawerProps = {
   open: boolean
@@ -17,6 +19,9 @@ type AiDrawerProps = {
   onClearEmphasisContext: () => void
   onClose: () => void
   onOpenCitation?: (citation: Citation) => void
+  modelProfiles?: ModelProfile[]
+  activeModelProfile?: ModelProfile | null
+  onActivateModel?: (id: string) => void | Promise<void>
 }
 
 export type AiDrawerSession = {
@@ -60,18 +65,27 @@ export function AiDrawer({
   onWidthChange,
   onClearEmphasisContext,
   onClose,
-  onOpenCitation
+  onOpenCitation,
+  modelProfiles,
+  activeModelProfile,
+  onActivateModel
 }: AiDrawerProps): JSX.Element | null {
   const [sending, setSending] = useState(false)
   const [progressIndex, setProgressIndex] = useState(0)
   const [progressStartedAt, setProgressStartedAt] = useState<number | null>(null)
   const [progressDetail, setProgressDetail] = useState<string | null>(null)
   const [toolCalls, setToolCalls] = useState<Array<{ name: string; label: string; status: 'running' | 'done' }>>([])
+  const [tokenUsage, setTokenUsage] = useState<TokenUsage | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [streamingAnswer, setStreamingAnswer] = useState('')
   const [activeProgressRequestId, setActiveProgressRequestId] = useState<string | null>(null)
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null)
   const { conversationId, messages, draft } = session
+
+  useEffect(() => {
+    const lastAssistant = [...messages].reverse().find((message) => message.role === 'assistant' && message.tokenUsage)
+    setTokenUsage(lastAssistant?.tokenUsage ?? null)
+  }, [messages])
 
   useEffect(() => {
     setError(null)
@@ -130,6 +144,9 @@ export function AiDrawer({
             })
           } else if (event.phase === 'answer' || event.phase === 'done') {
             setToolCalls((current) => current.map((call) => (call.status === 'running' ? { ...call, status: 'done' as const } : call)))
+          }
+          if (event.phase === 'usage' && event.usage) {
+            setTokenUsage(event.usage)
           }
           setProgressIndex(event.phase === 'done' ? 3 : 2)
           setProgressDetail(event.label)
@@ -298,6 +315,17 @@ export function AiDrawer({
       ) : null}
       {sending ? <DrawerProgress activeIndex={progressIndex} startedAt={progressStartedAt} detail={progressDetail} toolCalls={toolCalls} /> : null}
 
+      {modelProfiles && modelProfiles.length > 0 ? (
+        <div className="drawer-model-row">
+          <ModelSelector
+            profiles={modelProfiles}
+            activeProfile={activeModelProfile ?? null}
+            onActivate={(id) => {
+              if (onActivateModel) void onActivateModel(id)
+            }}
+          />
+        </div>
+      ) : null}
       <div className="drawer-quick-actions" aria-label="快捷操作">
         {(emphasisContext ? drawerQuickActions.selection : drawerQuickActions.full).map((action) => (
           <button
@@ -344,6 +372,16 @@ export function AiDrawer({
           {sending ? <Square size={14} aria-hidden="true" /> : <ArrowUp size={16} aria-hidden="true" />}
         </button>
       </form>
+      {tokenUsage && activeModelProfile?.contextWindowTokens ? (
+        <div className="drawer-token-row">
+          <span
+            className={`token-counter ${tokenUsage.totalTokens / activeModelProfile.contextWindowTokens >= 0.8 ? 'danger' : ''}`}
+            title={`提示 ${tokenUsage.promptTokens} · 补全 ${tokenUsage.completionTokens}`}
+          >
+            上下文 {formatTokenCount(tokenUsage.totalTokens)} / {formatTokenCount(activeModelProfile.contextWindowTokens)}
+          </span>
+        </div>
+      ) : null}
     </aside>
   )
 }

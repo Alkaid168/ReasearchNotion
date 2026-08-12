@@ -4,8 +4,10 @@ import { desktopApi } from '../api/desktopApi'
 import researchNotionMark from '../assets/research-notion-mark.svg'
 import { AcademicMarkdown } from '../components/AcademicMarkdown'
 import { CitationStatus } from '../components/CitationStatus'
+import { ModelSelector } from '../components/ModelSelector'
 import { userFacingSendError } from '../utils/userFacingError'
-import type { ChatContext, Citation, Conversation, Folder, Message, Paper } from '../../shared/types'
+import { formatTokenCount } from '../utils/formatToken'
+import type { ChatContext, Citation, Conversation, Folder, Message, ModelProfile, Paper, TokenUsage } from '../../shared/types'
 
 type ChatPageProps = {
   selectedConversationId?: string | null
@@ -13,6 +15,9 @@ type ChatPageProps = {
   onConversationCreated?: (conversation: Conversation) => void
   onNotify?: (message: string, tone?: 'success' | 'error') => void
   onOpenCitation?: (citation: Citation) => void
+  modelProfiles?: ModelProfile[]
+  activeModelProfile?: ModelProfile | null
+  onActivateModel?: (id: string) => void | Promise<void>
 }
 
 type ContextOption = {
@@ -74,7 +79,10 @@ export function ChatPage({
   selectedConversationFolderId = null,
   onConversationCreated,
   onNotify,
-  onOpenCitation
+  onOpenCitation,
+  modelProfiles,
+  activeModelProfile,
+  onActivateModel
 }: ChatPageProps): JSX.Element {
   const [conversationId, setConversationId] = useState<string | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
@@ -92,6 +100,13 @@ export function ChatPage({
   const [showJumpToLatest, setShowJumpToLatest] = useState(false)
   const [contextSwitchNotice, setContextSwitchNotice] = useState<string | null>(null)
   const [toolCalls, setToolCalls] = useState<Array<{ name: string; label: string; status: 'running' | 'done' }>>([])
+  const [tokenUsage, setTokenUsage] = useState<TokenUsage | null>(null)
+  const [compressing, setCompressing] = useState(false)
+
+  useEffect(() => {
+    const lastAssistant = [...messages].reverse().find((message) => message.role === 'assistant' && message.tokenUsage)
+    setTokenUsage(lastAssistant?.tokenUsage ?? null)
+  }, [messages])
   const messageListRef = useRef<HTMLElement | null>(null)
 
   function handleContextChange(context: ChatContext): void {
@@ -240,6 +255,9 @@ export function ChatPage({
           } else if (event.phase === 'answer' || event.phase === 'done') {
             setToolCalls((current) => current.map((call) => (call.status === 'running' ? { ...call, status: 'done' as const } : call)))
           }
+          if (event.phase === 'usage' && event.usage) {
+            setTokenUsage(event.usage)
+          }
           setSendProgress((current) => ({
             step: event.phase === 'done' ? 'save' : 'dify',
             startedAt: current?.startedAt ?? Date.now(),
@@ -305,6 +323,8 @@ export function ChatPage({
       error={sendError}
       selectedContext={selectedContext}
       contextOptions={contextOptions}
+      tokenUsage={tokenUsage}
+      contextWindowTokens={activeModelProfile?.contextWindowTokens}
       onContextChange={handleContextChange}
       onDraftChange={(value) => {
         setDraft(value)
@@ -317,6 +337,39 @@ export function ChatPage({
       onRetry={() => void send()}
     />
   )
+
+  const modelSelectorRow =
+    modelProfiles && modelProfiles.length > 0 ? (
+      <div className="dock-model-row">
+        <ModelSelector
+          profiles={modelProfiles}
+          activeProfile={activeModelProfile ?? null}
+          onActivate={(id) => {
+            if (onActivateModel) void onActivateModel(id)
+          }}
+        />
+      </div>
+    ) : null
+
+  const contextWindowTokens = activeModelProfile?.contextWindowTokens
+  const tokenRatio = tokenUsage && contextWindowTokens ? tokenUsage.totalTokens / contextWindowTokens : 0
+  const showCompressNotice = tokenRatio >= 0.7 && Boolean(conversationId)
+  const ratioPercent = Math.round(tokenRatio * 100)
+
+  async function handleCompress(): Promise<void> {
+    if (!conversationId || compressing) return
+    setCompressing(true)
+    try {
+      await desktopApi.conversations.compressContext?.(conversationId)
+      const updated = await desktopApi.messages.list(conversationId)
+      setMessages(updated)
+      onNotify?.('已压缩上下文，后续消息基于摘要。', 'success')
+    } catch {
+      onNotify?.('压缩失败，请重试。', 'error')
+    } finally {
+      setCompressing(false)
+    }
+  }
 
   const hasTimeline = messages.length > 0 || sending
 
@@ -381,6 +434,7 @@ export function ChatPage({
           </div>
           <h1>今天研究点什么？</h1>
           <Suggestions onSelect={setDraft} />
+          {modelSelectorRow}
           {composer}
         </section>
       )}
@@ -399,6 +453,15 @@ export function ChatPage({
               >
                 <Square size={12} aria-hidden="true" fill="currentColor" />
                 停止生成
+              </button>
+            </div>
+          ) : null}
+          {modelSelectorRow}
+          {showCompressNotice ? (
+            <div className="compress-notice">
+              <span>上下文较满（{ratioPercent}%）</span>
+              <button type="button" onClick={() => void handleCompress()} disabled={compressing}>
+                {compressing ? '压缩中…' : '压缩上下文'}
               </button>
             </div>
           ) : null}
@@ -423,6 +486,8 @@ type ComposerProps = {
     folderOptions: ContextOption[]
     paperOptions: ContextOption[]
   }
+  tokenUsage?: TokenUsage | null
+  contextWindowTokens?: number
   onContextChange: (context: ChatContext) => void
   onDraftChange: (value: string) => void
   onSend: () => void
@@ -436,6 +501,8 @@ function Composer({
   error,
   selectedContext,
   contextOptions,
+  tokenUsage,
+  contextWindowTokens,
   onContextChange,
   onDraftChange,
   onSend,
@@ -539,7 +606,17 @@ function Composer({
           {sending ? <Square size={15} aria-hidden="true" /> : <ArrowUp size={17} aria-hidden="true" />}
         </button>
       </div>
-      <p className="composer-disclaimer">AI 可能出错。请核实重要信息。</p>
+      <div className="composer-footer">
+        <p className="composer-disclaimer">AI 可能出错。请核实重要信息。</p>
+        {tokenUsage && contextWindowTokens ? (
+          <span
+            className={`token-counter ${tokenUsage.totalTokens / contextWindowTokens >= 0.8 ? 'danger' : ''}`}
+            title={`提示 ${tokenUsage.promptTokens} · 补全 ${tokenUsage.completionTokens}`}
+          >
+            {formatTokenCount(tokenUsage.totalTokens)} / {formatTokenCount(contextWindowTokens)}
+          </span>
+        ) : null}
+      </div>
     </div>
   )
 }

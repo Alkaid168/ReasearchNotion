@@ -5,6 +5,8 @@ import type {
   ConversationFolder,
   Folder,
   Message,
+  ModelProfile,
+  ModelProfileInput,
   Paper,
   PaperCard,
   PaperOutlineItem,
@@ -12,6 +14,7 @@ import type {
   ReadingState,
   ReadingStateUpdate,
   ReadingStatus,
+  TokenUsage,
   UserMemory,
   UserMemoryInput
 } from './types'
@@ -23,11 +26,12 @@ export type SendMessageOptions = {
 
 export type ConversationProgressEvent = {
   requestId: string
-  phase: 'tool' | 'answer' | 'delta' | 'done'
+  phase: 'tool' | 'answer' | 'delta' | 'done' | 'usage'
   label: string
   toolName?: string
   delta?: string
   replaceAnswer?: boolean
+  usage?: TokenUsage
 }
 
 export type ConversationExportResult = {
@@ -123,9 +127,16 @@ export type DesktopApi = {
     sendMessage(conversationId: string, content: string, options?: SendMessageOptions): Promise<Message>
     cancelSend?(requestId: string): Promise<boolean>
     exportMarkdown?(conversationId: string): Promise<ConversationExportResult>
+    compressContext?(conversationId: string): Promise<Message>
     onSendProgress?(listener: (event: ConversationProgressEvent) => void): () => void
   }
   messages: {
     list(conversationId: string): Promise<Message[]>
+  }
+  modelProfiles: {
+    list(): Promise<ModelProfile[]>
+    save(input: ModelProfileInput): Promise<ModelProfile>
+    delete(id: string): Promise<void>
+    setActive(id: string): Promise<ModelProfile>
   }
 }

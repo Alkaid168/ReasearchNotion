@@ -67,6 +67,7 @@ CREATE TABLE IF NOT EXISTS messages (
   role TEXT NOT NULL CHECK(role IN ('user', 'assistant')),
   content TEXT NOT NULL,
   citations_json TEXT NOT NULL,
+  token_usage_json TEXT,
   created_at TEXT NOT NULL,
   FOREIGN KEY(conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
 );
@@ -82,6 +83,19 @@ CREATE TABLE IF NOT EXISTS user_memories (
   name TEXT NOT NULL,
   description TEXT NOT NULL DEFAULT '',
   body TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS model_profiles (
+  id TEXT PRIMARY KEY,
+  provider TEXT NOT NULL CHECK(provider IN ('deepseek','qwen','zhipu')),
+  model_name TEXT NOT NULL,
+  display_name TEXT NOT NULL,
+  llm_api_key TEXT NOT NULL,
+  context_window_tokens INTEGER NOT NULL DEFAULT 1048576,
+  is_active INTEGER NOT NULL DEFAULT 0,
+  sort_order INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );

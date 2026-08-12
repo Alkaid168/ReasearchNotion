@@ -17,12 +17,13 @@ import { readingStatePatchForConversationContext } from './dify/conversationRunt
 import { buildResearchAgentInputs, buildResearchAgentQuery, formatConversationHistory } from './dify/researchAgent'
 import { readPaperMarkdown, readPaperPlainText } from './files/importPaper'
 import { registerIpc } from './ipc'
+import { applyModelProfile } from './settings/modelKeySync'
 import { createElectronSecretBox } from './settings/secretBox'
 import { createSettingsService } from './settings/settingsService'
 import { createMemoriesService } from './settings/memoriesService'
 import { ensureFolderDataset } from './workflows/ensureFolderDataset'
 import { importAndIndexPaper, reindexPaper } from './workflows/importAndIndexPaper'
-import type { AppSettings, ChatContext, Paper } from '../shared/types'
+import type { AppSettings, ChatContext, ModelProfile, ModelProfileInput, Paper } from '../shared/types'
 
 const isolatedUserDataDir = process.env.RESEARCH_NOTION_USER_DATA_DIR?.trim()
 if (isolatedUserDataDir) app.setPath('userData', isolatedUserDataDir)
@@ -201,6 +202,38 @@ void app.whenReady().then(async () => {
       repos,
       dify
     })
+  }
+
+  async function applyActiveProfile(profileId: string): Promise<ModelProfile> {
+    const profile = repos.modelProfiles.setActive(profileId)
+    // 同步到 Dify：改 provider credentials + Tool Agent app 的 model 配置 + 清 Redis 缓存
+    try {
+      applyModelProfile(profile.provider, profile.llmApiKey, profile.modelName)
+    } catch (error) {
+      console.error('[modelProfile] sync to Dify failed (best-effort):', error)
+    }
+    // 切 provider 后历史是旧模型生成，清 dify 线程避免续接错乱
+    repos.conversations.clearDifyConversationIds()
+    const current = await settingsService.get()
+    await settingsService.save({ ...current, activeModelProfileId: profile.id })
+    return profile
+  }
+
+  // 首次启动：把现有 DeepSeek LLM key 导入为默认档，保证向后兼容。
+  // Dify 端仍用原 DeepSeek 配置，无需 sync。
+  if (repos.modelProfiles.list().length === 0) {
+    const seedSettings = await settingsService.get()
+    if (seedSettings.deepseekApiKey) {
+      const seeded = repos.modelProfiles.create({
+        provider: 'deepseek',
+        modelName: 'deepseek-v4-flash',
+        displayName: 'DeepSeek V4 Flash',
+        llmApiKey: seedSettings.deepseekApiKey,
+        contextWindowTokens: 1048576
+      })
+      repos.modelProfiles.setActive(seeded.id)
+      await settingsService.save({ ...seedSettings, activeModelProfileId: seeded.id })
+    }
   }
 
   registerIpc({
@@ -471,7 +504,8 @@ void app.whenReady().then(async () => {
             conversationId,
             role: 'assistant',
             content: result.answer,
-            citations
+            citations,
+            tokenUsage: result.usage
           })
         } finally {
           if (progressRequestId && activeSendControllers.get(progressRequestId) === abortController) {
@@ -496,10 +530,62 @@ void app.whenReady().then(async () => {
         if (result.canceled || !result.filePath) return { canceled: true, filePath: null }
         await fs.writeFile(result.filePath, formatConversationMarkdown(conversation, repos.messages.listByConversation(conversationId)), 'utf8')
         return { canceled: false, filePath: result.filePath }
+      },
+      compressContext: async (conversationId) => {
+        const conversation = repos.conversations.getById(conversationId)
+        if (!conversation) throw new Error('对话不存在。')
+
+        const history = repos.messages.listByConversation(conversationId)
+        if (history.length === 0) throw new Error('对话无历史消息可压缩。')
+
+        const settings = await settingsService.get()
+        const dify = createConfiguredDifyClient(settings)
+        const formatted = history
+          .map((message) => `${message.role === 'user' ? '用户' : '助手'}：${message.content}`)
+          .join('\n\n')
+        const summaryQuery = `请将以下对话历史总结为简洁的上下文摘要，保留关键研究事实、用户意图、已得结论，便于后续对话延续。直接输出摘要正文，不要前言或致歉：\n\n${formatted}`
+
+        // 在新 Dify 线程发总结请求（不带 conversationId，开新线程）
+        const result = await dify.sendChatMessage({
+          query: summaryQuery,
+          user: 'local-user',
+          inputs: {}
+        })
+
+        // 把新 Dify 线程 id 挂到当前对话，后续基于摘要线程延续
+        if (result.difyConversationId) {
+          repos.conversations.setDifyConversationId(conversationId, result.difyConversationId)
+        }
+
+        return repos.messages.create({
+          conversationId,
+          role: 'assistant',
+          content: `【上下文摘要】\n${result.answer}`,
+          citations: [],
+          tokenUsage: result.usage
+        })
       }
     },
     messages: {
       list: async (conversationId) => repos.messages.listByConversation(conversationId)
+    },
+    modelProfiles: {
+      list: async () => repos.modelProfiles.list(),
+      save: async (input: ModelProfileInput) => (input.id ? repos.modelProfiles.update(input) : repos.modelProfiles.create(input)),
+      delete: async (id: string) => {
+        const existing = repos.modelProfiles.getById(id)
+        const wasActive = existing?.isActive ?? false
+        repos.modelProfiles.delete(id)
+        if (!wasActive) return
+        const remaining = repos.modelProfiles.list()
+        if (remaining.length > 0) {
+          await applyActiveProfile(remaining[0].id)
+        } else {
+          const current = await settingsService.get()
+          await settingsService.save({ ...current, activeModelProfileId: null })
+        }
+      },
+      setActive: async (id: string) => applyActiveProfile(id)
     }
   })
 

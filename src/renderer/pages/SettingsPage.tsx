@@ -2,14 +2,16 @@ import { useEffect, useState, type FormEvent, type JSX } from 'react'
 import { Brain, CheckCircle2, Database, Eye, EyeOff, FileText, Folder, KeyRound, Loader2, MessageSquare, Pencil, Plug, Plus, RefreshCw, Save, Server, Trash2, X, XCircle, Zap } from 'lucide-react'
 import { desktopApi } from '../api/desktopApi'
 import type { ConnectionTestResult, EnvironmentStatus } from '../../shared/ipcTypes'
-import type { AppSettings, UserMemory, UserMemoryInput, UserMemoryType } from '../../shared/types'
+import type { AppSettings, ModelProfile, ModelProfileInput, ModelProvider, UserMemory, UserMemoryInput, UserMemoryType } from '../../shared/types'
+import { MODEL_PROVIDER_ORDER, MODEL_PROVIDER_PRESETS } from '../../shared/modelPresets'
 
 const emptySettings: AppSettings = {
   difyBaseUrl: '',
   difyAppApiKey: '',
   difyKnowledgeApiKey: '',
   deepseekApiKey: '',
-  defaultFolderId: null
+  defaultFolderId: null,
+  activeModelProfileId: null
 }
 
 type SecretInputProps = {
@@ -54,9 +56,10 @@ type Notice = {
 type SettingsPageProps = {
   onSettingsSaved?: (settings: AppSettings) => void
   onConnectionTested?: (result: ConnectionTestResult) => void
+  onModelProfilesChanged?: () => void | Promise<void>
 }
 
-export function SettingsPage({ onSettingsSaved, onConnectionTested }: SettingsPageProps = {}): JSX.Element {
+export function SettingsPage({ onSettingsSaved, onConnectionTested, onModelProfilesChanged }: SettingsPageProps = {}): JSX.Element {
   const [settings, setSettings] = useState<AppSettings>(emptySettings)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -66,16 +69,19 @@ export function SettingsPage({ onSettingsSaved, onConnectionTested }: SettingsPa
   const [notice, setNotice] = useState<Notice | null>(null)
   const [memories, setMemories] = useState<UserMemory[]>([])
   const [editingMemory, setEditingMemory] = useState<UserMemoryInput | null>(null)
+  const [modelProfiles, setModelProfiles] = useState<ModelProfile[]>([])
+  const [editingProfile, setEditingProfile] = useState<ModelProfileInput | null>(null)
 
   useEffect(() => {
     let alive = true
 
-    void Promise.all([desktopApi.settings.get(), desktopApi.app.getEnvironmentStatus(), desktopApi.memories.list()])
-      .then(([storedSettings, status, storedMemories]) => {
+    void Promise.all([desktopApi.settings.get(), desktopApi.app.getEnvironmentStatus(), desktopApi.memories.list(), desktopApi.modelProfiles.list()])
+      .then(([storedSettings, status, storedMemories, storedProfiles]) => {
         if (!alive) return
         setSettings(storedSettings)
         setEnvironmentStatus(status)
         setMemories(storedMemories)
+        setModelProfiles(storedProfiles)
         setNotice(null)
       })
       .catch(() => {
@@ -146,6 +152,32 @@ export function SettingsPage({ onSettingsSaved, onConnectionTested }: SettingsPa
     await desktopApi.memories.delete(id)
     setMemories(await desktopApi.memories.list())
     setNotice({ tone: 'neutral', message: '记忆已删除。' })
+  }
+
+  async function saveModelProfileInput(input: ModelProfileInput): Promise<void> {
+    const saved = await desktopApi.modelProfiles.save(input)
+    setModelProfiles(await desktopApi.modelProfiles.list())
+    await onModelProfilesChanged?.()
+    setEditingProfile(null)
+    setNotice({ tone: 'success', message: `模型档「${saved.displayName}」已保存。` })
+  }
+
+  async function deleteModelProfile(id: string): Promise<void> {
+    await desktopApi.modelProfiles.delete(id)
+    setModelProfiles(await desktopApi.modelProfiles.list())
+    await onModelProfilesChanged?.()
+    const updated = await desktopApi.settings.get()
+    setSettings(updated)
+    setNotice({ tone: 'neutral', message: '模型档已删除。' })
+  }
+
+  async function activateModelProfile(id: string): Promise<void> {
+    await desktopApi.modelProfiles.setActive(id)
+    setModelProfiles(await desktopApi.modelProfiles.list())
+    await onModelProfilesChanged?.()
+    const updated = await desktopApi.settings.get()
+    setSettings(updated)
+    setNotice({ tone: 'success', message: '已切换默认模型，新对话将使用此模型。' })
   }
 
   const memoryTypeLabels: Record<UserMemoryType, string> = {
@@ -254,6 +286,98 @@ export function SettingsPage({ onSettingsSaved, onConnectionTested }: SettingsPa
           ResearchNotion 只使用 Tool Agent。它会按问题自主读取本地论文、调用检索工具，并在需要时查询公开学术资源。
         </p>
       </div>
+
+      <section className="settings-status-panel" aria-label="模型档">
+        <div className="settings-status-head">
+          <div>
+            <span className="settings-kicker">模型档</span>
+            <h2>模型档</h2>
+          </div>
+        </div>
+        <p className="settings-app-mode-hint">
+          每个模型档对应一个 Dify Tool Agent 应用（不同厂商或同厂商不同模型）。切换后新对话使用所选模型。仅支持 DeepSeek / 通义千问 / 智谱。需先在 Dify 控制台为对应模型创建 agent 应用，再将其 App API Key 填入此处。
+        </p>
+
+        {editingProfile ? (
+          <ModelProfileEditor input={editingProfile} onCancel={() => setEditingProfile(null)} onSave={(input) => void saveModelProfileInput(input)} />
+        ) : null}
+
+        {MODEL_PROVIDER_ORDER.map((provider) => {
+          const presets = MODEL_PROVIDER_PRESETS[provider]
+          const profiles = modelProfiles.filter((profile) => profile.provider === provider)
+          return (
+            <div key={provider} className="settings-model-provider-group">
+              <div className="settings-model-provider-head">
+                <strong>{presets.label}</strong>
+                <button
+                  className="secondary-action compact"
+                  type="button"
+                  onClick={() =>
+                    setEditingProfile({
+                      provider,
+                      modelName: presets.models[0].name,
+                      displayName: presets.models[0].label,
+                      llmApiKey: '',
+                      contextWindowTokens: presets.models[0].contextWindow
+                    })
+                  }
+                >
+                  <Plus size={14} aria-hidden="true" />
+                  添加
+                </button>
+              </div>
+              {profiles.length === 0 ? (
+                <p className="settings-model-empty">尚未配置该厂商的模型档。</p>
+              ) : (
+                <div className="settings-model-list">
+                  {profiles.map((profile) => (
+                    <div key={profile.id} className={`settings-model-card ${profile.isActive ? 'active' : ''}`}>
+                      <div className="settings-model-info">
+                        <span className={`settings-model-dot ${profile.isActive ? 'on' : ''}`} aria-hidden="true" />
+                        <div>
+                          <strong>{profile.displayName}</strong>
+                          <small>
+                            {profile.modelName} · {(profile.contextWindowTokens / 1000).toFixed(0)}k 上下文
+                          </small>
+                        </div>
+                      </div>
+                      <div className="settings-model-actions">
+                        {profile.isActive ? (
+                          <span className="settings-model-active-tag">当前默认</span>
+                        ) : (
+                          <button className="secondary-action compact" type="button" onClick={() => void activateModelProfile(profile.id)}>
+                            设为默认
+                          </button>
+                        )}
+                        <button
+                          className="secondary-action compact"
+                          type="button"
+                          onClick={() =>
+                            setEditingProfile({
+                              id: profile.id,
+                              provider: profile.provider,
+                              modelName: profile.modelName,
+                              displayName: profile.displayName,
+                              llmApiKey: profile.llmApiKey,
+                              contextWindowTokens: profile.contextWindowTokens
+                            })
+                          }
+                        >
+                          <Pencil size={13} aria-hidden="true" />
+                          编辑
+                        </button>
+                        <button className="secondary-action compact danger" type="button" onClick={() => void deleteModelProfile(profile.id)}>
+                          <Trash2 size={13} aria-hidden="true" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </section>
 
       <section className="settings-status-panel" aria-label="本地状态">
         <div className="settings-status-head">
@@ -419,6 +543,104 @@ function MemoryEditor({ input, onSave, onCancel }: MemoryEditorProps): JSX.Eleme
         <button className="primary-action" type="submit" disabled={!name.trim() || !body.trim()}>
           <Save size={16} aria-hidden="true" />
           保存记忆
+        </button>
+      </div>
+    </form>
+  )
+}
+
+type ModelProfileEditorProps = {
+  input: ModelProfileInput
+  onSave: (input: ModelProfileInput) => void
+  onCancel: () => void
+}
+
+function ModelProfileEditor({ input, onSave, onCancel }: ModelProfileEditorProps): JSX.Element {
+  const [provider, setProvider] = useState<ModelProvider>(input.provider)
+  const [modelName, setModelName] = useState(input.modelName)
+  const [displayName, setDisplayName] = useState(input.displayName)
+  const [llmApiKey, setLlmApiKey] = useState(input.llmApiKey)
+  const [contextWindowTokens, setContextWindowTokens] = useState(input.contextWindowTokens)
+
+  const presets = MODEL_PROVIDER_PRESETS[provider]
+
+  function handleProviderChange(next: ModelProvider): void {
+    setProvider(next)
+    const first = MODEL_PROVIDER_PRESETS[next].models[0]
+    setModelName(first.name)
+    setDisplayName(first.label)
+    setContextWindowTokens(first.contextWindow)
+  }
+
+  function handleModelChange(name: string): void {
+    setModelName(name)
+    const model = presets.models.find((entry) => entry.name === name)
+    if (model) {
+      setDisplayName(model.label)
+      setContextWindowTokens(model.contextWindow)
+    }
+  }
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>): void {
+    event.preventDefault()
+    onSave({
+      id: input.id,
+      provider,
+      modelName: modelName.trim(),
+      displayName: displayName.trim(),
+      llmApiKey: llmApiKey.trim(),
+      contextWindowTokens
+    })
+  }
+
+  return (
+    <form className="settings-memory-editor" onSubmit={handleSubmit}>
+      <label className="settings-field">
+        <span><Brain size={16} aria-hidden="true" /> 厂商</span>
+        <select value={provider} onChange={(event) => handleProviderChange(event.target.value as ModelProvider)} className="settings-memory-select">
+          {MODEL_PROVIDER_ORDER.map((entry) => (
+            <option key={entry} value={entry}>
+              {MODEL_PROVIDER_PRESETS[entry].label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="settings-field">
+        <span>模型</span>
+        <select value={modelName} onChange={(event) => handleModelChange(event.target.value)} className="settings-memory-select">
+          {presets.models.map((model) => (
+            <option key={model.name} value={model.name}>
+              {model.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="settings-field">
+        <span>显示名</span>
+        <input value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder="如 DeepSeek Chat" />
+      </label>
+      <label className="settings-field">
+        <span><KeyRound size={16} aria-hidden="true" /> LLM API Key</span>
+        <SecretInput value={llmApiKey} onChange={setLlmApiKey} placeholder="sk-..." />
+      </label>
+      <label className="settings-field">
+        <span>上下文窗口（tokens）</span>
+        <input
+          type="number"
+          value={contextWindowTokens}
+          onChange={(event) => setContextWindowTokens(Number(event.target.value))}
+          min={1000}
+          step="any"
+        />
+      </label>
+      <div className="settings-actions">
+        <button className="secondary-action" type="button" onClick={onCancel}>
+          <X size={16} aria-hidden="true" />
+          取消
+        </button>
+        <button className="primary-action" type="submit" disabled={!displayName.trim() || !llmApiKey.trim()}>
+          <Save size={16} aria-hidden="true" />
+          保存模型档
         </button>
       </div>
     </form>

@@ -84,12 +84,19 @@ export type Citation = {
   evidenceType?: 'retrieval' | 'tool' | 'metadata'
 }
 
+export type TokenUsage = {
+  promptTokens: number
+  completionTokens: number
+  totalTokens: number
+}
+
 export type Message = {
   id: string
   conversationId: string
   role: 'user' | 'assistant'
   content: string
   citations: Citation[]
+  tokenUsage?: TokenUsage
   createdAt: string
 }
 
@@ -99,6 +106,31 @@ export type AppSettings = {
   difyKnowledgeApiKey: string
   deepseekApiKey: string
   defaultFolderId: string | null
+  activeModelProfileId: string | null
+}
+
+export type ModelProvider = 'deepseek' | 'qwen' | 'zhipu'
+
+export type ModelProfile = {
+  id: string
+  provider: ModelProvider
+  modelName: string
+  displayName: string
+  llmApiKey: string
+  contextWindowTokens: number
+  isActive: boolean
+  sortOrder: number
+  createdAt: string
+  updatedAt: string
+}
+
+export type ModelProfileInput = {
+  id?: string
+  provider: ModelProvider
+  modelName: string
+  displayName: string
+  llmApiKey: string
+  contextWindowTokens: number
 }
 
 export type UserMemoryType = 'user' | 'preference' | 'feedback' | 'project' | 'reference'

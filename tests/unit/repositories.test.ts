@@ -488,4 +488,81 @@ describe('repositories', () => {
 
     expect(columns.map((column) => column.name)).toContain('dify_conversation_id')
   })
+
+  it('manages model profiles with a single active flag', () => {
+    const db = createDatabase(path.join(tempDir, 'model-profiles.sqlite'))
+    databases.push(db)
+    const repos = createRepositories(db)
+
+    expect(repos.modelProfiles.list()).toEqual([])
+    expect(repos.modelProfiles.getActive()).toBeNull()
+
+    const deepseek = repos.modelProfiles.create({
+      provider: 'deepseek',
+      modelName: 'deepseek-chat',
+      displayName: 'DeepSeek Chat',
+      llmApiKey: 'app-deepseek',
+      contextWindowTokens: 64000
+    })
+    const qwen = repos.modelProfiles.create({
+      provider: 'qwen',
+      modelName: 'qwen-max',
+      displayName: 'Qwen Max',
+      llmApiKey: 'app-qwen',
+      contextWindowTokens: 32000
+    })
+
+    expect(deepseek.isActive).toBe(false)
+    expect(repos.modelProfiles.list().map((profile) => profile.id)).toEqual([deepseek.id, qwen.id])
+
+    const activated = repos.modelProfiles.setActive(qwen.id)
+    expect(activated.isActive).toBe(true)
+    expect(repos.modelProfiles.getActive()?.id).toBe(qwen.id)
+    expect(repos.modelProfiles.getById(deepseek.id)?.isActive).toBe(false)
+
+    const updated = repos.modelProfiles.update({
+      id: deepseek.id,
+      provider: 'deepseek',
+      modelName: 'deepseek-reasoner',
+      displayName: 'DeepSeek Reasoner',
+      llmApiKey: 'app-deepseek-v2',
+      contextWindowTokens: 64000
+    })
+    expect(updated.modelName).toBe('deepseek-reasoner')
+    expect(updated.llmApiKey).toBe('app-deepseek-v2')
+
+    repos.modelProfiles.delete(qwen.id)
+    expect(repos.modelProfiles.list().map((profile) => profile.id)).toEqual([deepseek.id])
+    expect(repos.modelProfiles.getActive()).toBeNull()
+  })
+
+  it('persists and reads back token usage on assistant messages', () => {
+    const db = createDatabase(path.join(tempDir, 'token-usage.sqlite'))
+    databases.push(db)
+    const repos = createRepositories(db)
+
+    const conversation = repos.conversations.create({
+      title: '对话',
+      folderId: null,
+      context: { type: 'free' }
+    })
+    repos.messages.create({
+      conversationId: conversation.id,
+      role: 'user',
+      content: '问题',
+      citations: []
+    })
+    repos.messages.create({
+      conversationId: conversation.id,
+      role: 'assistant',
+      content: '回答',
+      citations: [],
+      tokenUsage: { promptTokens: 100, completionTokens: 20, totalTokens: 120 }
+    })
+
+    const messages = repos.messages.listByConversation(conversation.id)
+    expect(messages).toHaveLength(2)
+    expect(messages[0].tokenUsage).toBeUndefined()
+    expect(messages[1].tokenUsage).toEqual({ promptTokens: 100, completionTokens: 20, totalTokens: 120 })
+  })
 })

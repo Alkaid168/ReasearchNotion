@@ -71,6 +71,7 @@ const api: DesktopApi = {
       ),
     cancelSend: (requestId: string) => ipcRenderer.invoke('conversations:cancelSend', { requestId }),
     exportMarkdown: (conversationId: string) => ipcRenderer.invoke('conversations:exportMarkdown', { conversationId }),
+    compressContext: (conversationId: string) => ipcRenderer.invoke('conversations:compressContext', { conversationId }),
     onSendProgress: (listener: (event: ConversationProgressEvent) => void) => {
       const handler = (_event: Electron.IpcRendererEvent, progress: ConversationProgressEvent) => listener(progress)
       ipcRenderer.on('conversations:sendProgress', handler)
@@ -79,6 +80,12 @@ const api: DesktopApi = {
   },
   messages: {
     list: (conversationId: string) => ipcRenderer.invoke('messages:list', { conversationId })
+  },
+  modelProfiles: {
+    list: () => ipcRenderer.invoke('modelProfiles:list'),
+    save: (input) => ipcRenderer.invoke('modelProfiles:save', input),
+    delete: (id) => ipcRenderer.invoke('modelProfiles:delete', { id }),
+    setActive: (id) => ipcRenderer.invoke('modelProfiles:setActive', { id })
   }
 }
 
