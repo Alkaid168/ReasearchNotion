@@ -535,4 +535,34 @@ describe('repositories', () => {
     expect(repos.modelProfiles.list().map((profile) => profile.id)).toEqual([deepseek.id])
     expect(repos.modelProfiles.getActive()).toBeNull()
   })
+
+  it('persists and reads back token usage on assistant messages', () => {
+    const db = createDatabase(path.join(tempDir, 'token-usage.sqlite'))
+    databases.push(db)
+    const repos = createRepositories(db)
+
+    const conversation = repos.conversations.create({
+      title: '对话',
+      folderId: null,
+      context: { type: 'free' }
+    })
+    repos.messages.create({
+      conversationId: conversation.id,
+      role: 'user',
+      content: '问题',
+      citations: []
+    })
+    repos.messages.create({
+      conversationId: conversation.id,
+      role: 'assistant',
+      content: '回答',
+      citations: [],
+      tokenUsage: { promptTokens: 100, completionTokens: 20, totalTokens: 120 }
+    })
+
+    const messages = repos.messages.listByConversation(conversation.id)
+    expect(messages).toHaveLength(2)
+    expect(messages[0].tokenUsage).toBeUndefined()
+    expect(messages[1].tokenUsage).toEqual({ promptTokens: 100, completionTokens: 20, totalTokens: 120 })
+  })
 })

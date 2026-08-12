@@ -84,12 +84,19 @@ export type Citation = {
   evidenceType?: 'retrieval' | 'tool' | 'metadata'
 }
 
+export type TokenUsage = {
+  promptTokens: number
+  completionTokens: number
+  totalTokens: number
+}
+
 export type Message = {
   id: string
   conversationId: string
   role: 'user' | 'assistant'
   content: string
   citations: Citation[]
+  tokenUsage?: TokenUsage
   createdAt: string
 }
 

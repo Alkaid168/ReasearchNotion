@@ -14,6 +14,7 @@ import type {
   ReadingState,
   ReadingStateUpdate,
   ReadingStatus,
+  TokenUsage,
   UserMemory,
   UserMemoryInput
 } from './types'
@@ -25,11 +26,12 @@ export type SendMessageOptions = {
 
 export type ConversationProgressEvent = {
   requestId: string
-  phase: 'tool' | 'answer' | 'delta' | 'done'
+  phase: 'tool' | 'answer' | 'delta' | 'done' | 'usage'
   label: string
   toolName?: string
   delta?: string
   replaceAnswer?: boolean
+  usage?: TokenUsage
 }
 
 export type ConversationExportResult = {

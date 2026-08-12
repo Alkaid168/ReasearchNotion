@@ -9,6 +9,7 @@ export function createDatabase(dbPath: string): AppDatabase {
   db.exec(schemaSql)
   ensureConversationFolderColumn(db)
   ensureDifyConversationIdColumn(db)
+  ensureTokenUsageColumn(db)
   ensureSortOrderColumn(db, 'conversation_folders', 'created_at ASC')
   ensureSortOrderColumn(db, 'conversations', 'updated_at DESC')
   return db
@@ -24,6 +25,12 @@ function ensureDifyConversationIdColumn(db: AppDatabase): void {
   const columns = db.pragma('table_info(conversations)') as Array<{ name: string }>
   if (columns.some((column) => column.name === 'dify_conversation_id')) return
   db.exec(`ALTER TABLE conversations ADD COLUMN dify_conversation_id TEXT`)
+}
+
+function ensureTokenUsageColumn(db: AppDatabase): void {
+  const columns = db.pragma('table_info(messages)') as Array<{ name: string }>
+  if (columns.some((column) => column.name === 'token_usage_json')) return
+  db.exec(`ALTER TABLE messages ADD COLUMN token_usage_json TEXT`)
 }
 
 function ensureSortOrderColumn(db: AppDatabase, tableName: 'conversation_folders' | 'conversations', orderBy: string): void {

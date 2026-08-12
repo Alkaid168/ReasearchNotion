@@ -1,4 +1,4 @@
-import type { Citation } from '../../shared/types'
+import type { Citation, TokenUsage } from '../../shared/types'
 import { DifyApiError } from './errors'
 import type { DifyAppInfo, DifyChatProgressEvent, DifyConnectionCheck, DifyDataset, SendChatInput, SendChatResult } from './types'
 
@@ -366,6 +366,7 @@ async function readStreamingChatResponse(response: FetchResponseLike, onProgress
   let emittedAnswer = ''
   let difyConversationId: string | null = null
   let citationSource: unknown = []
+  let capturedUsage: TokenUsage | undefined
   const toolCitations: Citation[] = []
   const decoder = new TextDecoder()
 
@@ -387,6 +388,18 @@ async function readStreamingChatResponse(response: FetchResponseLike, onProgress
       emittedAnswer = ''
     }
 
+    if (event.event === 'message_end') {
+      const metadata = objectValue(event.metadata)
+      const usageRaw = metadata ? objectValue(metadata.usage) : null
+      if (usageRaw) {
+        capturedUsage = {
+          promptTokens: Number(usageRaw.prompt_tokens ?? 0),
+          completionTokens: Number(usageRaw.completion_tokens ?? 0),
+          totalTokens: Number(usageRaw.total_tokens ?? 0)
+        }
+        onProgress?.({ phase: 'usage', label: 'token', usage: capturedUsage })
+      }
+    }
     emitStreamingProgress(event, onProgress)
     toolCitations.push(...citationsFromAgentThought(event))
 
@@ -430,7 +443,8 @@ async function readStreamingChatResponse(response: FetchResponseLike, onProgress
   return {
     answer: stripBoilerplate(stripReasoning(answer)),
     difyConversationId,
-    citations: uniqueCitations([...mapCitations(citationSource), ...toolCitations])
+    citations: uniqueCitations([...mapCitations(citationSource), ...toolCitations]),
+    usage: capturedUsage
   }
 }
 

@@ -14,7 +14,8 @@ import type {
   ModelProvider,
   Paper,
   PaperCard,
-  ReadingStatus
+  ReadingStatus,
+  TokenUsage
 } from '../../shared/types'
 
 function now(): string {
@@ -32,7 +33,7 @@ type CreateConversationInput = Pick<Conversation, 'title' | 'folderId' | 'contex
   conversationFolderId?: string | null
 }
 type ListConversationsOptions = { conversationFolderId?: string | null }
-type CreateMessageInput = Pick<Message, 'conversationId' | 'role' | 'content' | 'citations'>
+type CreateMessageInput = Pick<Message, 'conversationId' | 'role' | 'content' | 'citations' | 'tokenUsage'>
 
 export function createRepositories(db: Database.Database) {
   function nextFolderSortOrder(): number {
@@ -123,10 +124,16 @@ export function createRepositories(db: Database.Database) {
     return row ? mapConversation(row) : null
   }
 
-  function mapMessage(row: Omit<Message, 'citations'> & { citationsJson: string }): Message {
+  type MessageRow = Omit<Message, 'citations' | 'tokenUsage'> & {
+    citationsJson: string
+    tokenUsageJson: string | null
+  }
+
+  function mapMessage(row: MessageRow): Message {
     return {
       ...row,
-      citations: JSON.parse(row.citationsJson) as Citation[]
+      citations: JSON.parse(row.citationsJson) as Citation[],
+      tokenUsage: row.tokenUsageJson ? (JSON.parse(row.tokenUsageJson) as TokenUsage) : undefined
     }
   }
 
@@ -547,14 +554,16 @@ export function createRepositories(db: Database.Database) {
           role: input.role,
           content: input.content,
           citations: input.citations,
+          tokenUsage: input.tokenUsage,
           createdAt: timestamp
         }
         db.prepare(
-          `INSERT INTO messages (id, conversation_id, role, content, citations_json, created_at)
-           VALUES (@id, @conversationId, @role, @content, @citationsJson, @createdAt)`
+          `INSERT INTO messages (id, conversation_id, role, content, citations_json, token_usage_json, created_at)
+           VALUES (@id, @conversationId, @role, @content, @citationsJson, @tokenUsageJson, @createdAt)`
         ).run({
           ...row,
-          citationsJson: JSON.stringify(row.citations)
+          citationsJson: JSON.stringify(row.citations),
+          tokenUsageJson: row.tokenUsage ? JSON.stringify(row.tokenUsage) : null
         })
         db.prepare(`UPDATE conversations SET updated_at = ? WHERE id = ?`).run(timestamp, input.conversationId)
         return row
@@ -563,10 +572,11 @@ export function createRepositories(db: Database.Database) {
         const rows = db
           .prepare(
             `SELECT id, conversation_id as conversationId, role, content,
-                    citations_json as citationsJson, created_at as createdAt
+                    citations_json as citationsJson, token_usage_json as tokenUsageJson,
+                    created_at as createdAt
              FROM messages WHERE conversation_id = ? ORDER BY created_at ASC`
           )
-          .all(conversationId) as Array<Omit<Message, 'citations'> & { citationsJson: string }>
+          .all(conversationId) as MessageRow[]
         return rows.map(mapMessage)
       }
     },

@@ -501,7 +501,8 @@ void app.whenReady().then(async () => {
             conversationId,
             role: 'assistant',
             content: result.answer,
-            citations
+            citations,
+            tokenUsage: result.usage
           })
         } finally {
           if (progressRequestId && activeSendControllers.get(progressRequestId) === abortController) {
