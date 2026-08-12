@@ -9,7 +9,8 @@ const emptySettings: AppSettings = {
   difyAppApiKey: '',
   difyKnowledgeApiKey: '',
     deepseekApiKey: '',
-  defaultFolderId: null
+  defaultFolderId: null,
+  activeModelProfileId: null
 }
 
 const unconfiguredStatus: EnvironmentStatus = {
@@ -72,7 +73,8 @@ function createApiMock(status: EnvironmentStatus = unconfiguredStatus): DesktopA
       reorder: vi.fn(),
       sendMessage: vi.fn()
     },
-    messages: { list: vi.fn() }
+    messages: { list: vi.fn() },
+    modelProfiles: { list: vi.fn().mockResolvedValue([]), save: vi.fn(), delete: vi.fn(), setActive: vi.fn() }
   }
 }
 
@@ -105,7 +107,8 @@ describe('SettingsPage', () => {
         difyAppApiKey: 'app-key',
         difyKnowledgeApiKey: 'knowledge-key',
     deepseekApiKey: '',
-        defaultFolderId: null
+        defaultFolderId: null,
+        activeModelProfileId: null
       })
     })
   })
@@ -124,14 +127,15 @@ describe('SettingsPage', () => {
         difyAppApiKey: 'app-key',
         difyKnowledgeApiKey: 'knowledge-key',
     deepseekApiKey: '',
-        defaultFolderId: null
+        defaultFolderId: null,
+        activeModelProfileId: null
       })
     })
   })
 
   it('shows concise user-facing workspace status without implementation diagnostics', async () => {
     await renderPage()
-    const status = document.querySelector<HTMLElement>('.settings-status-panel')!
+    const status = document.querySelector<HTMLElement>('.settings-status-panel[aria-label="本地状态"]')!
 
     expect(status.querySelectorAll('.settings-status-card')).toHaveLength(7)
     expect(status.textContent).not.toContain('ResearchNotion Tool Agent')

@@ -9,6 +9,9 @@ import type {
   Folder,
   IndexStatus,
   Message,
+  ModelProfile,
+  ModelProfileInput,
+  ModelProvider,
   Paper,
   PaperCard,
   ReadingStatus
@@ -125,6 +128,45 @@ export function createRepositories(db: Database.Database) {
       ...row,
       citations: JSON.parse(row.citationsJson) as Citation[]
     }
+  }
+
+  type ModelProfileRow = {
+    id: string
+    provider: string
+    modelName: string
+    displayName: string
+    difyAppApiKey: string
+    contextWindowTokens: number
+    isActive: number
+    sortOrder: number
+    createdAt: string
+    updatedAt: string
+  }
+
+  const modelProfileSelect = `SELECT id, provider, model_name as modelName, display_name as displayName,
+        dify_app_api_key as difyAppApiKey, context_window_tokens as contextWindowTokens,
+        is_active as isActive, sort_order as sortOrder,
+        created_at as createdAt, updated_at as updatedAt
+ FROM model_profiles`
+
+  function mapModelProfile(row: ModelProfileRow): ModelProfile {
+    return {
+      id: row.id,
+      provider: row.provider as ModelProvider,
+      modelName: row.modelName,
+      displayName: row.displayName,
+      difyAppApiKey: row.difyAppApiKey,
+      contextWindowTokens: row.contextWindowTokens,
+      isActive: row.isActive === 1,
+      sortOrder: row.sortOrder,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt
+    }
+  }
+
+  function getModelProfile(profileId: string): ModelProfile | null {
+    const row = db.prepare(`${modelProfileSelect} WHERE id = ?`).get(profileId) as ModelProfileRow | undefined
+    return row ? mapModelProfile(row) : null
   }
 
   return {
@@ -526,6 +568,83 @@ export function createRepositories(db: Database.Database) {
           )
           .all(conversationId) as Array<Omit<Message, 'citations'> & { citationsJson: string }>
         return rows.map(mapMessage)
+      }
+    },
+    modelProfiles: {
+      // 注：dify_app_api_key 在 model_profiles 表中明文存储（DB 文件位于本机 userDataDir，
+      // 桌面应用场景；与 settings 表的 sealed 存储策略不同，这里优先实现简洁）。
+      list(): ModelProfile[] {
+        const rows = db
+          .prepare(`${modelProfileSelect} ORDER BY sort_order ASC, created_at ASC`)
+          .all() as ModelProfileRow[]
+        return rows.map(mapModelProfile)
+      },
+      getById(profileId: string): ModelProfile | null {
+        return getModelProfile(profileId)
+      },
+      getActive(): ModelProfile | null {
+        const row = db.prepare(`${modelProfileSelect} WHERE is_active = 1 LIMIT 1`).get() as
+          | ModelProfileRow
+          | undefined
+        return row ? mapModelProfile(row) : null
+      },
+      create(input: ModelProfileInput): ModelProfile {
+        const timestamp = now()
+        const profileId = id('model')
+        const next = db.prepare(`SELECT COALESCE(MAX(sort_order), -1) + 1 as next FROM model_profiles`).get() as {
+          next: number
+        }
+        db.prepare(
+          `INSERT INTO model_profiles
+             (id, provider, model_name, display_name, dify_app_api_key, context_window_tokens,
+              is_active, sort_order, created_at, updated_at)
+           VALUES (@id, @provider, @modelName, @displayName, @difyAppApiKey, @contextWindowTokens,
+                   0, @sortOrder, @createdAt, @updatedAt)`
+        ).run({
+          id: profileId,
+          provider: input.provider,
+          modelName: input.modelName,
+          displayName: input.displayName,
+          difyAppApiKey: input.difyAppApiKey,
+          contextWindowTokens: input.contextWindowTokens,
+          sortOrder: next.next,
+          createdAt: timestamp,
+          updatedAt: timestamp
+        })
+        const profile = getModelProfile(profileId)
+        if (!profile) throw new Error('模型档创建失败。')
+        return profile
+      },
+      update(input: ModelProfileInput): ModelProfile {
+        if (!input.id) throw new Error('模型档 id 缺失。')
+        db.prepare(
+          `UPDATE model_profiles SET provider = ?, model_name = ?, display_name = ?,
+                  dify_app_api_key = ?, context_window_tokens = ?, updated_at = ? WHERE id = ?`
+        ).run(
+          input.provider,
+          input.modelName,
+          input.displayName,
+          input.difyAppApiKey,
+          input.contextWindowTokens,
+          now(),
+          input.id
+        )
+        const profile = getModelProfile(input.id)
+        if (!profile) throw new Error('模型档不存在。')
+        return profile
+      },
+      delete(profileId: string): void {
+        db.prepare(`DELETE FROM model_profiles WHERE id = ?`).run(profileId)
+      },
+      setActive(profileId: string): ModelProfile {
+        const applyActive = db.transaction(() => {
+          db.prepare(`UPDATE model_profiles SET is_active = 0`).run()
+          db.prepare(`UPDATE model_profiles SET is_active = 1, updated_at = ? WHERE id = ?`).run(now(), profileId)
+        })
+        applyActive()
+        const profile = getModelProfile(profileId)
+        if (!profile) throw new Error('模型档不存在。')
+        return profile
       }
     }
   }

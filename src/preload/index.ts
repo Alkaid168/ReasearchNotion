@@ -79,6 +79,12 @@ const api: DesktopApi = {
   },
   messages: {
     list: (conversationId: string) => ipcRenderer.invoke('messages:list', { conversationId })
+  },
+  modelProfiles: {
+    list: () => ipcRenderer.invoke('modelProfiles:list'),
+    save: (input) => ipcRenderer.invoke('modelProfiles:save', input),
+    delete: (id) => ipcRenderer.invoke('modelProfiles:delete', { id }),
+    setActive: (id) => ipcRenderer.invoke('modelProfiles:setActive', { id })
   }
 }
 

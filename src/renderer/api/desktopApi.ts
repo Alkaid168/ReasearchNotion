@@ -4,7 +4,7 @@ import type {
   DesktopApi,
   SendMessageOptions
 } from '../../shared/ipcTypes'
-import type { AppSettings, ChatContext, ReadingStateUpdate, ReadingStatus, UserMemoryInput } from '../../shared/types'
+import type { AppSettings, ChatContext, ModelProfileInput, ReadingStateUpdate, ReadingStatus, UserMemoryInput } from '../../shared/types'
 
 declare global {
   interface Window {
@@ -87,5 +87,11 @@ export const desktopApi: DesktopApi = {
   },
   messages: {
     list: (conversationId: string) => getBridge().messages.list(conversationId)
+  },
+  modelProfiles: {
+    list: () => getBridge().modelProfiles.list(),
+    save: (input: ModelProfileInput) => getBridge().modelProfiles.save(input),
+    delete: (id: string) => getBridge().modelProfiles.delete(id),
+    setActive: (id: string) => getBridge().modelProfiles.setActive(id)
   }
 }

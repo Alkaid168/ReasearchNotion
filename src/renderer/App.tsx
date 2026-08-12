@@ -9,7 +9,7 @@ import { ChatPage } from './pages/ChatPage'
 import { KnowledgePage } from './pages/KnowledgePage'
 import { SettingsPage } from './pages/SettingsPage'
 import { readWorkspacePreferences, updateWorkspacePreferences } from './state/workspacePreferences'
-import type { AppSettings, Conversation } from '../shared/types'
+import type { AppSettings, Conversation, ModelProfile } from '../shared/types'
 
 type DifyStatus = {
   label: string
@@ -41,6 +41,8 @@ export function App(): JSX.Element {
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
   const [knowledgeRequest, setKnowledgeRequest] = useState<{ paperId?: string; folderId?: string; page?: number; nonce: number } | null>(null)
   const [difyStatus, setDifyStatus] = useState<DifyStatus>({ label: 'Dify 未配置', tone: 'neutral' })
+  const [modelProfiles, setModelProfiles] = useState<ModelProfile[]>([])
+  const activeModelProfile = modelProfiles.find((profile) => profile.isActive) ?? null
   const [toasts, setToasts] = useState<ToastItem[]>([])
   const toastSequence = useRef(0)
 
@@ -54,10 +56,22 @@ export function App(): JSX.Element {
     window.setTimeout(() => dismissToast(id), 4200)
   }, [dismissToast])
 
+  const handleActivateModel = useCallback(
+    async (id: string) => {
+      await desktopApi.modelProfiles.setActive(id)
+      const profiles = await desktopApi.modelProfiles.list()
+      setModelProfiles(profiles)
+      notify('已切换模型，新对话将使用所选模型。')
+    },
+    [notify]
+  )
+
   useEffect(() => {
     let alive = true
-    void desktopApi.settings.get().then((settings) => {
-      if (alive) setDifyStatus(statusFromSettings(settings))
+    void Promise.all([desktopApi.settings.get(), desktopApi.modelProfiles.list()]).then(([settings, profiles]) => {
+      if (!alive) return
+      setDifyStatus(statusFromSettings(settings))
+      setModelProfiles(profiles)
     })
     return () => {
       alive = false
@@ -189,6 +203,9 @@ export function App(): JSX.Element {
           selectedConversationFolderId={selectedConversationFolderId}
           onConversationCreated={onConversationCreated}
           onNotify={notify}
+          modelProfiles={modelProfiles}
+          activeModelProfile={activeModelProfile}
+          onActivateModel={handleActivateModel}
           onOpenCitation={(citation) => {
             if (!citation.paperId) return
             updateWorkspacePreferences({ activeTab: 'knowledge', knowledge: { activePaperId: citation.paperId } })
@@ -204,6 +221,9 @@ export function App(): JSX.Element {
           requestedPage={knowledgeRequest?.page}
           requestNonce={knowledgeRequest?.nonce}
           onNotify={notify}
+          modelProfiles={modelProfiles}
+          activeModelProfile={activeModelProfile}
+          onActivateModel={handleActivateModel}
         />
       ) : null}
       {activeTab === 'settings' ? (

@@ -5,6 +5,8 @@ import type {
   ConversationFolder,
   Folder,
   Message,
+  ModelProfile,
+  ModelProfileInput,
   Paper,
   PaperCard,
   PaperOutlineItem,
@@ -127,5 +129,11 @@ export type DesktopApi = {
   }
   messages: {
     list(conversationId: string): Promise<Message[]>
+  }
+  modelProfiles: {
+    list(): Promise<ModelProfile[]>
+    save(input: ModelProfileInput): Promise<ModelProfile>
+    delete(id: string): Promise<void>
+    setActive(id: string): Promise<ModelProfile>
   }
 }

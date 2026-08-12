@@ -22,7 +22,7 @@ import { createSettingsService } from './settings/settingsService'
 import { createMemoriesService } from './settings/memoriesService'
 import { ensureFolderDataset } from './workflows/ensureFolderDataset'
 import { importAndIndexPaper, reindexPaper } from './workflows/importAndIndexPaper'
-import type { AppSettings, ChatContext, Paper } from '../shared/types'
+import type { AppSettings, ChatContext, ModelProfile, ModelProfileInput, Paper } from '../shared/types'
 
 const isolatedUserDataDir = process.env.RESEARCH_NOTION_USER_DATA_DIR?.trim()
 if (isolatedUserDataDir) app.setPath('userData', isolatedUserDataDir)
@@ -201,6 +201,36 @@ void app.whenReady().then(async () => {
       repos,
       dify
     })
+  }
+
+  async function applyActiveProfile(profileId: string): Promise<ModelProfile> {
+    const profile = repos.modelProfiles.setActive(profileId)
+    const current = await settingsService.get()
+    await settingsService.save({
+      ...current,
+      difyAppApiKey: profile.difyAppApiKey,
+      activeModelProfileId: profile.id
+    })
+    // dify conversation_id 是 app-scoped，切档（换 Dify app）后旧线程会 404，必须清。
+    repos.conversations.clearDifyConversationIds()
+    return profile
+  }
+
+  // 首次启动：把现有 difyAppApiKey 导入为默认 DeepSeek 档，保证向后兼容。
+  // key 未变，不清 dify 线程，保留历史连续性。
+  if (repos.modelProfiles.list().length === 0) {
+    const seedSettings = await settingsService.get()
+    if (seedSettings.difyAppApiKey) {
+      const seeded = repos.modelProfiles.create({
+        provider: 'deepseek',
+        modelName: 'deepseek-chat',
+        displayName: 'DeepSeek Chat',
+        difyAppApiKey: seedSettings.difyAppApiKey,
+        contextWindowTokens: 64000
+      })
+      repos.modelProfiles.setActive(seeded.id)
+      await settingsService.save({ ...seedSettings, activeModelProfileId: seeded.id })
+    }
   }
 
   registerIpc({
@@ -500,6 +530,24 @@ void app.whenReady().then(async () => {
     },
     messages: {
       list: async (conversationId) => repos.messages.listByConversation(conversationId)
+    },
+    modelProfiles: {
+      list: async () => repos.modelProfiles.list(),
+      save: async (input: ModelProfileInput) => (input.id ? repos.modelProfiles.update(input) : repos.modelProfiles.create(input)),
+      delete: async (id: string) => {
+        const existing = repos.modelProfiles.getById(id)
+        const wasActive = existing?.isActive ?? false
+        repos.modelProfiles.delete(id)
+        if (!wasActive) return
+        const remaining = repos.modelProfiles.list()
+        if (remaining.length > 0) {
+          await applyActiveProfile(remaining[0].id)
+        } else {
+          const current = await settingsService.get()
+          await settingsService.save({ ...current, activeModelProfileId: null })
+        }
+      },
+      setActive: async (id: string) => applyActiveProfile(id)
     }
   })
 

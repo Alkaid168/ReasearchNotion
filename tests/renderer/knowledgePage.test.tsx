@@ -9,7 +9,8 @@ const emptySettings: AppSettings = {
   difyAppApiKey: '',
   difyKnowledgeApiKey: '',
     deepseekApiKey: '',
-  defaultFolderId: null
+  defaultFolderId: null,
+  activeModelProfileId: null
 }
 
 const folder: Folder = {
@@ -154,7 +155,8 @@ function createApiMock(): DesktopApi {
       })
     },
     conversations: { list: vi.fn().mockResolvedValue([]), create: vi.fn(), moveToFolder: vi.fn(), rename: vi.fn(), updateContext: vi.fn(), delete: vi.fn(), reorder: vi.fn(), sendMessage: vi.fn() },
-    messages: { list: vi.fn() }
+    messages: { list: vi.fn() },
+    modelProfiles: { list: vi.fn().mockResolvedValue([]), save: vi.fn(), delete: vi.fn(), setActive: vi.fn() }
   }
 }
 

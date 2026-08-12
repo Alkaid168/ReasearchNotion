@@ -99,6 +99,31 @@ export type AppSettings = {
   difyKnowledgeApiKey: string
   deepseekApiKey: string
   defaultFolderId: string | null
+  activeModelProfileId: string | null
+}
+
+export type ModelProvider = 'deepseek' | 'qwen' | 'zhipu'
+
+export type ModelProfile = {
+  id: string
+  provider: ModelProvider
+  modelName: string
+  displayName: string
+  difyAppApiKey: string
+  contextWindowTokens: number
+  isActive: boolean
+  sortOrder: number
+  createdAt: string
+  updatedAt: string
+}
+
+export type ModelProfileInput = {
+  id?: string
+  provider: ModelProvider
+  modelName: string
+  displayName: string
+  difyAppApiKey: string
+  contextWindowTokens: number
 }
 
 export type UserMemoryType = 'user' | 'preference' | 'feedback' | 'project' | 'reference'

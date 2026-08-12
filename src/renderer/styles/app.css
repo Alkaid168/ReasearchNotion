@@ -4274,3 +4274,201 @@ button {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.5; }
 }
+
+/* ============ 模型档选择器（composer 顶部 chip） ============ */
+.dock-model-row,
+.drawer-model-row {
+  display: flex;
+  width: 100%;
+  margin: 0 auto 8px;
+}
+
+.dock-model-row {
+  justify-content: center;
+  max-width: 768px;
+}
+
+.drawer-model-row {
+  justify-content: flex-start;
+  padding: 0 16px;
+  margin: 0 0 8px;
+  max-width: none;
+}
+
+.model-selector {
+  position: relative;
+}
+
+.model-selector-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid var(--rn-border, rgba(0, 0, 0, 0.1));
+  border-radius: 9999px;
+  background: var(--rn-surface, #ffffff);
+  color: var(--rn-text, #0d0d0d);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.model-selector-chip:hover {
+  background: var(--rn-hover, rgba(0, 0, 0, 0.05));
+}
+
+.model-selector-label {
+  font-weight: 500;
+}
+
+.model-selector-dropdown {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  min-width: 220px;
+  background: var(--rn-surface, #ffffff);
+  border: 1px solid var(--rn-border, rgba(0, 0, 0, 0.1));
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+  padding: 6px;
+  z-index: 20;
+}
+
+.model-selector-group + .model-selector-group {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--rn-border, rgba(0, 0, 0, 0.06));
+}
+
+.model-selector-group-label {
+  padding: 6px 10px 4px;
+  font-size: 11px;
+  color: var(--rn-muted, rgba(13, 13, 13, 0.55));
+  letter-spacing: 0.02em;
+}
+
+.model-selector-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  background: transparent;
+  color: var(--rn-text, #0d0d0d);
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: left;
+  font-size: 13px;
+}
+
+.model-selector-option span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.model-selector-option small {
+  font-size: 11px;
+  color: var(--rn-muted, rgba(13, 13, 13, 0.5));
+}
+
+.model-selector-option:hover {
+  background: var(--rn-hover, rgba(0, 0, 0, 0.05));
+}
+
+.model-selector-option.active {
+  color: var(--rn-text, #0d0d0d);
+}
+
+/* ============ 设置页：模型档卡片列表 ============ */
+.settings-model-provider-group {
+  margin-top: 16px;
+}
+
+.settings-model-provider-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 0 8px;
+  border-bottom: 1px solid var(--rn-border, rgba(0, 0, 0, 0.06));
+  margin-bottom: 10px;
+}
+
+.settings-model-provider-head strong {
+  font-size: 13px;
+  color: var(--rn-text, #0d0d0d);
+}
+
+.settings-model-empty {
+  font-size: 12px;
+  color: var(--rn-muted, rgba(13, 13, 13, 0.5));
+  padding: 8px 0;
+  margin: 0;
+}
+
+.settings-model-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settings-model-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border: 1px solid var(--rn-border, rgba(0, 0, 0, 0.1));
+  border-radius: 8px;
+  background: var(--rn-surface, #ffffff);
+}
+
+.settings-model-card.active {
+  border-color: var(--rn-text, #0d0d0d);
+}
+
+.settings-model-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.settings-model-info strong {
+  display: block;
+  font-size: 13px;
+  color: var(--rn-text, #0d0d0d);
+}
+
+.settings-model-info small {
+  display: block;
+  font-size: 11px;
+  color: var(--rn-muted, rgba(13, 13, 13, 0.5));
+}
+
+.settings-model-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1px solid var(--rn-border, rgba(0, 0, 0, 0.2));
+  background: transparent;
+}
+
+.settings-model-dot.on {
+  background: var(--rn-text, #0d0d0d);
+  border-color: var(--rn-text, #0d0d0d);
+}
+
+.settings-model-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.settings-model-active-tag {
+  font-size: 11px;
+  color: var(--rn-muted, rgba(13, 13, 13, 0.55));
+  padding: 2px 8px;
+  border: 1px solid var(--rn-border, rgba(0, 0, 0, 0.1));
+  border-radius: 9999px;
+}

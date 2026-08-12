@@ -488,4 +488,51 @@ describe('repositories', () => {
 
     expect(columns.map((column) => column.name)).toContain('dify_conversation_id')
   })
+
+  it('manages model profiles with a single active flag', () => {
+    const db = createDatabase(path.join(tempDir, 'model-profiles.sqlite'))
+    databases.push(db)
+    const repos = createRepositories(db)
+
+    expect(repos.modelProfiles.list()).toEqual([])
+    expect(repos.modelProfiles.getActive()).toBeNull()
+
+    const deepseek = repos.modelProfiles.create({
+      provider: 'deepseek',
+      modelName: 'deepseek-chat',
+      displayName: 'DeepSeek Chat',
+      difyAppApiKey: 'app-deepseek',
+      contextWindowTokens: 64000
+    })
+    const qwen = repos.modelProfiles.create({
+      provider: 'qwen',
+      modelName: 'qwen-max',
+      displayName: 'Qwen Max',
+      difyAppApiKey: 'app-qwen',
+      contextWindowTokens: 32000
+    })
+
+    expect(deepseek.isActive).toBe(false)
+    expect(repos.modelProfiles.list().map((profile) => profile.id)).toEqual([deepseek.id, qwen.id])
+
+    const activated = repos.modelProfiles.setActive(qwen.id)
+    expect(activated.isActive).toBe(true)
+    expect(repos.modelProfiles.getActive()?.id).toBe(qwen.id)
+    expect(repos.modelProfiles.getById(deepseek.id)?.isActive).toBe(false)
+
+    const updated = repos.modelProfiles.update({
+      id: deepseek.id,
+      provider: 'deepseek',
+      modelName: 'deepseek-reasoner',
+      displayName: 'DeepSeek Reasoner',
+      difyAppApiKey: 'app-deepseek-v2',
+      contextWindowTokens: 64000
+    })
+    expect(updated.modelName).toBe('deepseek-reasoner')
+    expect(updated.difyAppApiKey).toBe('app-deepseek-v2')
+
+    repos.modelProfiles.delete(qwen.id)
+    expect(repos.modelProfiles.list().map((profile) => profile.id)).toEqual([deepseek.id])
+    expect(repos.modelProfiles.getActive()).toBeNull()
+  })
 })

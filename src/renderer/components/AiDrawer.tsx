@@ -3,8 +3,9 @@ import { ArrowUp, Check, Copy, Lightbulb, MessageSquare, Square, X } from 'lucid
 import { desktopApi } from '../api/desktopApi'
 import { AcademicMarkdown } from './AcademicMarkdown'
 import { CitationStatus } from './CitationStatus'
+import { ModelSelector } from './ModelSelector'
 import { userFacingSendError } from '../utils/userFacingError'
-import type { Citation, Message, Paper } from '../../shared/types'
+import type { Citation, Message, ModelProfile, Paper } from '../../shared/types'
 
 type AiDrawerProps = {
   open: boolean
@@ -17,6 +18,9 @@ type AiDrawerProps = {
   onClearEmphasisContext: () => void
   onClose: () => void
   onOpenCitation?: (citation: Citation) => void
+  modelProfiles?: ModelProfile[]
+  activeModelProfile?: ModelProfile | null
+  onActivateModel?: (id: string) => void | Promise<void>
 }
 
 export type AiDrawerSession = {
@@ -60,7 +64,10 @@ export function AiDrawer({
   onWidthChange,
   onClearEmphasisContext,
   onClose,
-  onOpenCitation
+  onOpenCitation,
+  modelProfiles,
+  activeModelProfile,
+  onActivateModel
 }: AiDrawerProps): JSX.Element | null {
   const [sending, setSending] = useState(false)
   const [progressIndex, setProgressIndex] = useState(0)
@@ -298,6 +305,17 @@ export function AiDrawer({
       ) : null}
       {sending ? <DrawerProgress activeIndex={progressIndex} startedAt={progressStartedAt} detail={progressDetail} toolCalls={toolCalls} /> : null}
 
+      {modelProfiles && modelProfiles.length > 0 ? (
+        <div className="drawer-model-row">
+          <ModelSelector
+            profiles={modelProfiles}
+            activeProfile={activeModelProfile ?? null}
+            onActivate={(id) => {
+              if (onActivateModel) void onActivateModel(id)
+            }}
+          />
+        </div>
+      ) : null}
       <div className="drawer-quick-actions" aria-label="快捷操作">
         {(emphasisContext ? drawerQuickActions.selection : drawerQuickActions.full).map((action) => (
           <button

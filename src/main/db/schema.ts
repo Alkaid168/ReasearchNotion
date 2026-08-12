@@ -85,4 +85,17 @@ CREATE TABLE IF NOT EXISTS user_memories (
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS model_profiles (
+  id TEXT PRIMARY KEY,
+  provider TEXT NOT NULL CHECK(provider IN ('deepseek','qwen','zhipu')),
+  model_name TEXT NOT NULL,
+  display_name TEXT NOT NULL,
+  dify_app_api_key TEXT NOT NULL,
+  context_window_tokens INTEGER NOT NULL DEFAULT 64000,
+  is_active INTEGER NOT NULL DEFAULT 0,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
 `

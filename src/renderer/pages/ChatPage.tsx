@@ -4,8 +4,9 @@ import { desktopApi } from '../api/desktopApi'
 import researchNotionMark from '../assets/research-notion-mark.svg'
 import { AcademicMarkdown } from '../components/AcademicMarkdown'
 import { CitationStatus } from '../components/CitationStatus'
+import { ModelSelector } from '../components/ModelSelector'
 import { userFacingSendError } from '../utils/userFacingError'
-import type { ChatContext, Citation, Conversation, Folder, Message, Paper } from '../../shared/types'
+import type { ChatContext, Citation, Conversation, Folder, Message, ModelProfile, Paper } from '../../shared/types'
 
 type ChatPageProps = {
   selectedConversationId?: string | null
@@ -13,6 +14,9 @@ type ChatPageProps = {
   onConversationCreated?: (conversation: Conversation) => void
   onNotify?: (message: string, tone?: 'success' | 'error') => void
   onOpenCitation?: (citation: Citation) => void
+  modelProfiles?: ModelProfile[]
+  activeModelProfile?: ModelProfile | null
+  onActivateModel?: (id: string) => void | Promise<void>
 }
 
 type ContextOption = {
@@ -74,7 +78,10 @@ export function ChatPage({
   selectedConversationFolderId = null,
   onConversationCreated,
   onNotify,
-  onOpenCitation
+  onOpenCitation,
+  modelProfiles,
+  activeModelProfile,
+  onActivateModel
 }: ChatPageProps): JSX.Element {
   const [conversationId, setConversationId] = useState<string | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
@@ -318,6 +325,19 @@ export function ChatPage({
     />
   )
 
+  const modelSelectorRow =
+    modelProfiles && modelProfiles.length > 0 ? (
+      <div className="dock-model-row">
+        <ModelSelector
+          profiles={modelProfiles}
+          activeProfile={activeModelProfile ?? null}
+          onActivate={(id) => {
+            if (onActivateModel) void onActivateModel(id)
+          }}
+        />
+      </div>
+    ) : null
+
   const hasTimeline = messages.length > 0 || sending
 
   return (
@@ -381,6 +401,7 @@ export function ChatPage({
           </div>
           <h1>今天研究点什么？</h1>
           <Suggestions onSelect={setDraft} />
+          {modelSelectorRow}
           {composer}
         </section>
       )}
@@ -402,6 +423,7 @@ export function ChatPage({
               </button>
             </div>
           ) : null}
+          {modelSelectorRow}
           {composer}
         </section>
       ) : null}
