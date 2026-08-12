@@ -223,10 +223,10 @@ void app.whenReady().then(async () => {
     if (seedSettings.difyAppApiKey) {
       const seeded = repos.modelProfiles.create({
         provider: 'deepseek',
-        modelName: 'deepseek-chat',
-        displayName: 'DeepSeek Chat',
+        modelName: 'deepseek-v4-flash',
+        displayName: 'DeepSeek V4 Flash',
         difyAppApiKey: seedSettings.difyAppApiKey,
-        contextWindowTokens: 64000
+        contextWindowTokens: 1048576
       })
       repos.modelProfiles.setActive(seeded.id)
       await settingsService.save({ ...seedSettings, activeModelProfileId: seeded.id })
