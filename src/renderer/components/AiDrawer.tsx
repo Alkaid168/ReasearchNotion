@@ -5,6 +5,7 @@ import { AcademicMarkdown } from './AcademicMarkdown'
 import { CitationStatus } from './CitationStatus'
 import { ModelSelector } from './ModelSelector'
 import { userFacingSendError } from '../utils/userFacingError'
+import { formatTokenCount } from '../utils/formatToken'
 import type { Citation, Message, ModelProfile, Paper, TokenUsage } from '../../shared/types'
 
 type AiDrawerProps = {
@@ -377,7 +378,7 @@ export function AiDrawer({
             className={`token-counter ${tokenUsage.totalTokens / activeModelProfile.contextWindowTokens >= 0.8 ? 'danger' : ''}`}
             title={`提示 ${tokenUsage.promptTokens} · 补全 ${tokenUsage.completionTokens}`}
           >
-            上下文 {(tokenUsage.totalTokens / 1000).toFixed(1)}k / {(activeModelProfile.contextWindowTokens / 1000).toFixed(0)}k
+            上下文 {formatTokenCount(tokenUsage.totalTokens)} / {formatTokenCount(activeModelProfile.contextWindowTokens)}
           </span>
         </div>
       ) : null}

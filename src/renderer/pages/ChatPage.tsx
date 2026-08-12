@@ -6,6 +6,7 @@ import { AcademicMarkdown } from '../components/AcademicMarkdown'
 import { CitationStatus } from '../components/CitationStatus'
 import { ModelSelector } from '../components/ModelSelector'
 import { userFacingSendError } from '../utils/userFacingError'
+import { formatTokenCount } from '../utils/formatToken'
 import type { ChatContext, Citation, Conversation, Folder, Message, ModelProfile, Paper, TokenUsage } from '../../shared/types'
 
 type ChatPageProps = {
@@ -612,7 +613,7 @@ function Composer({
             className={`token-counter ${tokenUsage.totalTokens / contextWindowTokens >= 0.8 ? 'danger' : ''}`}
             title={`提示 ${tokenUsage.promptTokens} · 补全 ${tokenUsage.completionTokens}`}
           >
-            {(tokenUsage.totalTokens / 1000).toFixed(1)}k / {(contextWindowTokens / 1000).toFixed(0)}k
+            {formatTokenCount(tokenUsage.totalTokens)} / {formatTokenCount(contextWindowTokens)}
           </span>
         ) : null}
       </div>
