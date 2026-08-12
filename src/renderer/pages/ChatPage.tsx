@@ -1,16 +1,20 @@
 import { useEffect, useMemo, useRef, useState, type JSX } from 'react'
-import { ArrowDown, ArrowUp, BookOpen, Check, Copy, Download, GitCompare, LibraryBig, Lightbulb, ListChecks, Quote, RotateCcw, Square } from 'lucide-react'
+import { ArrowDown, ArrowUp, BookOpen, BrainCircuit, Check, ChevronDown, ChevronUp, Copy, Download, ExternalLink, GitCompare, LibraryBig, Lightbulb, ListChecks, Quote, RotateCcw, Square, X } from 'lucide-react'
 import { desktopApi } from '../api/desktopApi'
 import researchNotionMark from '../assets/research-notion-mark.svg'
 import { AcademicMarkdown } from '../components/AcademicMarkdown'
 import { CitationStatus } from '../components/CitationStatus'
+import { PaperReader } from '../components/PaperReader'
 import { userFacingSendError } from '../utils/userFacingError'
-import type { ChatContext, Citation, Conversation, Folder, Message, Paper } from '../../shared/types'
+import { buildResearchProcess, researchPhaseForProgress } from '../../shared/researchProcess'
+import type { ConversationProgressEvent } from '../../shared/ipcTypes'
+import type { ChatContext, Citation, Conversation, Folder, Message, Paper, ResearchProcess, ResearchProcessPhase } from '../../shared/types'
 
 type ChatPageProps = {
   selectedConversationId?: string | null
   selectedConversationFolderId?: string | null
   onConversationCreated?: (conversation: Conversation) => void
+  onStartNewConversation?: () => void
   onNotify?: (message: string, tone?: 'success' | 'error') => void
   onOpenCitation?: (citation: Citation) => void
 }
@@ -21,7 +25,7 @@ type ContextOption = {
   context: ChatContext
 }
 
-type SendProgressStep = 'prepare' | 'context' | 'dify' | 'save'
+type SendProgressStep = ResearchProcessPhase
 
 type SendProgress = {
   step: SendProgressStep
@@ -34,12 +38,36 @@ type StreamingAnswer = {
   content: string
 } | null
 
+type LiveThinking = {
+  requestId: string
+  startedAt: number
+  question: string
+  context: ChatContext
+  thoughts: string[]
+  events: ConversationProgressEvent[]
+} | null
+
+type CitationPaperSource = Awaited<ReturnType<typeof desktopApi.papers.read>>
+
+type CitationPanelState = {
+  citation: Citation
+  source: CitationPaperSource | null
+  loading: boolean
+  error: string | null
+  nonce: number
+} | null
+
 const progressSteps: Array<{ step: SendProgressStep; label: string }> = [
-  { step: 'prepare', label: '准备对话' },
-  { step: 'context', label: '锁定上下文' },
-  { step: 'dify', label: 'Dify 检索与生成' },
-  { step: 'save', label: '写入回答' }
+  { step: 'scope', label: '确认论文范围' },
+  { step: 'search', label: '检索论文' },
+  { step: 'read', label: '读取原文与页码' },
+  { step: 'answer', label: '生成回答' },
+  { step: 'verify', label: '核对引用' }
 ]
+
+function progressStepForEvent(event: ConversationProgressEvent): SendProgressStep {
+  return researchPhaseForProgress(event)
+}
 
 const freeContext: ChatContext = { type: 'free' }
 
@@ -79,6 +107,7 @@ export function ChatPage({
   selectedConversationId,
   selectedConversationFolderId = null,
   onConversationCreated,
+  onStartNewConversation,
   onNotify,
   onOpenCitation
 }: ChatPageProps): JSX.Element {
@@ -87,16 +116,21 @@ export function ChatPage({
   const [draft, setDraft] = useState('')
   const [sending, setSending] = useState(false)
   const [sendProgress, setSendProgress] = useState<SendProgress>(null)
+  const [liveResearchEvents, setLiveResearchEvents] = useState<ConversationProgressEvent[]>([])
   const [streamingAnswer, setStreamingAnswer] = useState<StreamingAnswer>(null)
+  const [liveThinking, setLiveThinking] = useState<LiveThinking>(null)
   const [sendError, setSendError] = useState<string | null>(null)
   const [selectedContext, setSelectedContext] = useState<ChatContext>(freeContext)
   const [availableFolders, setAvailableFolders] = useState<Folder[]>([])
   const [availablePapers, setAvailablePapers] = useState<Paper[]>([])
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null)
+  const [expandedProcessIds, setExpandedProcessIds] = useState<Set<string>>(() => new Set())
+  const [citationPanel, setCitationPanel] = useState<CitationPanelState>(null)
   const [activeProgressRequestId, setActiveProgressRequestId] = useState<string | null>(null)
   const [followLatest, setFollowLatest] = useState(true)
   const [showJumpToLatest, setShowJumpToLatest] = useState(false)
   const messageListRef = useRef<HTMLElement | null>(null)
+  const citationRequestRef = useRef(0)
 
   const contextOptions = useMemo(() => {
     const folderOptions = availableFolders.map((folder) => ({
@@ -104,9 +138,10 @@ export function ChatPage({
       label: folder.name,
       context: folderContext(folder)
     }))
+    const folderNames = new Map(availableFolders.map((folder) => [folder.id, folder.name]))
     const paperOptions = availablePapers.map((paper) => ({
       value: contextValue(paperContext(paper)),
-      label: paper.title,
+      label: `${folderNames.get(paper.folderId) ?? '知识库'} / ${paper.title}`,
       context: paperContext(paper)
     }))
     return { folderOptions, paperOptions }
@@ -135,9 +170,14 @@ export function ChatPage({
       setDraft('')
       setSendError(null)
       setStreamingAnswer(null)
+      setLiveThinking(null)
+      setLiveResearchEvents([])
+      setExpandedProcessIds(new Set())
+      setCitationPanel(null)
       setSelectedContext(freeContext)
       return
     }
+    if (selectedConversationId === conversationId) return
 
     let alive = true
     void Promise.all([desktopApi.messages.list(selectedConversationId), desktopApi.conversations.list()]).then(
@@ -148,6 +188,13 @@ export function ChatPage({
         setDraft('')
         setSendError(null)
         setStreamingAnswer(null)
+        setLiveThinking(null)
+        setLiveResearchEvents([])
+        const latestThinkingMessage = [...rows]
+          .reverse()
+          .find((message) => message.role === 'assistant' && message.researchProcess)
+        setExpandedProcessIds(latestThinkingMessage ? new Set([latestThinkingMessage.id]) : new Set())
+        setCitationPanel(null)
         setSelectedContext(conversations.find((conversation) => conversation.id === selectedConversationId)?.context ?? freeContext)
       }
     )
@@ -183,13 +230,39 @@ export function ChatPage({
     } else {
       setShowJumpToLatest(true)
     }
-  }, [messages.length, streamingAnswer?.content])
+  }, [messages.length, streamingAnswer?.content, liveThinking?.thoughts.length, liveThinking?.events.length])
 
   async function copyAnswer(message: Message): Promise<void> {
     if (!navigator.clipboard?.writeText) return
     await navigator.clipboard.writeText(message.content)
     setCopiedMessageId(message.id)
     onNotify?.('回答已复制', 'success')
+  }
+
+  async function openCitationPanel(citation: Citation): Promise<void> {
+    if (!citation.paperId) {
+      onOpenCitation?.(citation)
+      return
+    }
+
+    const requestId = citationRequestRef.current + 1
+    citationRequestRef.current = requestId
+    setCitationPanel({ citation, source: null, loading: true, error: null, nonce: requestId })
+
+    try {
+      const source = await desktopApi.papers.read(citation.paperId)
+      if (citationRequestRef.current !== requestId) return
+      setCitationPanel({ citation, source, loading: false, error: null, nonce: requestId })
+    } catch (error) {
+      if (citationRequestRef.current !== requestId) return
+      setCitationPanel({
+        citation,
+        source: null,
+        loading: false,
+        error: error instanceof Error ? error.message : '无法读取论文原文',
+        nonce: requestId
+      })
+    }
   }
 
   async function exportConversation(): Promise<void> {
@@ -202,22 +275,49 @@ export function ChatPage({
     }
   }
 
-  async function send(): Promise<void> {
-    const content = draft.trim()
+  async function send(regenerate?: { messageId: string; content: string }): Promise<void> {
+    const content = (regenerate?.content ?? draft).trim()
     if (!content || sending) return
 
+    const processStartedAt = Date.now()
+    const observedProgressEvents: ConversationProgressEvent[] = []
     setSending(true)
-    setSendProgress({ step: conversationId ? 'context' : 'prepare', startedAt: Date.now() })
+    setSendProgress({ step: 'scope', startedAt: processStartedAt })
+    setLiveResearchEvents([])
+    setLiveThinking(null)
     setSendError(null)
-    setDraft('')
+    if (!regenerate) setDraft('')
     let id = conversationId
     let createdConversation: Conversation | null = null
     let optimisticMessageId: string | null = null
     const progressRequestId = desktopApi.conversations.onSendProgress ? createProgressRequestId() : null
     setActiveProgressRequestId(progressRequestId)
+    if (progressRequestId) {
+      setLiveThinking({
+        requestId: progressRequestId,
+        startedAt: processStartedAt,
+        question: content,
+        context: selectedContext,
+        thoughts: [],
+        events: []
+      })
+    }
     const unsubscribeProgress = progressRequestId
       ? desktopApi.conversations.onSendProgress?.((event) => {
           if (event.requestId !== progressRequestId) return
+          observedProgressEvents.push(event)
+          if (event.phase !== 'delta') setLiveResearchEvents((current) => [...current, event])
+          if (event.phase === 'thought' || event.phase === 'tool') {
+            setLiveThinking((current) => {
+              if (!current || current.requestId !== progressRequestId) return current
+              const thoughts = event.phase === 'thought' && event.thought?.trim()
+                ? current.thoughts.includes(event.thought.trim())
+                  ? current.thoughts
+                  : [...current.thoughts, event.thought.trim()]
+                : current.thoughts
+              return { ...current, thoughts, events: [...current.events, event] }
+            })
+          }
           if (event.phase === 'delta') {
             setStreamingAnswer((current) => ({
               requestId: progressRequestId,
@@ -225,7 +325,7 @@ export function ChatPage({
             }))
           }
           setSendProgress((current) => ({
-            step: event.phase === 'done' ? 'save' : 'dify',
+            step: progressStepForEvent(event),
             startedAt: current?.startedAt ?? Date.now(),
             detail: event.label
           }))
@@ -233,7 +333,7 @@ export function ChatPage({
       : undefined
     try {
       if (!id) {
-        setSendProgress((current) => ({ step: 'prepare', startedAt: current?.startedAt ?? Date.now() }))
+        setSendProgress((current) => ({ step: 'scope', startedAt: current?.startedAt ?? processStartedAt }))
         const conversation = await desktopApi.conversations.create({
           title: content.slice(0, 24),
           folderId: null,
@@ -245,41 +345,82 @@ export function ChatPage({
         createdConversation = conversation
       }
 
-      setSendProgress((current) => ({ step: 'context', startedAt: current?.startedAt ?? Date.now() }))
-      const userMessage: Message = {
-        id: `local-${Date.now()}`,
-        conversationId: id,
-        role: 'user',
-        content,
-        citations: [],
-        createdAt: new Date().toISOString()
+      setSendProgress((current) => ({ step: 'scope', startedAt: current?.startedAt ?? processStartedAt }))
+      if (!regenerate) {
+        const userMessage: Message = {
+          id: `local-${Date.now()}`,
+          conversationId: id,
+          role: 'user',
+          content,
+          citations: [],
+          createdAt: new Date().toISOString()
+        }
+        optimisticMessageId = userMessage.id
+        setMessages((current) => [...current, userMessage])
       }
-      optimisticMessageId = userMessage.id
-      setMessages((current) => [...current, userMessage])
 
-      setSendProgress((current) => ({ step: 'dify', startedAt: current?.startedAt ?? Date.now() }))
+      setSendProgress((current) => ({ step: 'search', startedAt: current?.startedAt ?? processStartedAt }))
+      const sendOptions = {
+        ...(progressRequestId ? { progressRequestId } : {}),
+        ...(regenerate ? { regenerateMessageId: regenerate.messageId } : {})
+      }
       const assistant = await desktopApi.conversations.sendMessage(
         id,
         content,
-        progressRequestId ? { progressRequestId } : undefined
+        Object.keys(sendOptions).length ? sendOptions : undefined
       )
-      setSendProgress((current) => ({ step: 'save', startedAt: current?.startedAt ?? Date.now() }))
+      setSendProgress((current) => ({ step: 'verify', startedAt: current?.startedAt ?? processStartedAt }))
       setStreamingAnswer(null)
-      setMessages((current) => [...current, assistant])
+      const assistantWithProcess: Message = assistant.researchProcess
+        ? assistant
+        : {
+            ...assistant,
+            researchProcess: buildResearchProcess({
+              context: selectedContext,
+              events: observedProgressEvents,
+              citations: assistant.citations,
+              durationMs: Date.now() - processStartedAt,
+              question: content,
+              answer: assistant.content
+            })
+          }
+      setMessages((current) => regenerate
+        ? current.map((message) => (message.id === regenerate.messageId ? assistantWithProcess : message))
+        : [...current, assistantWithProcess]
+      )
+      if (assistantWithProcess.researchProcess) {
+        setExpandedProcessIds((current) => new Set(current).add(assistantWithProcess.id))
+      }
       if (createdConversation) onConversationCreated?.(createdConversation)
     } catch (error) {
       setStreamingAnswer(null)
       if (optimisticMessageId) {
         setMessages((current) => current.filter((message) => message.id !== optimisticMessageId))
       }
-      setDraft(content)
+      if (!regenerate) setDraft(content)
       setSendError(userFacingSendError(error))
     } finally {
       unsubscribeProgress?.()
       setActiveProgressRequestId(null)
       setSending(false)
       setSendProgress(null)
+      setLiveResearchEvents([])
+      setLiveThinking(null)
     }
+  }
+
+  function regenerateAnswer(message: Message): void {
+    if (sending || message.role !== 'assistant') return
+    const messageIndex = messages.findIndex((candidate) => candidate.id === message.id)
+    const previousUserMessage = messages
+      .slice(0, messageIndex)
+      .reverse()
+      .find((candidate) => candidate.role === 'user')
+    if (!previousUserMessage) {
+      setSendError('找不到这条回答对应的问题，无法重新生成。')
+      return
+    }
+    void send({ messageId: message.id, content: previousUserMessage.content })
   }
 
   const composer = (
@@ -290,6 +431,7 @@ export function ChatPage({
       selectedContext={selectedContext}
       contextOptions={contextOptions}
       disabledContext={Boolean(conversationId)}
+      onStartNewConversation={onStartNewConversation}
       onContextChange={setSelectedContext}
       onDraftChange={(value) => {
         setDraft(value)
@@ -306,7 +448,7 @@ export function ChatPage({
   const hasTimeline = messages.length > 0 || sending
 
   return (
-    <main className={hasTimeline ? 'chat-page has-messages' : 'chat-page'}>
+    <main className={`${hasTimeline ? 'chat-page has-messages' : 'chat-page'}${citationPanel ? ' citation-panel-open' : ''}`}>
       {hasTimeline ? (
         <>
         {conversationId ? (
@@ -317,13 +459,42 @@ export function ChatPage({
         <section ref={messageListRef} className="message-list" aria-label="对话消息" onScroll={handleMessageListScroll}>
           {messages.map((message) => (
             <article key={message.id} className={`message ${message.role}`}>
-              <div className="markdown-content">
-                <AcademicMarkdown>{message.content}</AcademicMarkdown>
-              </div>
               {message.role === 'assistant' ? (
                 <>
-                  <CitationStatus messageId={message.id} citations={message.citations} onOpenCitation={onOpenCitation} />
+                  {message.researchProcess ? (
+                    <AnswerProcessDisclosure
+                      record={message.researchProcess}
+                      expanded={expandedProcessIds.has(message.id)}
+                      onToggle={() => {
+                        setExpandedProcessIds((current) => {
+                          const next = new Set(current)
+                          if (next.has(message.id)) next.delete(message.id)
+                          else next.add(message.id)
+                          return next
+                        })
+                      }}
+                    />
+                  ) : null}
+                  <div className="markdown-content">
+                    <AcademicMarkdown>{message.content}</AcademicMarkdown>
+                  </div>
+                  <CitationStatus
+                    messageId={message.id}
+                    citations={message.citations}
+                    onOpenCitation={(citation) => void openCitationPanel(citation)}
+                  />
                   <div className="message-actions">
+                    {message.id === [...messages].reverse().find((candidate) => candidate.role === 'assistant')?.id ? (
+                      <button
+                        type="button"
+                        aria-label="重新生成回答"
+                        title="重新生成"
+                        disabled={sending}
+                        onClick={() => regenerateAnswer(message)}
+                      >
+                        <RotateCcw size={14} aria-hidden="true" />
+                      </button>
+                    ) : null}
                     <button
                       type="button"
                       aria-label={copiedMessageId === message.id ? '已复制' : '复制回答'}
@@ -334,8 +505,16 @@ export function ChatPage({
                   </div>
                 </>
               ) : null}
+              {message.role !== 'assistant' ? (
+                <div className="markdown-content">
+                  <AcademicMarkdown>{message.content}</AcademicMarkdown>
+                </div>
+              ) : null}
             </article>
           ))}
+          {sending && liveThinking ? (
+            <LiveThinkingDisclosure state={liveThinking} />
+          ) : null}
           {streamingAnswer?.content ? (
             <article className="message assistant streaming" aria-live="polite">
               <div className="markdown-content">
@@ -343,9 +522,9 @@ export function ChatPage({
               </div>
             </article>
           ) : null}
-          {sending ? (
+          {sending && !liveThinking ? (
             <div className="timeline-progress">
-              <AgentProgress progress={sendProgress} />
+              <AgentProgress progress={sendProgress} events={liveResearchEvents} />
             </div>
           ) : null}
           <div className="message-list-end" aria-hidden="true" />
@@ -367,7 +546,165 @@ export function ChatPage({
           <ArrowDown size={16} aria-hidden="true" />
         </button>
       ) : null}
+      {citationPanel ? (
+        <CitationSourcePanel
+          state={citationPanel}
+          onClose={() => {
+            citationRequestRef.current += 1
+            setCitationPanel(null)
+          }}
+          onOpenFull={onOpenCitation ? () => onOpenCitation(citationPanel.citation) : undefined}
+        />
+      ) : null}
     </main>
+  )
+}
+
+function AnswerProcessDisclosure({
+  record,
+  expanded,
+  onToggle
+}: {
+  record: ResearchProcess
+  expanded: boolean
+  onToggle: () => void
+}): JSX.Element {
+  const elapsedSeconds = Math.max(1, Math.round(record.durationMs / 1000))
+  const thoughts = record.thoughts?.filter((thought) => thought.trim()) ?? []
+
+  return (
+    <section className="thinking-disclosure" aria-label="思考过程">
+      <button type="button" aria-expanded={expanded} onClick={onToggle}>
+        <BrainCircuit size={19} aria-hidden="true" />
+        <strong>已思考（用时 {elapsedSeconds} 秒）</strong>
+        {expanded ? <ChevronUp size={18} aria-hidden="true" /> : <ChevronDown size={18} aria-hidden="true" />}
+      </button>
+      {expanded ? (
+        <ThinkingContent paragraphs={thoughts} />
+      ) : null}
+    </section>
+  )
+}
+
+function LiveThinkingDisclosure({ state }: { state: NonNullable<LiveThinking> }): JSX.Element {
+  const [now, setNow] = useState(Date.now())
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 500)
+    return () => window.clearInterval(timer)
+  }, [])
+
+  const elapsedSeconds = Math.max(0, Math.floor((now - state.startedAt) / 1000))
+  const activityLabels = state.events
+    .filter((event) => event.phase === 'tool')
+    .filter((event, index, events) => events.findIndex((candidate) => (candidate.toolName || candidate.label) === (event.toolName || event.label)) === index)
+    .map((event) => event.label)
+  const contextParagraph = state.context.type === 'paper'
+    ? `我注意到上下文锁定了《${state.context.paperTitle}》。那么只要说到这篇论文的具体结论，就得回原文里对一遍，不能用我已经知道的一般知识顶上。`
+    : state.context.type === 'folder'
+      ? `这次可以查的是论文库“${state.context.folderName}”。我先看哪几篇真的正面谈到了这个问题，免得抓到一篇看起来相关的就急着下结论。`
+      : '这个问题没有锁定单篇论文。我先分辨它要的是概念解释，还是某个需要回原文核对的事实；这一步会直接决定后面要不要查文献。'
+  const liveParagraphs = [
+    `我先重新看一遍这个问题：“${state.question.length > 90 ? `${state.question.slice(0, 90)}…` : state.question}”。先别急着生成答案，得看清它表面在问什么，真正需要解决的又是什么。`,
+    contextParagraph,
+    ...state.thoughts,
+    activityLabels.length
+      ? `我已经开始往原文里追了，目前走到：${activityLabels.join('、')}。接下来还要看这些内容是真正回答了问题，还是只是关键词看着很像。`
+      : '我还在理这个问题的关键点。如果它牵涉具体论文事实，我会停下来读原文；如果本质上是概念问题，就不为了显得“查过”而堆检索步骤。'
+  ]
+
+  return (
+    <section className="thinking-disclosure live" role="status" aria-label="正在思考" aria-live="polite">
+      <div className="thinking-live-header">
+        <BrainCircuit size={19} aria-hidden="true" />
+        <strong>正在思考（用时 {elapsedSeconds} 秒）</strong>
+        <span className="thinking-pulse" aria-hidden="true" />
+      </div>
+      <ThinkingContent paragraphs={liveParagraphs} live />
+    </section>
+  )
+}
+
+function ThinkingContent({
+  paragraphs,
+  live = false
+}: {
+  paragraphs: string[]
+  live?: boolean
+}): JSX.Element {
+  return (
+    <div className="thinking-content">
+      {paragraphs.length ? (
+        <div className="thinking-summaries">
+          {paragraphs.map((paragraph, index) => (
+            <div key={`${paragraph.slice(0, 40)}-${index}`} className="markdown-content">
+              <AcademicMarkdown>{paragraph}</AcademicMarkdown>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="thinking-placeholder">正在理解问题并规划可核对的研究路径…</p>
+      )}
+      {!live ? <small>这是可展开的研究过程记录：包括我怎样理解问题、查了什么、哪些证据能用；不是模型隐藏推理的逐字记录。</small> : null}
+    </div>
+  )
+}
+
+function CitationSourcePanel({
+  state,
+  onClose,
+  onOpenFull
+}: {
+  state: NonNullable<CitationPanelState>
+  onClose: () => void
+  onOpenFull?: () => void
+}): JSX.Element {
+  const { citation, source, loading, error, nonce } = state
+  const pageNumber = citation.pageNumber ? Math.max(1, citation.pageNumber) : 1
+
+  return (
+    <aside className="citation-source-panel" aria-label="论文原文侧边栏">
+      <header className="citation-source-header">
+        <div>
+          <small>回答引用原文</small>
+          <strong>{citation.paperTitle}</strong>
+          <span>{citation.pageNumber ? `第 ${citation.pageNumber} 页` : citation.section || '原文位置'}</span>
+        </div>
+        <div className="citation-source-actions">
+          {onOpenFull ? (
+            <button type="button" aria-label="在知识库完整打开" title="在知识库完整打开" onClick={onOpenFull}>
+              <ExternalLink size={15} aria-hidden="true" />
+            </button>
+          ) : null}
+          <button type="button" aria-label="关闭论文原文侧边栏" title="关闭" onClick={onClose}>
+            <X size={16} aria-hidden="true" />
+          </button>
+        </div>
+      </header>
+
+      {citation.snippet ? (
+        <blockquote className="citation-source-snippet">
+          <small>回答所依据的原文片段</small>
+          <p>{citation.snippet}</p>
+        </blockquote>
+      ) : null}
+
+      <div className="citation-source-reader">
+        {loading ? <p className="citation-source-state">正在打开论文原文...</p> : null}
+        {!loading && error ? <p className="citation-source-state error">{error}</p> : null}
+        {!loading && !error && source ? (
+          <PaperReader
+            key={`${source.paper.id}-${pageNumber}-${nonce}`}
+            paper={source.paper}
+            markdownText={source.markdownText}
+            plainText={source.plainText}
+            previewUrl={source.previewUrl}
+            pdfData={source.pdfData}
+            initialPage={pageNumber}
+          />
+        ) : null}
+      </div>
+    </aside>
   )
 }
 
@@ -381,6 +718,7 @@ type ComposerProps = {
     paperOptions: ContextOption[]
   }
   disabledContext: boolean
+  onStartNewConversation?: () => void
   onContextChange: (context: ChatContext) => void
   onDraftChange: (value: string) => void
   onSend: () => void
@@ -395,6 +733,7 @@ function Composer({
   selectedContext,
   contextOptions,
   disabledContext,
+  onStartNewConversation,
   onContextChange,
   onDraftChange,
   onSend,
@@ -417,20 +756,30 @@ function Composer({
     <div className="composer" aria-label="研究问答输入区">
       <label className="composer-context">
         <LibraryBig size={14} aria-hidden="true" />
-        <span>上下文</span>
+        <span>从知识库选择论文</span>
         {disabledContext ? (
-          <input aria-label="问答上下文" value={contextLabel(selectedContext)} readOnly />
+          <>
+            <input aria-label="当前论文范围" value={contextLabel(selectedContext)} readOnly />
+            <button
+              className="context-change-button"
+              type="button"
+              onClick={onStartNewConversation}
+              disabled={!onStartNewConversation}
+            >
+              新建对话并更换
+            </button>
+          </>
         ) : (
           <select
-            aria-label="问答上下文"
+            aria-label="从知识库选择论文"
             value={contextValue(selectedContext)}
             onChange={(event) => {
               onContextChange(options.find((option) => option.value === event.target.value)?.context ?? freeContext)
             }}
           >
-            <option value="free">不限定</option>
+            <option value="free">暂不选择（可搜索全部论文）</option>
             {contextOptions.folderOptions.length ? (
-              <optgroup label="论文库">
+              <optgroup label="选择整个论文库">
                 {contextOptions.folderOptions.map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}
@@ -439,7 +788,7 @@ function Composer({
               </optgroup>
             ) : null}
             {contextOptions.paperOptions.length ? (
-              <optgroup label="论文">
+              <optgroup label="选择单篇论文（严格限定）">
                 {contextOptions.paperOptions.map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}
@@ -506,7 +855,7 @@ function Composer({
   )
 }
 
-function AgentProgress({ progress }: { progress: SendProgress }): JSX.Element {
+function AgentProgress({ progress, events }: { progress: SendProgress; events: ConversationProgressEvent[] }): JSX.Element {
   const [now, setNow] = useState(Date.now())
 
   useEffect(() => {
@@ -522,14 +871,26 @@ function AgentProgress({ progress }: { progress: SendProgress }): JSX.Element {
   const elapsedSeconds = progress ? Math.max(0, Math.floor((now - progress.startedAt) / 1000)) : 0
   const detail =
     progress?.detail ??
-    (progress?.step === 'dify' && elapsedSeconds >= 8
+    (progress?.step === 'answer' && elapsedSeconds >= 8
       ? 'Dify 仍在等待模型和知识库返回'
       : progressSteps[activeIndex]?.label ?? '处理中')
+  const toolActivities = Array.from(
+    events
+      .filter((event) => event.phase === 'tool')
+      .reduce((activities, event) => {
+        const key = event.toolName || event.label
+        const existing = activities.get(key)
+        if (existing) existing.count += 1
+        else activities.set(key, { label: event.label, count: 1 })
+        return activities
+      }, new Map<string, { label: string; count: number }>())
+      .values()
+  ).slice(-4)
 
   return (
     <div className="agent-progress" role="status" aria-live="polite">
       <div className="agent-progress-header">
-        <span className="agent-progress-dot" />
+        <BrainCircuit size={15} aria-hidden="true" />
         <strong>{detail}</strong>
         <em>{elapsedSeconds}s</em>
       </div>
@@ -539,6 +900,22 @@ function AgentProgress({ progress }: { progress: SendProgress }): JSX.Element {
             {item.label}
           </span>
         ))}
+      </div>
+      <div className="live-research-trace">
+        {toolActivities.length ? (
+          toolActivities.map((activity) => (
+            <span key={activity.label}>
+              <i aria-hidden="true" />
+              {activity.label}
+              {activity.count > 1 ? <small>×{activity.count}</small> : null}
+            </span>
+          ))
+        ) : (
+          <span>
+            <i className="planning" aria-hidden="true" />
+            正在规划可核对的研究路径
+          </span>
+        )}
       </div>
     </div>
   )

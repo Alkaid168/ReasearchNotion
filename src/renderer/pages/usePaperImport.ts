@@ -1,14 +1,12 @@
 import { useRef, useState, type DragEvent } from 'react'
 import { desktopApi } from '../api/desktopApi'
-import { normalizedPaperTitle, supportedPaperFile } from './paperImportUtils'
-import type { Paper } from '../../shared/types'
+import { supportedPaperFile } from './paperImportUtils'
 
 export type ImportQueueStatus = 'queued' | 'importing' | 'imported' | 'skipped' | 'failed'
 export type ImportQueueItem = { id: string; fileName: string; status: ImportQueueStatus; detail?: string }
 
 type UsePaperImportOptions = {
   activeFolderId: string | null
-  activeFolderPapers: Array<Pick<Paper, 'title'>>
   loadFolderPapers: (folderId: string) => Promise<unknown>
   onNotify?: (message: string, tone?: 'success' | 'error') => void
   onError: (message: string | null) => void
@@ -18,9 +16,20 @@ function containsFiles(event: DragEvent<HTMLElement>): boolean {
   return Array.from(event.dataTransfer.types).includes('Files')
 }
 
+function importErrorMessage(error: unknown): string {
+  if (!(error instanceof Error)) return '导入论文失败。'
+  return error.message
+    .replace(/^Error invoking remote method '[^']+':\s*/i, '')
+    .replace(/^Error:\s*/i, '')
+    .trim()
+}
+
+function isDuplicateImportError(message: string): boolean {
+  return message.includes('重复') || message.includes('已存在')
+}
+
 export function usePaperImport({
   activeFolderId,
-  activeFolderPapers,
   loadFolderPapers,
   onNotify,
   onError
@@ -45,7 +54,7 @@ export function usePaperImport({
       if (importedPapers.length === 1) onNotify?.(`已导入「${importedPapers[0].title}」`, 'success')
       else onNotify?.(`已导入 ${importedPapers.length} 篇论文`, 'success')
     } catch (error) {
-      const message = error instanceof Error ? error.message : '导入论文失败。'
+      const message = importErrorMessage(error)
       onError(message)
       onNotify?.(message, 'error')
     } finally {
@@ -54,39 +63,37 @@ export function usePaperImport({
   }
 
   async function importDroppedFiles(folderId: string, files: File[]): Promise<void> {
-    const existingTitles = new Set(activeFolderPapers.map((paper) => normalizedPaperTitle(paper.title)))
-    const incomingTitles = new Set<string>()
-    const items = files.map((file, index) => {
-      const title = normalizedPaperTitle(file.name)
-      const duplicate = existingTitles.has(title) || incomingTitles.has(title)
-      incomingTitles.add(title)
-      return {
-        id: `import-${Date.now()}-${index}`,
-        fileName: file.name,
-        status: duplicate ? 'skipped' : 'queued',
-        detail: duplicate ? '当前论文库或本次导入中已有同名论文。' : undefined
-      } satisfies ImportQueueItem
-    })
+    const items = files.map(
+      (file, index) =>
+        ({
+          id: `import-${Date.now()}-${index}`,
+          fileName: file.name,
+          status: 'queued'
+        }) satisfies ImportQueueItem
+    )
     setImportQueue(items)
 
     let importedCount = 0
     let failedCount = 0
     for (const [index, file] of files.entries()) {
       const item = items[index]
-      if (item.status === 'skipped') continue
       updateImportQueueItem(item.id, { status: 'importing' })
       try {
         const imported = await desktopApi.papers.importFiles(folderId, [file])
         const importedPaper = imported[0]
         if (!importedPaper) throw new Error('导入没有返回论文记录。')
-        existingTitles.add(normalizedPaperTitle(importedPaper.title))
         importedCount += 1
         updateImportQueueItem(item.id, { status: 'imported' })
       } catch (error) {
+        const message = importErrorMessage(error)
+        if (isDuplicateImportError(message)) {
+          updateImportQueueItem(item.id, { status: 'skipped', detail: message })
+          continue
+        }
         failedCount += 1
         updateImportQueueItem(item.id, {
           status: 'failed',
-          detail: error instanceof Error ? error.message : '导入失败。'
+          detail: message
         })
       }
     }

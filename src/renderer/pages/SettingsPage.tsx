@@ -69,8 +69,13 @@ export function SettingsPage({ onSettingsSaved, onConnectionTested }: SettingsPa
       const savedSettings = await desktopApi.settings.save(settings)
       setSettings(savedSettings)
       setEnvironmentStatus(await desktopApi.app.getEnvironmentStatus())
-      setNotice({ tone: 'success', message: '设置已保存。' })
       onSettingsSaved?.(savedSettings)
+      const connection = await desktopApi.settings.testConnection(savedSettings)
+      setNotice({
+        tone: connection.ok ? 'success' : 'error',
+        message: connection.ok ? `设置已保存；${connection.message}` : `设置已保存，但${connection.message}`
+      })
+      onConnectionTested?.(connection)
     } catch {
       setNotice({ tone: 'error', message: '保存设置失败。' })
     } finally {

@@ -44,6 +44,7 @@ pnpm verify:mvp
 ```powershell
 pnpm check:dify
 pnpm verify:mvp
+pnpm smoke:dify-agent-paper
 pnpm lint:types
 pnpm test
 pnpm build

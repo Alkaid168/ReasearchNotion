@@ -1,4 +1,14 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type JSX, type PointerEvent } from 'react'
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type DragEvent,
+  type FormEvent,
+  type JSX,
+  type PointerEvent
+} from 'react'
 import {
   BookOpenText,
   Check,
@@ -75,11 +85,16 @@ export function KnowledgePage({ requestedPaperId, requestedFolderId, requestedPa
   const [importError, setImportError] = useState<string | null>(null)
   const [deleteConfirmPaperId, setDeleteConfirmPaperId] = useState<string | null>(null)
   const [deletingPaperId, setDeletingPaperId] = useState<string | null>(null)
+  const [draggedPaperId, setDraggedPaperId] = useState<string | null>(null)
+  const [paperDropTargetFolderId, setPaperDropTargetFolderId] = useState<string | null>(null)
+  const [copyingTargetFolderId, setCopyingTargetFolderId] = useState<string | null>(null)
   const [paperSearchQuery, setPaperSearchQuery] = useState('')
   const activePaperRef = useRef<Paper | null>(null)
   const currentPageRef = useRef(1)
   const drawerOpenRef = useRef(false)
   const knowledgeResizeCleanupRef = useRef<(() => void) | null>(null)
+  const outlinePaperIdRef = useRef<string | null>(null)
+  const outlineRequestRef = useRef<Promise<void> | null>(null)
 
   activePaperRef.current = activePaper
   currentPageRef.current = currentPage
@@ -115,7 +130,6 @@ export function KnowledgePage({ requestedPaperId, requestedFolderId, requestedPa
     onPaperDrop
   } = usePaperImport({
     activeFolderId,
-    activeFolderPapers,
     loadFolderPapers,
     onNotify,
     onError: setImportError
@@ -281,6 +295,8 @@ export function KnowledgePage({ requestedPaperId, requestedFolderId, requestedPa
     setPreviewUrl(result.previewUrl)
     setPdfData(result.pdfData)
     setPaperOutline([])
+    outlinePaperIdRef.current = null
+    outlineRequestRef.current = null
     setReaderSearchResults([])
     setReaderSearching(false)
     setReaderSearchError(null)
@@ -313,13 +329,24 @@ export function KnowledgePage({ requestedPaperId, requestedFolderId, requestedPa
     setEmphasisContext(null)
     setDeleteConfirmPaperId(null)
 
-    void desktopApi.papers
-      .getOutline(result.paper.id)
+  }
+
+  function loadActivePaperOutline(): void {
+    const paperId = activePaperRef.current?.id
+    if (!paperId || outlinePaperIdRef.current === paperId || outlineRequestRef.current) return
+
+    outlineRequestRef.current = desktopApi.papers
+      .getOutline(paperId)
       .then((outline) => {
-        if (activePaperRef.current?.id === result.paper.id) setPaperOutline(outline)
+        if (activePaperRef.current?.id !== paperId) return
+        outlinePaperIdRef.current = paperId
+        setPaperOutline(outline)
       })
       .catch(() => {
-        if (activePaperRef.current?.id === result.paper.id) setPaperOutline([])
+        if (activePaperRef.current?.id === paperId) setPaperOutline([])
+      })
+      .finally(() => {
+        outlineRequestRef.current = null
       })
   }
 
@@ -374,6 +401,97 @@ export function KnowledgePage({ requestedPaperId, requestedFolderId, requestedPa
       setImportError(error instanceof Error ? error.message : '删除论文失败。')
     } finally {
       setDeletingPaperId(null)
+    }
+  }
+
+  async function deletePaperFromLibrary(paperId: string): Promise<void> {
+    if (deletingPaperId) return
+    const paper = Object.values(papersByFolderId)
+      .flat()
+      .find((candidate) => candidate.id === paperId)
+    if (!paper) return
+
+    setDeletingPaperId(paperId)
+    setImportError(null)
+    try {
+      await desktopApi.papers.delete(paperId)
+      await loadFolderPapers(paper.folderId)
+      if (activePaperRef.current?.id === paperId) clearActivePaper()
+    } catch (error) {
+      setImportError(error instanceof Error ? error.message : '删除论文失败。')
+    } finally {
+      setDeletingPaperId(null)
+    }
+  }
+
+  function loadedPaper(paperId: string): PaperRow | null {
+    return Object.values(papersByFolderId)
+      .flat()
+      .find((candidate) => candidate.id === paperId) ?? null
+  }
+
+  function startPaperCopyDrag(event: DragEvent<HTMLButtonElement>, paperId: string): void {
+    if (copyingTargetFolderId) {
+      event.preventDefault()
+      return
+    }
+    event.dataTransfer.effectAllowed = 'copy'
+    event.dataTransfer.setData('application/x-research-notion-paper', paperId)
+    setDraggedPaperId(paperId)
+    setPaperDropTargetFolderId(null)
+  }
+
+  function finishPaperCopyDrag(): void {
+    setDraggedPaperId(null)
+    setPaperDropTargetFolderId(null)
+  }
+
+  function paperIdFromDrag(event: DragEvent<HTMLElement>): string | null {
+    return draggedPaperId || event.dataTransfer.getData('application/x-research-notion-paper') || null
+  }
+
+  function markPaperCopyTarget(event: DragEvent<HTMLElement>, targetFolderId: string): void {
+    const paperId = paperIdFromDrag(event)
+    const sourcePaper = paperId ? loadedPaper(paperId) : null
+    if (!sourcePaper || sourcePaper.folderId === targetFolderId || copyingTargetFolderId) return
+    event.preventDefault()
+    event.stopPropagation()
+    event.dataTransfer.dropEffect = 'copy'
+    setPaperDropTargetFolderId(targetFolderId)
+  }
+
+  function leavePaperCopyTarget(event: DragEvent<HTMLElement>, targetFolderId: string): void {
+    const nextTarget = event.relatedTarget
+    if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) return
+    setPaperDropTargetFolderId((current) => (current === targetFolderId ? null : current))
+  }
+
+  async function copyPaperFromDrop(event: DragEvent<HTMLElement>, targetFolderId: string): Promise<void> {
+    const paperId = paperIdFromDrag(event)
+    const sourcePaper = paperId ? loadedPaper(paperId) : null
+    if (!sourcePaper || sourcePaper.folderId === targetFolderId || copyingTargetFolderId) return
+
+    event.preventDefault()
+    event.stopPropagation()
+    setDraggedPaperId(null)
+    setPaperDropTargetFolderId(null)
+    setCopyingTargetFolderId(targetFolderId)
+    setImportError(null)
+    setExpandedFolderIds((current) => {
+      const next = new Set(current).add(targetFolderId)
+      updateWorkspacePreferences({ knowledge: { expandedFolderIds: [...next] } })
+      return next
+    })
+
+    try {
+      const copiedPaper = await desktopApi.papers.copyToFolder(sourcePaper.id, targetFolderId)
+      await loadFolderPapers(targetFolderId)
+      const targetFolder = folders.find((folder) => folder.id === targetFolderId)
+      onNotify?.(`已将《${copiedPaper.title}》复制到「${targetFolder?.name ?? '目标文件夹'}」。`, 'success')
+    } catch (error) {
+      setImportError(error instanceof Error ? error.message : '复制论文失败。')
+    } finally {
+      setCopyingTargetFolderId(null)
     }
   }
 
@@ -600,6 +718,8 @@ export function KnowledgePage({ requestedPaperId, requestedFolderId, requestedPa
             const isExpanded = expandedFolderIds.has(folder.id)
             const folderPapers = papersByFolderId[folder.id] ?? []
             const isLoadingFolder = loadingFolderIds.has(folder.id)
+            const isPaperDropTarget = paperDropTargetFolderId === folder.id
+            const isCopyingHere = copyingTargetFolderId === folder.id
             return (
               <div className="library-folder-block" key={folder.id}>
                 {editingFolderId === folder.id ? (
@@ -625,7 +745,13 @@ export function KnowledgePage({ requestedPaperId, requestedFolderId, requestedPa
                     </button>
                   </form>
                 ) : (
-                  <div className={isActive ? 'library-folder-line active' : 'library-folder-line'}>
+                  <div
+                    className={`library-folder-line${isActive ? ' active' : ''}${isPaperDropTarget ? ' copy-drop-target' : ''}${isCopyingHere ? ' copying' : ''}`}
+                    onDragEnter={(event) => markPaperCopyTarget(event, folder.id)}
+                    onDragOver={(event) => markPaperCopyTarget(event, folder.id)}
+                    onDragLeave={(event) => leavePaperCopyTarget(event, folder.id)}
+                    onDrop={(event) => void copyPaperFromDrop(event, folder.id)}
+                  >
                     <button
                       className={isActive ? 'library-folder-row active' : 'library-folder-row'}
                       type="button"
@@ -635,6 +761,7 @@ export function KnowledgePage({ requestedPaperId, requestedFolderId, requestedPa
                       <ChevronRight className={isExpanded ? 'folder-chevron open' : 'folder-chevron'} size={14} aria-hidden="true" />
                       {isExpanded ? <FolderOpen size={15} aria-hidden="true" /> : <FolderClosed size={15} aria-hidden="true" />}
                       <span>{folder.name}</span>
+                      {isCopyingHere ? <small className="library-folder-copying">复制中</small> : null}
                     </button>
                     <button
                       className="library-row-icon-button"
@@ -693,6 +820,9 @@ export function KnowledgePage({ requestedPaperId, requestedFolderId, requestedPa
                     loading={isLoadingFolder}
                     activePaperId={activePaper?.id ?? null}
                     onOpenPaper={(paperId) => void openPaper(paperId)}
+                    onDeletePaper={(paperId) => void deletePaperFromLibrary(paperId)}
+                    onPaperDragStart={startPaperCopyDrag}
+                    onPaperDragEnd={finishPaperCopyDrag}
                   />
                 ) : null}
               </div>
@@ -732,6 +862,9 @@ export function KnowledgePage({ requestedPaperId, requestedFolderId, requestedPa
                     {item.status === 'skipped' ? '已跳过重复文件' : null}
                     {item.status === 'failed' ? '导入失败' : null}
                   </small>
+                  {item.detail && (item.status === 'failed' || item.status === 'skipped') ? (
+                    <span className="import-queue-detail">{item.detail}</span>
+                  ) : null}
                 </div>
               ))}
             </section>
@@ -826,6 +959,7 @@ export function KnowledgePage({ requestedPaperId, requestedFolderId, requestedPa
           searching={readerSearching}
           searchError={readerSearchError}
           onSearch={(query) => void searchActivePaper(query)}
+          onOutlineRequest={loadActivePaperOutline}
           initialPage={activePaper ? paperViews[activePaper.id]?.page : undefined}
           initialScale={activePaper ? paperViews[activePaper.id]?.scale : undefined}
           focusMode={focusMode}

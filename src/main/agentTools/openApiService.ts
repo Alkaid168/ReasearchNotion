@@ -25,6 +25,8 @@ export type ToolInvocation = {
   paperId: string | null
   folderId: string | null
   aspectCount: number
+  chunkIndex: number | null
+  maxChars: number | null
   invokedAt: string
 }
 
@@ -388,6 +390,8 @@ export function createOpenApiToolService({ tools, readingState, authToken, prefe
       paperId: typeof input.paperId === 'string' ? input.paperId : null,
       folderId: typeof input.folderId === 'string' ? input.folderId : null,
       aspectCount: Array.isArray(input.aspects) ? Math.min(4, input.aspects.length) : 0,
+      chunkIndex: route.operationId === 'get_paper_text_chunk' ? Number(input.chunkIndex ?? 1) : null,
+      maxChars: route.operationId === 'get_paper_text_chunk' ? Number(input.maxChars ?? 4000) : null,
       invokedAt: new Date().toISOString()
     })
     if (toolInvocations.length > 200) toolInvocations.splice(0, toolInvocations.length - 200)

@@ -46,10 +46,10 @@ describe('demo preparation scripts', () => {
     const readme = readFileSync(readmePath, 'utf8')
     const runbook = readFileSync(runbookPath, 'utf8')
     expect(readme).toContain('DeepSeek')
-    expect(readme).toContain('14')
-    expect(runbook).toContain('DeepSeek bridge')
-    expect(runbook).toContain('http://host.docker.internal:17778')
-    expect(runbook).toContain('prepare-demo.bat` starts it automatically')
+    expect(readme).toContain('16')
+    expect(runbook).toContain('DeepSeek')
+    expect(runbook).toContain('host.docker.internal:17777')
+    expect(runbook).toContain('pnpm demo:prepare')
   })
 
   it('lets the Dify launcher start quietly for desktop startup', () => {
@@ -58,6 +58,8 @@ describe('demo preparation scripts', () => {
 
     expect(script).toContain('param(')
     expect(script).toContain('[switch]$NoOpen')
+    expect(script).toContain("'D:\\Dify\\dify-main'")
+    expect(script).toContain("@composeArgs 'up' '-d'")
     expect(script).toContain('if (-not $NoOpen)')
     expect(script).toContain('Start-Process $DifyUrl')
   })

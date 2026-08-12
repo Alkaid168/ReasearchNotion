@@ -84,12 +84,28 @@ export type Citation = {
   evidenceType?: 'retrieval' | 'tool' | 'metadata'
 }
 
+export type ResearchProcessPhase = 'scope' | 'search' | 'read' | 'answer' | 'verify'
+
+export type ResearchProcessStep = {
+  phase: ResearchProcessPhase
+  label: string
+  detail: string
+  toolName?: string
+}
+
+export type ResearchProcess = {
+  durationMs: number
+  steps: ResearchProcessStep[]
+  thoughts?: string[]
+}
+
 export type Message = {
   id: string
   conversationId: string
   role: 'user' | 'assistant'
   content: string
   citations: Citation[]
+  researchProcess?: ResearchProcess | null
   createdAt: string
 }
 

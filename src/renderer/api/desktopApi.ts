@@ -52,6 +52,8 @@ export const desktopApi: DesktopApi = {
     list: (folderId: string) => getBridge().papers.list(folderId),
     import: (folderId: string) => getBridge().papers.import(folderId),
     importFiles: (folderId: string, files: File[]) => getBridge().papers.importFiles(folderId, files),
+    copyToFolder: (paperId: string, targetFolderId: string) =>
+      getBridge().papers.copyToFolder(paperId, targetFolderId),
     updateReadingStatus: (paperId: string, readingStatus: ReadingStatus) =>
       getBridge().papers.updateReadingStatus(paperId, readingStatus),
     reindex: (paperId: string) => getBridge().papers.reindex(paperId),
