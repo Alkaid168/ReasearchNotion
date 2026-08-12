@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest'
 describe('Dify Tool Agent configuration scripts', () => {
   it('configures one Tool Agent route and does not ship the old Workflow switch', () => {
     const script = readFileSync(resolve('scripts/configure-dify-agent.mjs'), 'utf8')
+    const runner = readFileSync(resolve('scripts/run-configure-dify-agent.cjs'), 'utf8')
     const psScript = readFileSync(resolve('scripts/configure-dify-agent.ps1'), 'utf8')
     const batchScript = readFileSync(resolve('use-dify-agent.bat'), 'utf8')
     const packageJson = JSON.parse(readFileSync(resolve('package.json'), 'utf8'))
@@ -20,8 +21,11 @@ describe('Dify Tool Agent configuration scripts', () => {
     expect(script).toContain('ResearchNotion Demo Library')
     expect(psScript).toContain('use:dify-agent')
     expect(batchScript).toContain('configure-dify-agent.ps1')
-    expect(packageJson.scripts['use:dify-agent']).toBe('node scripts/configure-dify-agent.mjs')
-    expect(packageJson.scripts['provision:dify-agent']).toContain('scripts/configure-dify-agent.mjs')
+    expect(runner).toContain("ELECTRON_RUN_AS_NODE: '1'")
+    expect(runner).toContain("require('electron')")
+    expect(runner).toContain("'configure-dify-agent.mjs'")
+    expect(packageJson.scripts['use:dify-agent']).toBe('node scripts/run-configure-dify-agent.cjs')
+    expect(packageJson.scripts['provision:dify-agent']).toContain('scripts/run-configure-dify-agent.cjs')
     expect(packageJson.scripts).not.toHaveProperty('use:dify-workflow')
     expect(packageJson.scripts).not.toHaveProperty('provision:dify')
   })

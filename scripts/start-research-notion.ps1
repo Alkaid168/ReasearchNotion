@@ -9,57 +9,43 @@ $env:ELECTRON_MIRROR = if ($env:ELECTRON_MIRROR) {
   'https://npmmirror.com/mirrors/electron/'
 }
 
-$pnpmCommand = Get-Command pnpm -ErrorAction SilentlyContinue
-$codexPnpm = Join-Path $env:USERPROFILE '.cache\codex-runtimes\codex-primary-runtime\dependencies\bin\pnpm.cmd'
-$corepackCommand = Get-Command corepack -ErrorAction SilentlyContinue
-
-if ($pnpmCommand) {
-  $pnpmFile = $pnpmCommand.Source
-  $pnpmPrefixArgs = @()
-  $pnpmDisplay = $pnpmCommand.Source
-} elseif (Test-Path $codexPnpm) {
-  $pnpmFile = $codexPnpm
-  $pnpmPrefixArgs = @()
-  $pnpmDisplay = $codexPnpm
-} elseif ($corepackCommand) {
-  $pnpmFile = $corepackCommand.Source
-  $pnpmPrefixArgs = @('pnpm')
-  $pnpmDisplay = "$($corepackCommand.Source) pnpm"
-} else {
-  Write-Host 'pnpm was not found. Please install pnpm first:' -ForegroundColor Red
-  Write-Host '  npm install -g pnpm'
+$nodeCommand = Get-Command node -ErrorAction SilentlyContinue
+if (-not $nodeCommand) {
+  Write-Host '没有找到 Node.js，无法启动 ResearchNotion。' -ForegroundColor Red
   exit 1
 }
+$nodeExecutable = [string]$nodeCommand.Source
 
-function Invoke-Pnpm {
-  param([string[]]$Arguments = @())
-  & $pnpmFile @pnpmPrefixArgs @Arguments
-}
-
-function Get-PnpmCommandText {
-  param([string[]]$Arguments = @())
-  return "& '$pnpmFile' $((@($pnpmPrefixArgs) + @($Arguments)) -join ' ')"
-}
+$electronViteScript = Join-Path $projectRoot 'node_modules\electron-vite\bin\electron-vite.js'
+$electronViteLauncher = Join-Path $projectRoot 'node_modules\.bin\electron-vite.CMD'
 
 Write-Host ''
 Write-Host 'ResearchNotion local launcher' -ForegroundColor Cyan
 Write-Host "Project: $projectRoot"
-Write-Host "pnpm:    $pnpmDisplay"
 Write-Host "Mirror:  $env:ELECTRON_MIRROR"
 Write-Host ''
 
-if (-not (Test-Path (Join-Path $projectRoot 'node_modules'))) {
-  Write-Host 'node_modules not found. Installing dependencies...' -ForegroundColor Yellow
-  Invoke-Pnpm -Arguments @('install')
-  if ($LASTEXITCODE -ne 0) {
-    exit $LASTEXITCODE
-  }
+$requiredDependencies = @(
+  $electronViteScript
+  $electronViteLauncher
+  (Join-Path $projectRoot 'node_modules\electron\dist\electron.exe')
+  (Join-Path $projectRoot 'node_modules\pdfjs-dist\package.json')
+  (Join-Path $projectRoot 'node_modules\better-sqlite3\build\Release\better_sqlite3.node')
+)
+$missingDependencies = @($requiredDependencies | Where-Object { -not (Test-Path -LiteralPath $_) })
+
+if ($missingDependencies.Count -gt 0) {
+  Write-Host '项目依赖不完整，ResearchNotion 尚未启动。缺少：' -ForegroundColor Red
+  $missingDependencies | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
+  Write-Host ''
+  Write-Host '为避免破坏已有环境，启动脚本不会自动运行 pnpm install。请先修复依赖。' -ForegroundColor Yellow
+  exit 1
 }
 
 function Test-Dify {
   try {
-    $response = Invoke-WebRequest -Uri 'http://localhost:8080' -UseBasicParsing -TimeoutSec 3
-    return $response.StatusCode -ge 200 -and $response.StatusCode -lt 500
+    $response = Invoke-WebRequest -Uri 'http://localhost:8080/console/api/system-features' -UseBasicParsing -TimeoutSec 3
+    return $response.StatusCode -ge 200 -and $response.StatusCode -lt 300
   } catch {
     return $false
   }
@@ -95,9 +81,10 @@ function Test-DeepSeekBridge {
 
 if (-not (Test-DeepSeekBridge)) {
   Write-Host 'Starting local DeepSeek bridge for Dify...' -ForegroundColor Yellow
+  $deepSeekBridgeScript = Join-Path $projectRoot 'scripts\deepseek-bridge.mjs'
   Start-Process `
     -FilePath 'powershell' `
-    -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', "Set-Location '$projectRoot'; $(Get-PnpmCommandText -Arguments @('deepseek:bridge'))") `
+    -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', "Set-Location '$projectRoot'; node '$deepSeekBridgeScript'") `
     -WindowStyle Hidden
 
   $deadline = (Get-Date).AddSeconds(15)
@@ -116,8 +103,8 @@ if (-not (Test-DeepSeekBridge)) {
   Write-Host 'DeepSeek bridge already responds at http://127.0.0.1:17778/health.' -ForegroundColor Green
 }
 
-Write-Host 'Rebuilding native modules for Electron...' -ForegroundColor Yellow
-Invoke-Pnpm -Arguments @('exec', 'electron-rebuild', '-f', '-w', 'better-sqlite3')
+Write-Host 'Checking native modules for Electron...' -ForegroundColor Yellow
+& node (Join-Path $projectRoot 'scripts\ensure-electron-native.cjs')
 if ($LASTEXITCODE -ne 0) {
   exit $LASTEXITCODE
 }
@@ -126,5 +113,5 @@ Write-Host 'Starting ResearchNotion...' -ForegroundColor Green
 Write-Host 'Close the Electron window or press Ctrl+C in this terminal to stop it.'
 Write-Host ''
 
-Invoke-Pnpm -Arguments @('exec', 'electron-vite', 'dev')
+node $electronViteScript
 exit $LASTEXITCODE

@@ -9,9 +9,16 @@ export function createDatabase(dbPath: string): AppDatabase {
   db.exec(schemaSql)
   ensureConversationFolderColumn(db)
   ensureDifyConversationIdColumn(db)
+  ensureMessageResearchProcessColumn(db)
   ensureSortOrderColumn(db, 'conversation_folders', 'created_at ASC')
   ensureSortOrderColumn(db, 'conversations', 'updated_at DESC')
   return db
+}
+
+function ensureMessageResearchProcessColumn(db: AppDatabase): void {
+  const columns = db.pragma('table_info(messages)') as Array<{ name: string }>
+  if (columns.some((column) => column.name === 'research_process_json')) return
+  db.exec(`ALTER TABLE messages ADD COLUMN research_process_json TEXT`)
 }
 
 function ensureConversationFolderColumn(db: AppDatabase): void {

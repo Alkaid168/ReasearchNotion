@@ -207,4 +207,31 @@ describe('research agent prompt contract', () => {
     expect(query).toContain('拆成可核验的子命题')
     expect(query).toContain('支持、反驳或尚未确认')
   })
+
+  it('requires complete chunk coverage for a whole-paper summary', () => {
+    const query = buildResearchAgentQuery({
+      content: '请总结整篇论文的核心内容，并说明依据页码',
+      context: { type: 'paper', paperId: 'paper-1', paperTitle: 'ROSClaw' }
+    })
+
+    expect(query).toContain('本轮要求总结整篇论文')
+    expect(query).toContain('chunkIndex=1')
+    expect(query).toContain('maxChars=8000')
+    expect(query).toContain('nextChunkIndex=null')
+    expect(query).toContain('pageEnd=documentPageCount')
+    expect(query).toContain('读取覆盖')
+    expect(query).toContain('不得只读摘要、开头几页或部分文本块')
+  })
+
+  it('reads relevant original pages for a topic summary without forcing whole-paper coverage', () => {
+    const query = buildResearchAgentQuery({
+      content: '请总结这篇论文中的 scenario，并标明出处',
+      context: { type: 'paper', paperId: 'paper-1', paperTitle: 'ROSClaw' }
+    })
+
+    expect(query).toContain('总结 scenario、方法、实验、局限等特定主题')
+    expect(query).toContain('相关的原文页或章节')
+    expect(query).toContain('标明页码或章节出处')
+    expect(query).not.toContain('本轮要求总结整篇论文')
+  })
 })

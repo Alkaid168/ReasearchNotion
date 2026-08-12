@@ -13,6 +13,7 @@ import type {
   PaperCard,
   ReadingStatus
 } from '../../shared/types'
+import type { ResearchProcess } from '../../shared/types'
 
 function now(): string {
   return new Date().toISOString()
@@ -29,7 +30,12 @@ type CreateConversationInput = Pick<Conversation, 'title' | 'folderId' | 'contex
   conversationFolderId?: string | null
 }
 type ListConversationsOptions = { conversationFolderId?: string | null }
-type CreateMessageInput = Pick<Message, 'conversationId' | 'role' | 'content' | 'citations'>
+type CreateMessageInput = Pick<Message, 'conversationId' | 'role' | 'content' | 'citations'> & {
+  researchProcess?: ResearchProcess | null
+}
+type UpdateMessageInput = Pick<Message, 'content' | 'citations'> & {
+  researchProcess?: ResearchProcess | null
+}
 
 export function createRepositories(db: Database.Database) {
   function nextFolderSortOrder(): number {
@@ -120,10 +126,22 @@ export function createRepositories(db: Database.Database) {
     return row ? mapConversation(row) : null
   }
 
-  function mapMessage(row: Omit<Message, 'citations'> & { citationsJson: string }): Message {
+  function parseResearchProcess(value: string | null | undefined): ResearchProcess | null {
+    if (!value) return null
+    try {
+      return JSON.parse(value) as ResearchProcess
+    } catch {
+      return null
+    }
+  }
+
+  function mapMessage(
+    row: Omit<Message, 'citations' | 'researchProcess'> & { citationsJson: string; researchProcessJson: string | null }
+  ): Message {
     return {
       ...row,
-      citations: JSON.parse(row.citationsJson) as Citation[]
+      citations: JSON.parse(row.citationsJson) as Citation[],
+      researchProcess: parseResearchProcess(row.researchProcessJson)
     }
   }
 
@@ -495,26 +513,65 @@ export function createRepositories(db: Database.Database) {
           role: input.role,
           content: input.content,
           citations: input.citations,
+          researchProcess: input.researchProcess ?? null,
           createdAt: timestamp
         }
         db.prepare(
-          `INSERT INTO messages (id, conversation_id, role, content, citations_json, created_at)
-           VALUES (@id, @conversationId, @role, @content, @citationsJson, @createdAt)`
+          `INSERT INTO messages (id, conversation_id, role, content, citations_json, research_process_json, created_at)
+           VALUES (@id, @conversationId, @role, @content, @citationsJson, @researchProcessJson, @createdAt)`
         ).run({
           ...row,
-          citationsJson: JSON.stringify(row.citations)
+          citationsJson: JSON.stringify(row.citations),
+          researchProcessJson: row.researchProcess ? JSON.stringify(row.researchProcess) : null
         })
         db.prepare(`UPDATE conversations SET updated_at = ? WHERE id = ?`).run(timestamp, input.conversationId)
         return row
+      },
+      update(messageId: string, input: UpdateMessageInput): Message {
+        const existing = db
+          .prepare(
+            `SELECT id, conversation_id as conversationId, role, content,
+                    citations_json as citationsJson, research_process_json as researchProcessJson, created_at as createdAt
+             FROM messages WHERE id = ?`
+          )
+          .get(messageId) as
+          | (Omit<Message, 'citations' | 'researchProcess'> & { citationsJson: string; researchProcessJson: string | null })
+          | undefined
+        if (!existing) throw new Error('Message not found.')
+
+        const timestamp = now()
+        const researchProcess = input.researchProcess ?? null
+        db.prepare(
+          `UPDATE messages
+           SET content = ?, citations_json = ?, research_process_json = ?
+           WHERE id = ?`
+        ).run(
+          input.content,
+          JSON.stringify(input.citations),
+          researchProcess ? JSON.stringify(researchProcess) : null,
+          messageId
+        )
+        db.prepare(`UPDATE conversations SET updated_at = ? WHERE id = ?`).run(timestamp, existing.conversationId)
+        return {
+          id: existing.id,
+          conversationId: existing.conversationId,
+          role: existing.role,
+          content: input.content,
+          citations: input.citations,
+          researchProcess,
+          createdAt: existing.createdAt
+        }
       },
       listByConversation(conversationId: string): Message[] {
         const rows = db
           .prepare(
             `SELECT id, conversation_id as conversationId, role, content,
-                    citations_json as citationsJson, created_at as createdAt
+                    citations_json as citationsJson, research_process_json as researchProcessJson, created_at as createdAt
              FROM messages WHERE conversation_id = ? ORDER BY created_at ASC`
           )
-          .all(conversationId) as Array<Omit<Message, 'citations'> & { citationsJson: string }>
+          .all(conversationId) as Array<
+            Omit<Message, 'citations' | 'researchProcess'> & { citationsJson: string; researchProcessJson: string | null }
+          >
         return rows.map(mapMessage)
       }
     }

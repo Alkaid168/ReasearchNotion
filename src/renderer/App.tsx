@@ -16,13 +16,22 @@ type DifyStatus = {
 }
 
 function hasDifyConfig(settings: AppSettings): boolean {
-  return Boolean(settings.difyBaseUrl && settings.difyAppApiKey && settings.difyKnowledgeApiKey)
+  // Tool Agent chat only requires the service URL and App API key. The
+  // Knowledge API key is optional and must not make a working chat look
+  // unconfigured.
+  return Boolean(settings.difyBaseUrl && settings.difyAppApiKey)
 }
 
 function statusFromSettings(settings: AppSettings): DifyStatus {
   return hasDifyConfig(settings)
-    ? { label: 'Dify 已配置', tone: 'neutral' }
+    ? { label: 'Dify 配置已保存', tone: 'neutral' }
     : { label: 'Dify 未配置', tone: 'neutral' }
+}
+
+function statusFromConnection(result: { ok: boolean }): DifyStatus {
+  return result.ok
+    ? { label: 'Dify 已连接', tone: 'ready' }
+    : { label: 'Dify 当前不可用', tone: 'error' }
 }
 
 export function App(): JSX.Element {
@@ -54,8 +63,13 @@ export function App(): JSX.Element {
 
   useEffect(() => {
     let alive = true
-    void desktopApi.settings.get().then((settings) => {
-      if (alive) setDifyStatus(statusFromSettings(settings))
+    void desktopApi.settings.get().then(async (settings) => {
+      if (!alive) return
+      setDifyStatus(statusFromSettings(settings))
+      if (!hasDifyConfig(settings)) return
+      setDifyStatus({ label: 'Dify 正在检查', tone: 'neutral' })
+      const result = await desktopApi.settings.testConnection(settings)
+      if (alive) setDifyStatus(statusFromConnection(result))
     })
     return () => {
       alive = false
@@ -172,6 +186,7 @@ export function App(): JSX.Element {
           selectedConversationId={selectedConversationId}
           selectedConversationFolderId={selectedConversationFolderId}
           onConversationCreated={onConversationCreated}
+          onStartNewConversation={startNewConversation}
           onNotify={notify}
           onOpenCitation={(citation) => {
             if (!citation.paperId) return
@@ -193,13 +208,7 @@ export function App(): JSX.Element {
       {activeTab === 'settings' ? (
         <SettingsPage
           onSettingsSaved={(settings) => setDifyStatus(statusFromSettings(settings))}
-          onConnectionTested={(result) =>
-            setDifyStatus(
-              result.ok
-                ? { label: 'Dify 连接正常', tone: 'ready' }
-                : { label: 'Dify 连接失败', tone: 'error' }
-            )
-          }
+          onConnectionTested={(result) => setDifyStatus(statusFromConnection(result))}
         />
       ) : null}
       </AppShell>

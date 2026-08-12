@@ -220,6 +220,7 @@ export function createAgentToolHandlers({ repos, readingState, memories }: ToolD
     async investigatePaper(input: { paperId: string; query: string; limit?: number; aspects?: InvestigationAspectInput[] }): Promise<
       | ToolOk<{
           paper: ReturnType<typeof paperCardSummary>
+          pageCount: number
           outline: AgentOutlineItem[]
           evidence: ReturnType<typeof collectPaperEvidence>['evidence']
           fallbackUsed: boolean
@@ -238,6 +239,7 @@ export function createAgentToolHandlers({ repos, readingState, memories }: ToolD
       return {
         ok: true,
         paper: paperCardSummary(paper, repos),
+        pageCount: pages.length,
         outline: compactOutline(extractOutline(pages)),
         ...result,
         evidenceByAspect,

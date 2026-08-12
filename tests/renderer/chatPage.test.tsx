@@ -35,7 +35,7 @@ function createApiMock(): DesktopApi {
       })
     },
     memories: { list: vi.fn().mockResolvedValue([]), save: vi.fn(), delete: vi.fn() },
-    papers: { list: vi.fn().mockResolvedValue([]), import: vi.fn(), importFiles: vi.fn(), updateReadingStatus: vi.fn(), reindex: vi.fn(), delete: vi.fn(), getOutline: vi.fn().mockResolvedValue([]), searchText: vi.fn().mockResolvedValue([]), read: vi.fn() },
+    papers: { list: vi.fn().mockResolvedValue([]), import: vi.fn(), importFiles: vi.fn(), copyToFolder: vi.fn(), updateReadingStatus: vi.fn(), reindex: vi.fn(), delete: vi.fn(), getOutline: vi.fn().mockResolvedValue([]), searchText: vi.fn().mockResolvedValue([]), read: vi.fn() },
     conversations: {
       list: vi.fn().mockResolvedValue([]),
       create: vi.fn(),
@@ -329,7 +329,8 @@ describe('App shell', () => {
     fireEvent.change(screen.getByLabelText('Dify App API Key'), { target: { value: 'app-key' } })
     fireEvent.click(screen.getByRole('button', { name: '测试连接' }))
 
-    expect(await screen.findAllByText('Dify 连接正常')).toHaveLength(2)
+    expect(await screen.findByText('valid')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Dify 已连接，打开设置' })).toBeInTheDocument()
   })
 
   it('opens settings from the topbar Dify status', async () => {
@@ -1139,7 +1140,7 @@ describe('App shell', () => {
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Reading' })).toHaveAttribute('aria-expanded', 'true')
     })
-    expect(screen.getByText('Hidden folder plan')).toBeInTheDocument()
+    expect(screen.getAllByText('Hidden folder plan').length).toBeGreaterThan(0)
   })
 
   it('creates a new conversation with the selected research context', async () => {
@@ -1158,7 +1159,7 @@ describe('App shell', () => {
 
     render(<App />)
 
-    const contextSelect = await screen.findByLabelText('问答上下文')
+    const contextSelect = await screen.findByLabelText('从知识库选择论文')
     fireEvent.change(contextSelect, { target: { value: `folder:${paperFolder.id}` } })
     fireEvent.change(screen.getByPlaceholderText('询问论文、比较方法、提取创新点、解释术语...'), {
       target: { value: 'Compare retrieval methods' }
@@ -1192,15 +1193,15 @@ describe('App shell', () => {
     fireEvent.click(await screen.findByText(contextConversation.title))
     expect(await screen.findByText('Explain attention')).toBeInTheDocument()
 
-    const contextInput = await screen.findByLabelText('问答上下文')
+    const contextInput = await screen.findByLabelText('当前论文范围')
     expect(contextInput).toHaveAttribute('readonly')
     expect(contextInput).toHaveValue(paperFolder.name)
-    expect(screen.queryByRole('combobox', { name: '问答上下文' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('combobox', { name: '从知识库选择论文' })).not.toBeInTheDocument()
     expect(screen.queryByText(/当前对话上下文已固定/)).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: '新对话' }))
 
-    expect(await screen.findByRole('combobox', { name: '问答上下文' })).toBeInTheDocument()
+    expect(await screen.findByRole('combobox', { name: '从知识库选择论文' })).toBeInTheDocument()
   })
 
   it('shows a compact agent progress state while waiting for the answer', async () => {
@@ -1225,10 +1226,11 @@ describe('App shell', () => {
     fireEvent.click(screen.getByRole('button', { name: '发送' }))
 
     const progress = await screen.findByRole('status')
-    expect(progress).toHaveTextContent('准备对话')
-    expect(progress).toHaveTextContent('锁定上下文')
-    expect(progress).toHaveTextContent('Dify 检索与生成')
-    expect(progress).toHaveTextContent('写入回答')
+    expect(progress).toHaveTextContent('确认论文范围')
+    expect(progress).toHaveTextContent('检索论文')
+    expect(progress).toHaveTextContent('读取原文与页码')
+    expect(progress).toHaveTextContent('生成回答')
+    expect(progress).toHaveTextContent('核对引用')
     expect(progress).toHaveTextContent(/\d+s/)
 
     await act(async () => {
@@ -1238,6 +1240,12 @@ describe('App shell', () => {
     await waitFor(() => {
       expect(screen.queryByRole('status')).not.toBeInTheDocument()
     })
+
+    const processButton = screen.getByRole('button', { name: /已思考（用时 \d+ 秒）/ })
+    expect(processButton).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByLabelText('思考过程')).toHaveTextContent('用户真正要解决的是')
+    expect(screen.getByLabelText('思考过程')).toHaveTextContent('回答范围和证据要求')
+    expect(screen.getByLabelText('思考过程')).toHaveTextContent('最后进入回答组织阶段')
   })
 
   it('updates the waiting state from Dify streaming progress events', async () => {
@@ -1290,6 +1298,37 @@ describe('App shell', () => {
       expect(screen.queryByRole('status')).not.toBeInTheDocument()
       expect(unsubscribeProgress).toHaveBeenCalled()
     })
+
+    expect(screen.getByRole('button', { name: /已思考（用时 \d+ 秒）/ })).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByLabelText('思考过程')).toHaveTextContent('读取论文大纲')
+  })
+
+  it('restores the saved research process when reopening a conversation', async () => {
+    const api = createApiMock()
+    const savedReply: Message = {
+      ...assistantReply,
+      researchProcess: {
+        durationMs: 4200,
+        thoughts: ['先确认论文范围，再读取原文证据，最后核对出处。'],
+        steps: [
+          { phase: 'scope', label: '确认论文范围', detail: '已将证据范围锁定为《RAG Survey》' },
+          { phase: 'read', label: '读取论文原文', detail: '实际调用 3 次', toolName: 'get_paper_text_chunk' },
+          { phase: 'verify', label: '核对引用', detail: '已匹配 2 条出处' }
+        ]
+      }
+    }
+    api.conversations.list = vi.fn().mockResolvedValue([outsideConversation])
+    api.messages.list = vi.fn().mockResolvedValue([savedReply])
+    window.researchNotion = api
+
+    const { ChatPage } = await import('../../src/renderer/pages/ChatPage')
+    render(<ChatPage selectedConversationId={outsideConversation.id} />)
+
+    const processButton = await screen.findByRole('button', { name: '已思考（用时 4 秒）' })
+    expect(processButton).toHaveAttribute('aria-expanded', 'true')
+
+    expect(screen.getByLabelText('思考过程')).toHaveTextContent('先确认论文范围，再读取原文证据，最后核对出处。')
+    expect(screen.getByLabelText('思考过程')).toHaveTextContent('公开思考摘要、实际研究动作与证据结果')
   })
 
   it('renders streamed answer text before the final assistant message is saved', async () => {

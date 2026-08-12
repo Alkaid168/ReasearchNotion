@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, shell } from 'electron'
+import { app, BrowserWindow, dialog, net, protocol, shell } from 'electron'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -11,22 +11,31 @@ import { resolveToolServiceToken } from './agentTools/toolServiceAuth'
 import { extractOutline, readPaperPages, searchPages } from './agentTools/paperText'
 import { createDifyClient } from './dify/client'
 import { conversationExportFilename, formatConversationMarkdown } from './conversations/exportMarkdown'
+import { guardPaperFactAnswer, requestsWholePaperSummary, verifyWholePaperRead } from './dify/answerGrounding'
 import { mapCitationsToLocalPapers, mergeCitationsWithToolInvocations } from './dify/citations'
 import { DifyApiError } from './dify/errors'
 import { readingStatePatchForConversationContext } from './dify/conversationRuntime'
 import { buildResearchAgentInputs, buildResearchAgentQuery, formatConversationHistory } from './dify/researchAgent'
-import { readPaperMarkdown, readPaperPlainText } from './files/importPaper'
+import { readPaperMarkdown } from './files/importPaper'
 import { registerIpc } from './ipc'
 import { createElectronSecretBox } from './settings/secretBox'
 import { createSettingsService } from './settings/settingsService'
 import { createMemoriesService } from './settings/memoriesService'
 import { ensureFolderDataset } from './workflows/ensureFolderDataset'
-import { importAndIndexPaper, reindexPaper } from './workflows/importAndIndexPaper'
+import { copyPaperToFolder, importAndIndexPaper, reindexPaper } from './workflows/importAndIndexPaper'
+import { buildResearchProcess, type ResearchProgressEvent } from '../shared/researchProcess'
 import type { AppSettings, ChatContext, Paper } from '../shared/types'
 
 const isolatedUserDataDir = process.env.RESEARCH_NOTION_USER_DATA_DIR?.trim()
 if (isolatedUserDataDir) app.setPath('userData', isolatedUserDataDir)
 if (process.platform === 'win32') app.setAppUserModelId('com.researchnotion.desktop')
+
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: 'research-notion-paper',
+    privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true }
+  }
+])
 
 function safeUrl(raw: string): URL | null {
   try {
@@ -88,8 +97,28 @@ function createWindow(): void {
 
   openExternalLinksInSystemBrowser(mainWindow)
 
+  mainWindow.webContents.on('did-start-loading', () => {
+    console.log(`[renderer] loading ${mainWindow.webContents.getURL() || '(pending URL)'}`)
+  })
+  mainWindow.webContents.on('did-finish-load', () => {
+    console.log(`[renderer] loaded ${mainWindow.webContents.getURL()}`)
+  })
+  mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL) => {
+    console.error(`[renderer] failed to load ${validatedURL}: ${errorCode} ${errorDescription}`)
+  })
+  mainWindow.webContents.on('render-process-gone', (_event, details) => {
+    console.error(`[renderer] process exited: ${details.reason} (code ${details.exitCode})`)
+  })
+  mainWindow.webContents.on('console-message', (_event, level, message, line, sourceId) => {
+    if (level < 2) return
+    console.error(`[renderer] ${message} (${sourceId}:${line})`)
+  })
+
   if (process.env.ELECTRON_RENDERER_URL) {
     void mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL)
+    if (process.env.RESEARCH_NOTION_OPEN_DEVTOOLS === '1') {
+      mainWindow.webContents.openDevTools({ mode: 'detach' })
+    }
   } else {
     void mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'))
   }
@@ -100,12 +129,24 @@ void app.whenReady().then(async () => {
   const databasePath = path.join(userDataDir, 'research-notion.sqlite')
   const db = createDatabase(databasePath)
   const repos = createRepositories(db)
+  protocol.handle('research-notion-paper', (request) => {
+    const requestUrl = new URL(request.url)
+    const paperId = decodeURIComponent(requestUrl.pathname.replace(/^\//, ''))
+    const paper = repos.papers.getById(paperId)
+    if (!paper || paper.fileType !== 'pdf') {
+      return new Response('Paper not found', { status: 404 })
+    }
+    return net.fetch(pathToFileURL(paper.filePath).toString(), {
+      headers: request.headers
+    })
+  })
   const readingState = createReadingStateStore()
   const toolServiceToken = await resolveToolServiceToken(userDataDir)
   const settingsService = createSettingsService(db, createElectronSecretBox())
   const memoriesService = createMemoriesService(db)
+  const agentTools = createAgentToolHandlers({ repos, readingState, memories: memoriesService })
   const agentToolService = createOpenApiToolService({
-    tools: createAgentToolHandlers({ repos, readingState, memories: memoriesService }),
+    tools: agentTools,
     readingState,
     authToken: toolServiceToken
   })
@@ -123,21 +164,23 @@ void app.whenReady().then(async () => {
     return createDifyClient({
       baseUrl: settings.difyBaseUrl,
       appApiKey: settings.difyAppApiKey,
-      knowledgeApiKey: settings.difyKnowledgeApiKey
+      knowledgeApiKey: settings.difyKnowledgeApiKey,
+      preferredResponseMode: 'streaming'
     })
   }
 
   function buildContextInventory(conversationContext: ChatContext): string | null {
     const describePaper = (paper: ReturnType<typeof repos.papers.listAll>[number], index: number) => {
       const card = paper.card
-      const meta = [card?.authors, card?.year].filter(Boolean).join(' · ')
       const details = [
         `paperId=${paper.id}`,
         `folderId=${paper.folderId}`,
         `type=${paper.fileType}`,
         `index=${paper.indexStatus}`
       ].join('；')
-      const lines = [`${index + 1}. ${paper.title}${meta ? `（${meta}）` : ''}`, `   ${details}`]
+      // Automatically generated card metadata is useful for navigation, but
+      // authorship must never be injected as primary-source evidence.
+      const lines = [`${index + 1}. ${paper.title}`, `   ${details}`]
       if (card?.oneSentenceSummary) lines.push(`   摘要：${card.oneSentenceSummary}`)
       if (card?.researchProblem) lines.push(`   研究问题：${card.researchProblem}`)
       if (card?.methodSummary) lines.push(`   方法：${card.methodSummary}`)
@@ -161,7 +204,6 @@ void app.whenReady().then(async () => {
         `paperId：${paper.id}`,
         `folderId：${paper.folderId}`,
         `文件类型/索引状态：${paper.fileType} / ${paper.indexStatus}`,
-        card?.authors || card?.year ? `作者/年份：${[card?.authors, card?.year].filter(Boolean).join(' · ')}` : null,
         card?.oneSentenceSummary ? `摘要：${card.oneSentenceSummary}` : null,
         card?.researchProblem ? `研究问题：${card.researchProblem}` : null,
         card?.methodSummary ? `方法：${card.methodSummary}` : null,
@@ -197,6 +239,32 @@ void app.whenReady().then(async () => {
       folderId,
       folderDatasetId: datasetId,
       sourcePath,
+      userDataDir,
+      repos,
+      dify
+    })
+  }
+
+  async function copyPaperIntoFolder(paperId: string, targetFolderId: string) {
+    const settings = await settingsService.get()
+    const hasDifyConfig = Boolean(settings.difyBaseUrl && settings.difyAppApiKey && settings.difyKnowledgeApiKey)
+    if (!hasDifyConfig) {
+      return copyPaperToFolder({ paperId, targetFolderId, userDataDir, repos })
+    }
+
+    const dify = createConfiguredDifyClient(settings)
+    let datasetId: string | null = null
+    try {
+      const dataset = await ensureFolderDataset({ folderId: targetFolderId, repos, dify })
+      datasetId = dataset.datasetId
+    } catch {
+      datasetId = null
+    }
+
+    return copyPaperToFolder({
+      paperId,
+      targetFolderId,
+      folderDatasetId: datasetId,
       userDataDir,
       repos,
       dify
@@ -338,6 +406,7 @@ void app.whenReady().then(async () => {
         for (const sourcePath of filePaths) imported.push(await importPaperFromPath(folderId, sourcePath))
         return imported
       },
+      copyToFolder: async (paperId, targetFolderId) => copyPaperIntoFolder(paperId, targetFolderId),
       updateReadingStatus: async (paperId, readingStatus) => repos.paperCards.updateReadingStatus(paperId, readingStatus),
       reindex: async (paperId) => {
         const paper = repos.papers.getById(paperId)
@@ -389,9 +458,13 @@ void app.whenReady().then(async () => {
         return {
           paper,
           markdownText: await readPaperMarkdown(paper),
-          plainText: await readPaperPlainText(paper),
-          previewUrl: paper.fileType === 'pdf' ? pathToFileURL(paper.filePath).toString() : null,
-          pdfData: paper.fileType === 'pdf' ? await fs.readFile(paper.filePath) : null
+          // PDF.js renders the document directly. Extracting every page here
+          // duplicated the reader work and blocked the first visible page.
+          plainText: null,
+          previewUrl: paper.fileType === 'pdf' ? `research-notion-paper://paper/${encodeURIComponent(paper.id)}` : null,
+          // Stream PDF bytes through a local protocol instead of copying the
+          // complete file through Electron IPC whenever the paper is opened.
+          pdfData: null
         }
       }
     },
@@ -407,6 +480,25 @@ void app.whenReady().then(async () => {
         const conversation = repos.conversations.getById(conversationId)
         if (!conversation) throw new Error('对话不存在。')
 
+        const existingMessages = repos.messages.listByConversation(conversationId)
+        const regenerateMessageId = options?.regenerateMessageId?.trim() || null
+        const regenerateIndex = regenerateMessageId
+          ? existingMessages.findIndex((message) => message.id === regenerateMessageId)
+          : -1
+        const regenerateTarget = regenerateIndex >= 0 ? existingMessages[regenerateIndex] : null
+        if (regenerateMessageId && (!regenerateTarget || regenerateTarget.role !== 'assistant')) {
+          throw new Error('只能重新生成已有的助手回答。')
+        }
+        if (regenerateTarget) {
+          const latestAssistant = [...existingMessages].reverse().find((message) => message.role === 'assistant')
+          if (latestAssistant?.id !== regenerateTarget.id) throw new Error('只能重新生成最新一条回答。')
+        }
+        const previousUserMessage = regenerateTarget
+          ? existingMessages.slice(0, regenerateIndex).reverse().find((message) => message.role === 'user')
+          : null
+        if (regenerateTarget && !previousUserMessage) throw new Error('找不到这条回答对应的问题。')
+        const promptContent = previousUserMessage?.content ?? content
+
         const settings = await settingsService.get()
         const progressRequestId = options?.progressRequestId?.trim()
         const abortController = progressRequestId ? new AbortController() : null
@@ -418,13 +510,21 @@ void app.whenReady().then(async () => {
           emphasisContext: options?.emphasisContext
         })
         if (readingPatch) readingState.update(readingPatch)
-        const conversationHistory = formatConversationHistory(repos.messages.listByConversation(conversationId))
+        const conversationHistory = formatConversationHistory(
+          regenerateTarget
+            ? existingMessages.filter(
+                (message) => message.id !== regenerateTarget.id && message.id !== previousUserMessage?.id
+              )
+            : existingMessages
+        )
         const toolInvocationCursor = agentToolService.getInvocationCursor()
+        const researchStartedAt = Date.now()
+        const researchEvents: ResearchProgressEvent[] = []
 
         try {
           const result = await createConfiguredDifyClient(settings).sendChatMessage({
             query: buildResearchAgentQuery({
-              content,
+              content: promptContent,
               context: conversation.context,
               emphasisContext: options?.emphasisContext,
               contextInventory: buildContextInventory(conversation.context),
@@ -433,26 +533,28 @@ void app.whenReady().then(async () => {
             }),
             user: 'local-user',
             inputs: buildResearchAgentInputs(conversation.context, options),
-            conversationId: conversation.difyConversationId ?? undefined,
+            // A regeneration starts a fresh remote branch so the previous answer
+            // cannot bias its replacement. Local history is still provided above.
+            conversationId: regenerateTarget ? undefined : conversation.difyConversationId ?? undefined,
             signal: abortController?.signal,
-            onProgress:
-              progressRequestId && emitProgress
-                ? (progress) => {
-                    emitProgress({ requestId: progressRequestId, ...progress })
-                  }
-                : undefined
+            onProgress: (progress) => {
+              researchEvents.push(progress)
+              if (progressRequestId && emitProgress) emitProgress({ requestId: progressRequestId, ...progress })
+            }
           })
 
           if (result.difyConversationId) {
             repos.conversations.setDifyConversationId(conversationId, result.difyConversationId)
           }
 
-          repos.messages.create({
-            conversationId,
-            role: 'user',
-            content,
-            citations: []
-          })
+          if (!regenerateTarget) {
+            repos.messages.create({
+              conversationId,
+              role: 'user',
+              content: promptContent,
+              citations: []
+            })
+          }
 
           const mappedCitations = mapCitationsToLocalPapers(
             result.citations,
@@ -460,17 +562,54 @@ void app.whenReady().then(async () => {
             repos.papers.getByTitle,
             repos.papers.getById
           )
+          const toolInvocations = agentToolService.getInvocationsAfter(toolInvocationCursor)
           const citations = mergeCitationsWithToolInvocations(
             mappedCitations,
-            agentToolService.getInvocationsAfter(toolInvocationCursor),
+            toolInvocations,
             repos.papers.getById
           )
+          const wholePaperReadCompleted =
+            conversation.context.type === 'paper' && requestsWholePaperSummary(promptContent, conversation.context)
+              ? await verifyWholePaperRead({
+                  paperId: conversation.context.paperId,
+                  invocations: toolInvocations,
+                  readChunk: (chunkInput) => agentTools.getPaperTextChunk(chunkInput)
+                })
+              : undefined
+          const grounded = guardPaperFactAnswer({
+            question: promptContent,
+            context: conversation.context,
+            answer: result.answer,
+            citations,
+            wholePaperReadCompleted,
+            allowedPaperIds:
+              conversation.context.type === 'folder'
+                ? repos.papers.listByFolder(conversation.context.folderId).map((candidate) => candidate.id)
+                : undefined
+          })
 
+          const answerCitations = grounded.blocked ? [] : citations
+          const researchProcess = buildResearchProcess({
+              context: conversation.context,
+              events: researchEvents,
+              citations: answerCitations,
+              durationMs: Date.now() - researchStartedAt,
+              question: promptContent,
+              answer: grounded.answer
+            })
+          if (regenerateTarget) {
+            return repos.messages.update(regenerateTarget.id, {
+              content: grounded.answer,
+              citations: answerCitations,
+              researchProcess
+            })
+          }
           return repos.messages.create({
             conversationId,
             role: 'assistant',
-            content: result.answer,
-            citations
+            content: grounded.answer,
+            citations: answerCitations,
+            researchProcess
           })
         } finally {
           if (progressRequestId && activeSendControllers.get(progressRequestId) === abortController) {

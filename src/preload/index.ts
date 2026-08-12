@@ -45,6 +45,8 @@ const api: DesktopApi = {
         folderId,
         filePaths: files.map((file) => webUtils.getPathForFile(file)).filter(Boolean)
       }),
+    copyToFolder: (paperId: string, targetFolderId: string) =>
+      ipcRenderer.invoke('papers:copyToFolder', { paperId, targetFolderId }),
     updateReadingStatus: (paperId: string, readingStatus: ReadingStatus) =>
       ipcRenderer.invoke('papers:updateReadingStatus', { paperId, readingStatus }),
     reindex: (paperId: string) => ipcRenderer.invoke('papers:reindex', { paperId }),
