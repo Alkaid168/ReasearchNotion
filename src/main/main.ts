@@ -17,6 +17,7 @@ import { readingStatePatchForConversationContext } from './dify/conversationRunt
 import { buildResearchAgentInputs, buildResearchAgentQuery, formatConversationHistory } from './dify/researchAgent'
 import { readPaperMarkdown, readPaperPlainText } from './files/importPaper'
 import { registerIpc } from './ipc'
+import { applyModelProfile } from './settings/modelKeySync'
 import { createElectronSecretBox } from './settings/secretBox'
 import { createSettingsService } from './settings/settingsService'
 import { createMemoriesService } from './settings/memoriesService'
@@ -205,27 +206,29 @@ void app.whenReady().then(async () => {
 
   async function applyActiveProfile(profileId: string): Promise<ModelProfile> {
     const profile = repos.modelProfiles.setActive(profileId)
-    const current = await settingsService.get()
-    await settingsService.save({
-      ...current,
-      difyAppApiKey: profile.difyAppApiKey,
-      activeModelProfileId: profile.id
-    })
-    // dify conversation_id 是 app-scoped，切档（换 Dify app）后旧线程会 404，必须清。
+    // 同步到 Dify：改 provider credentials + Tool Agent app 的 model 配置 + 清 Redis 缓存
+    try {
+      applyModelProfile(profile.provider, profile.llmApiKey, profile.modelName)
+    } catch (error) {
+      console.error('[modelProfile] sync to Dify failed (best-effort):', error)
+    }
+    // 切 provider 后历史是旧模型生成，清 dify 线程避免续接错乱
     repos.conversations.clearDifyConversationIds()
+    const current = await settingsService.get()
+    await settingsService.save({ ...current, activeModelProfileId: profile.id })
     return profile
   }
 
-  // 首次启动：把现有 difyAppApiKey 导入为默认 DeepSeek 档，保证向后兼容。
-  // key 未变，不清 dify 线程，保留历史连续性。
+  // 首次启动：把现有 DeepSeek LLM key 导入为默认档，保证向后兼容。
+  // Dify 端仍用原 DeepSeek 配置，无需 sync。
   if (repos.modelProfiles.list().length === 0) {
     const seedSettings = await settingsService.get()
-    if (seedSettings.difyAppApiKey) {
+    if (seedSettings.deepseekApiKey) {
       const seeded = repos.modelProfiles.create({
         provider: 'deepseek',
         modelName: 'deepseek-v4-flash',
         displayName: 'DeepSeek V4 Flash',
-        difyAppApiKey: seedSettings.difyAppApiKey,
+        llmApiKey: seedSettings.deepseekApiKey,
         contextWindowTokens: 1048576
       })
       repos.modelProfiles.setActive(seeded.id)

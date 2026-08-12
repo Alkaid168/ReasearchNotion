@@ -56,14 +56,17 @@ export function App(): JSX.Element {
     window.setTimeout(() => dismissToast(id), 4200)
   }, [dismissToast])
 
+  const reloadModelProfiles = useCallback(async () => {
+    setModelProfiles(await desktopApi.modelProfiles.list())
+  }, [])
+
   const handleActivateModel = useCallback(
     async (id: string) => {
       await desktopApi.modelProfiles.setActive(id)
-      const profiles = await desktopApi.modelProfiles.list()
-      setModelProfiles(profiles)
+      await reloadModelProfiles()
       notify('已切换模型，新对话将使用所选模型。')
     },
-    [notify]
+    [notify, reloadModelProfiles]
   )
 
   useEffect(() => {
@@ -236,6 +239,7 @@ export function App(): JSX.Element {
                 : { label: 'Dify 连接失败', tone: 'error' }
             )
           }
+          onModelProfilesChanged={reloadModelProfiles}
         />
       ) : null}
       </AppShell>

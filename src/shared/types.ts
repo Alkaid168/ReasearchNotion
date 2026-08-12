@@ -116,7 +116,7 @@ export type ModelProfile = {
   provider: ModelProvider
   modelName: string
   displayName: string
-  difyAppApiKey: string
+  llmApiKey: string
   contextWindowTokens: number
   isActive: boolean
   sortOrder: number
@@ -129,7 +129,7 @@ export type ModelProfileInput = {
   provider: ModelProvider
   modelName: string
   displayName: string
-  difyAppApiKey: string
+  llmApiKey: string
   contextWindowTokens: number
 }
 

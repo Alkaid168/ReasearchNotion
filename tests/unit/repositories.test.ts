@@ -501,14 +501,14 @@ describe('repositories', () => {
       provider: 'deepseek',
       modelName: 'deepseek-chat',
       displayName: 'DeepSeek Chat',
-      difyAppApiKey: 'app-deepseek',
+      llmApiKey: 'app-deepseek',
       contextWindowTokens: 64000
     })
     const qwen = repos.modelProfiles.create({
       provider: 'qwen',
       modelName: 'qwen-max',
       displayName: 'Qwen Max',
-      difyAppApiKey: 'app-qwen',
+      llmApiKey: 'app-qwen',
       contextWindowTokens: 32000
     })
 
@@ -525,11 +525,11 @@ describe('repositories', () => {
       provider: 'deepseek',
       modelName: 'deepseek-reasoner',
       displayName: 'DeepSeek Reasoner',
-      difyAppApiKey: 'app-deepseek-v2',
+      llmApiKey: 'app-deepseek-v2',
       contextWindowTokens: 64000
     })
     expect(updated.modelName).toBe('deepseek-reasoner')
-    expect(updated.difyAppApiKey).toBe('app-deepseek-v2')
+    expect(updated.llmApiKey).toBe('app-deepseek-v2')
 
     repos.modelProfiles.delete(qwen.id)
     expect(repos.modelProfiles.list().map((profile) => profile.id)).toEqual([deepseek.id])

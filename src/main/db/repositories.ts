@@ -142,7 +142,7 @@ export function createRepositories(db: Database.Database) {
     provider: string
     modelName: string
     displayName: string
-    difyAppApiKey: string
+    llmApiKey: string
     contextWindowTokens: number
     isActive: number
     sortOrder: number
@@ -151,7 +151,7 @@ export function createRepositories(db: Database.Database) {
   }
 
   const modelProfileSelect = `SELECT id, provider, model_name as modelName, display_name as displayName,
-        dify_app_api_key as difyAppApiKey, context_window_tokens as contextWindowTokens,
+        llm_api_key as llmApiKey, context_window_tokens as contextWindowTokens,
         is_active as isActive, sort_order as sortOrder,
         created_at as createdAt, updated_at as updatedAt
  FROM model_profiles`
@@ -162,7 +162,7 @@ export function createRepositories(db: Database.Database) {
       provider: row.provider as ModelProvider,
       modelName: row.modelName,
       displayName: row.displayName,
-      difyAppApiKey: row.difyAppApiKey,
+      llmApiKey: row.llmApiKey,
       contextWindowTokens: row.contextWindowTokens,
       isActive: row.isActive === 1,
       sortOrder: row.sortOrder,
@@ -581,7 +581,7 @@ export function createRepositories(db: Database.Database) {
       }
     },
     modelProfiles: {
-      // 注：dify_app_api_key 在 model_profiles 表中明文存储（DB 文件位于本机 userDataDir，
+      // 注：llm_api_key 在 model_profiles 表中明文存储（DB 文件位于本机 userDataDir，
       // 桌面应用场景；与 settings 表的 sealed 存储策略不同，这里优先实现简洁）。
       list(): ModelProfile[] {
         const rows = db
@@ -606,16 +606,16 @@ export function createRepositories(db: Database.Database) {
         }
         db.prepare(
           `INSERT INTO model_profiles
-             (id, provider, model_name, display_name, dify_app_api_key, context_window_tokens,
+             (id, provider, model_name, display_name, llm_api_key, context_window_tokens,
               is_active, sort_order, created_at, updated_at)
-           VALUES (@id, @provider, @modelName, @displayName, @difyAppApiKey, @contextWindowTokens,
+           VALUES (@id, @provider, @modelName, @displayName, @llmApiKey, @contextWindowTokens,
                    0, @sortOrder, @createdAt, @updatedAt)`
         ).run({
           id: profileId,
           provider: input.provider,
           modelName: input.modelName,
           displayName: input.displayName,
-          difyAppApiKey: input.difyAppApiKey,
+          llmApiKey: input.llmApiKey,
           contextWindowTokens: input.contextWindowTokens,
           sortOrder: next.next,
           createdAt: timestamp,
@@ -629,12 +629,12 @@ export function createRepositories(db: Database.Database) {
         if (!input.id) throw new Error('模型档 id 缺失。')
         db.prepare(
           `UPDATE model_profiles SET provider = ?, model_name = ?, display_name = ?,
-                  dify_app_api_key = ?, context_window_tokens = ?, updated_at = ? WHERE id = ?`
+                  llm_api_key = ?, context_window_tokens = ?, updated_at = ? WHERE id = ?`
         ).run(
           input.provider,
           input.modelName,
           input.displayName,
-          input.difyAppApiKey,
+          input.llmApiKey,
           input.contextWindowTokens,
           now(),
           input.id

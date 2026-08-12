@@ -56,9 +56,10 @@ type Notice = {
 type SettingsPageProps = {
   onSettingsSaved?: (settings: AppSettings) => void
   onConnectionTested?: (result: ConnectionTestResult) => void
+  onModelProfilesChanged?: () => void | Promise<void>
 }
 
-export function SettingsPage({ onSettingsSaved, onConnectionTested }: SettingsPageProps = {}): JSX.Element {
+export function SettingsPage({ onSettingsSaved, onConnectionTested, onModelProfilesChanged }: SettingsPageProps = {}): JSX.Element {
   const [settings, setSettings] = useState<AppSettings>(emptySettings)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -156,6 +157,7 @@ export function SettingsPage({ onSettingsSaved, onConnectionTested }: SettingsPa
   async function saveModelProfileInput(input: ModelProfileInput): Promise<void> {
     const saved = await desktopApi.modelProfiles.save(input)
     setModelProfiles(await desktopApi.modelProfiles.list())
+    await onModelProfilesChanged?.()
     setEditingProfile(null)
     setNotice({ tone: 'success', message: `模型档「${saved.displayName}」已保存。` })
   }
@@ -163,6 +165,7 @@ export function SettingsPage({ onSettingsSaved, onConnectionTested }: SettingsPa
   async function deleteModelProfile(id: string): Promise<void> {
     await desktopApi.modelProfiles.delete(id)
     setModelProfiles(await desktopApi.modelProfiles.list())
+    await onModelProfilesChanged?.()
     const updated = await desktopApi.settings.get()
     setSettings(updated)
     setNotice({ tone: 'neutral', message: '模型档已删除。' })
@@ -171,6 +174,7 @@ export function SettingsPage({ onSettingsSaved, onConnectionTested }: SettingsPa
   async function activateModelProfile(id: string): Promise<void> {
     await desktopApi.modelProfiles.setActive(id)
     setModelProfiles(await desktopApi.modelProfiles.list())
+    await onModelProfilesChanged?.()
     const updated = await desktopApi.settings.get()
     setSettings(updated)
     setNotice({ tone: 'success', message: '已切换默认模型，新对话将使用此模型。' })
@@ -313,7 +317,7 @@ export function SettingsPage({ onSettingsSaved, onConnectionTested }: SettingsPa
                       provider,
                       modelName: presets.models[0].name,
                       displayName: presets.models[0].label,
-                      difyAppApiKey: '',
+                      llmApiKey: '',
                       contextWindowTokens: presets.models[0].contextWindow
                     })
                   }
@@ -354,7 +358,7 @@ export function SettingsPage({ onSettingsSaved, onConnectionTested }: SettingsPa
                               provider: profile.provider,
                               modelName: profile.modelName,
                               displayName: profile.displayName,
-                              difyAppApiKey: profile.difyAppApiKey,
+                              llmApiKey: profile.llmApiKey,
                               contextWindowTokens: profile.contextWindowTokens
                             })
                           }
@@ -555,7 +559,7 @@ function ModelProfileEditor({ input, onSave, onCancel }: ModelProfileEditorProps
   const [provider, setProvider] = useState<ModelProvider>(input.provider)
   const [modelName, setModelName] = useState(input.modelName)
   const [displayName, setDisplayName] = useState(input.displayName)
-  const [difyAppApiKey, setDifyAppApiKey] = useState(input.difyAppApiKey)
+  const [llmApiKey, setLlmApiKey] = useState(input.llmApiKey)
   const [contextWindowTokens, setContextWindowTokens] = useState(input.contextWindowTokens)
 
   const presets = MODEL_PROVIDER_PRESETS[provider]
@@ -584,7 +588,7 @@ function ModelProfileEditor({ input, onSave, onCancel }: ModelProfileEditorProps
       provider,
       modelName: modelName.trim(),
       displayName: displayName.trim(),
-      difyAppApiKey: difyAppApiKey.trim(),
+      llmApiKey: llmApiKey.trim(),
       contextWindowTokens
     })
   }
@@ -616,8 +620,8 @@ function ModelProfileEditor({ input, onSave, onCancel }: ModelProfileEditorProps
         <input value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder="如 DeepSeek Chat" />
       </label>
       <label className="settings-field">
-        <span><KeyRound size={16} aria-hidden="true" /> Dify App API Key</span>
-        <SecretInput value={difyAppApiKey} onChange={setDifyAppApiKey} placeholder="app-..." />
+        <span><KeyRound size={16} aria-hidden="true" /> LLM API Key</span>
+        <SecretInput value={llmApiKey} onChange={setLlmApiKey} placeholder="sk-..." />
       </label>
       <label className="settings-field">
         <span>上下文窗口（tokens）</span>
@@ -626,7 +630,7 @@ function ModelProfileEditor({ input, onSave, onCancel }: ModelProfileEditorProps
           value={contextWindowTokens}
           onChange={(event) => setContextWindowTokens(Number(event.target.value))}
           min={1000}
-          step={1000}
+          step="any"
         />
       </label>
       <div className="settings-actions">
@@ -634,7 +638,7 @@ function ModelProfileEditor({ input, onSave, onCancel }: ModelProfileEditorProps
           <X size={16} aria-hidden="true" />
           取消
         </button>
-        <button className="primary-action" type="submit" disabled={!displayName.trim() || !difyAppApiKey.trim()}>
+        <button className="primary-action" type="submit" disabled={!displayName.trim() || !llmApiKey.trim()}>
           <Save size={16} aria-hidden="true" />
           保存模型档
         </button>
