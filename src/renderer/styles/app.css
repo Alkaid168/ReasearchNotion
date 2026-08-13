@@ -1502,12 +1502,14 @@ button {
   text-align: left;
   cursor: pointer;
   min-width: 120px;
-  transition: border-color 0.15s, background 0.15s;
+  transition: border-color var(--rn-duration-fast, 120ms) var(--rn-ease-out, ease), background var(--rn-duration-fast, 120ms) var(--rn-ease-out, ease), transform var(--rn-duration-fast, 120ms) var(--rn-ease-out, ease), box-shadow var(--rn-duration-fast, 120ms) var(--rn-ease-out, ease);
 }
 
 .suggestion-card:hover {
   border-color: var(--rn-border-strong);
-  background: var(--rn-hover);
+  background: var(--rn-surface);
+  transform: translateY(-1px);
+  box-shadow: var(--rn-shadow-float, 0 4px 20px rgba(0, 0, 0, 0.08));
 }
 
 .suggestion-card-title {
@@ -4592,4 +4594,85 @@ button {
 .compress-notice button:disabled {
   opacity: 0.55;
   cursor: default;
+}
+
+/* ============ 流式光标（GPT 标志性细节） ============ */
+.message.streaming .markdown-content > :last-child::after {
+  content: '';
+  display: inline-block;
+  width: 8px;
+  height: 1.1em;
+  margin-left: 2px;
+  border-radius: 1px;
+  background: var(--rn-text);
+  vertical-align: -0.15em;
+  animation: rn-cursor-blink 1s steps(2, start) infinite;
+}
+
+@keyframes rn-cursor-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0;
+  }
+}
+
+/* ============ 空态入场序列（仅播一次） ============ */
+.chat-hero .empty-avatar,
+.chat-hero h1,
+.chat-hero .suggestion-card,
+.chat-hero .dock-model-row,
+.chat-hero .composer {
+  animation: rn-hero-in 150ms var(--rn-ease-out, ease) both;
+}
+
+.chat-hero h1 {
+  animation-delay: 40ms;
+}
+
+.chat-hero .suggestion-card:nth-child(1) {
+  animation-delay: 80ms;
+}
+
+.chat-hero .suggestion-card:nth-child(2) {
+  animation-delay: 120ms;
+}
+
+.chat-hero .suggestion-card:nth-child(3) {
+  animation-delay: 160ms;
+}
+
+.chat-hero .suggestion-card:nth-child(4) {
+  animation-delay: 200ms;
+}
+
+.chat-hero .dock-model-row {
+  animation-delay: 240ms;
+}
+
+.chat-hero .composer {
+  animation-delay: 280ms;
+}
+
+.chat-hero.hero-played .empty-avatar,
+.chat-hero.hero-played h1,
+.chat-hero.hero-played .suggestion-card,
+.chat-hero.hero-played .dock-model-row,
+.chat-hero.hero-played .composer {
+  animation: none;
+}
+
+@keyframes rn-hero-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }

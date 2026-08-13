@@ -108,6 +108,7 @@ export function ChatPage({
     setTokenUsage(lastAssistant?.tokenUsage ?? null)
   }, [messages])
   const messageListRef = useRef<HTMLElement | null>(null)
+  const heroPlayedRef = useRef(false)
 
   function handleContextChange(context: ChatContext): void {
     setSelectedContext(context)
@@ -373,6 +374,10 @@ export function ChatPage({
 
   const hasTimeline = messages.length > 0 || sending
 
+  useEffect(() => {
+    if (!hasTimeline) heroPlayedRef.current = true
+  }, [hasTimeline])
+
   return (
     <main className={hasTimeline ? 'chat-page has-messages' : 'chat-page'}>
       {hasTimeline ? (
@@ -428,7 +433,7 @@ export function ChatPage({
         </section>
         </>
       ) : (
-        <section className="chat-hero">
+        <section className={heroPlayedRef.current ? 'chat-hero hero-played' : 'chat-hero'}>
           <div className="empty-avatar" aria-hidden="true">
             <img src={researchNotionMark} alt="" />
           </div>
