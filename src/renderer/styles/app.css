@@ -1425,15 +1425,34 @@ button {
 }
 
 .context-switch-notice {
-  width: min(768px, 100%);
-  margin: 0 0 8px;
-  padding: 6px 12px;
+  position: fixed;
+  top: 12px;
+  right: 16px;
+  width: auto;
+  max-width: min(420px, calc(100vw - 32px));
+  margin: 0;
+  padding: 8px 14px;
   border: 1px solid var(--rn-border);
-  border-radius: 8px;
-  background: #f9f9f9;
+  border-radius: var(--rn-radius-md, 12px);
+  background: var(--rn-surface);
+  box-shadow: var(--rn-shadow-float, 0 4px 20px rgba(0, 0, 0, 0.08));
   color: var(--rn-muted);
   font-size: 12px;
   line-height: 1.4;
+  z-index: var(--rn-z-toast, 40);
+  animation: rn-toast-in var(--rn-duration-normal, 200ms) var(--rn-ease-out, ease);
+}
+
+@keyframes rn-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .dock-stop-row {
@@ -4527,7 +4546,7 @@ button {
 }
 
 .token-counter {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--rn-muted, rgba(13, 13, 13, 0.5));
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -4545,19 +4564,32 @@ button {
 
 /* ============ 上下文压缩提示 ============ */
 .compress-notice {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 12px;
-  width: 100%;
-  max-width: 768px;
+  width: auto;
+  max-width: min(768px, 100%);
   margin: 0 auto 8px;
-  padding: 6px 12px;
+  padding: 6px 14px;
   border: 1px solid var(--rn-border, rgba(0, 0, 0, 0.1));
-  border-radius: 8px;
+  border-radius: 9999px;
   background: rgba(192, 57, 43, 0.04);
   font-size: 12px;
   color: var(--rn-text, #0d0d0d);
+  animation: rn-rise-in var(--rn-duration-normal, 200ms) var(--rn-ease-out, ease);
+}
+
+@keyframes rn-rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .compress-notice span {
