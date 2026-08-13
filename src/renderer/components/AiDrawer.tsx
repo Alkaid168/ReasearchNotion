@@ -1,10 +1,11 @@
-import { useEffect, useState, type Dispatch, type FormEvent, type JSX, type MouseEvent as ReactMouseEvent, type SetStateAction } from 'react'
+import { useEffect, useRef, useState, type Dispatch, type FormEvent, type JSX, type MouseEvent as ReactMouseEvent, type SetStateAction } from 'react'
 import { ArrowUp, Check, Copy, Lightbulb, MessageSquare, Square, X } from 'lucide-react'
 import { desktopApi } from '../api/desktopApi'
 import { AcademicMarkdown } from './AcademicMarkdown'
 import { CitationStatus } from './CitationStatus'
 import { ModelSelector } from './ModelSelector'
 import { StreamingMarkdown } from './StreamingMarkdown'
+import { useStreamingOutput } from '../hooks/useStreamingOutput'
 import { userFacingSendError } from '../utils/userFacingError'
 import { formatTokenCount } from '../utils/formatToken'
 import type { Citation, Message, ModelProfile, Paper, TokenUsage } from '../../shared/types'
@@ -78,7 +79,8 @@ export function AiDrawer({
   const [toolCalls, setToolCalls] = useState<Array<{ name: string; label: string; status: 'running' | 'done' }>>([])
   const [tokenUsage, setTokenUsage] = useState<TokenUsage | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [streamingAnswer, setStreamingAnswer] = useState('')
+  const stream = useStreamingOutput()
+  const finalAssistantRef = useRef<Message | null>(null)
   const [activeProgressRequestId, setActiveProgressRequestId] = useState<string | null>(null)
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null)
   const { conversationId, messages, draft } = session
@@ -91,6 +93,16 @@ export function AiDrawer({
   useEffect(() => {
     setError(null)
   }, [paper?.id])
+
+  // 流式排空完成后,把最终回答无缝落库为历史消息(与 ChatPage 同机制)。
+  useEffect(() => {
+    if (!stream.drained) return
+    const assistant = finalAssistantRef.current
+    if (!assistant) return
+    finalAssistantRef.current = null
+    setSession((current) => ({ ...current, messages: [...current.messages, assistant] }))
+    stream.reset()
+  }, [stream.drained])
 
   function updateDraft(value: string): void {
     setSession((current) => ({ ...current, draft: value }))
@@ -125,7 +137,8 @@ export function AiDrawer({
     setProgressStartedAt(Date.now())
     setProgressDetail(null)
     setError(null)
-    setStreamingAnswer('')
+    finalAssistantRef.current = null
+    stream.reset()
     updateDraft('')
     setToolCalls([])
     let optimisticMessageId: string | null = null
@@ -135,7 +148,7 @@ export function AiDrawer({
       ? desktopApi.conversations.onSendProgress?.((event) => {
           if (event.requestId !== progressRequestId) return
           if (event.phase === 'delta') {
-            setStreamingAnswer((current) => (event.replaceAnswer ? event.delta ?? '' : `${current}${event.delta ?? ''}`))
+            stream.push(event.delta ?? '', { replace: event.replaceAnswer })
           }
           if (event.phase === 'tool' && event.toolName) {
             const toolLabel = event.label || event.toolName
@@ -193,10 +206,10 @@ export function AiDrawer({
         sendOptions
       )
       setProgressIndex(3)
-      setStreamingAnswer('')
-      setSession((current) => ({ ...current, messages: [...current.messages, assistant] }))
+      finalAssistantRef.current = assistant
+      stream.finish(assistant.content)
     } catch (sendError) {
-      setStreamingAnswer('')
+      stream.reset()
       setSession((current) => ({
         ...current,
         draft: content,
@@ -256,7 +269,7 @@ export function AiDrawer({
         </section>
       ) : null}
 
-      {!messages.length && !streamingAnswer && !sending ? (
+      {!messages.length && !stream.content && !sending ? (
         <div className="ai-suggestions">
           {suggestions.map((suggestion) => (
             <button key={suggestion} type="button" onClick={() => updateDraft(suggestion)}>
@@ -291,18 +304,16 @@ export function AiDrawer({
               ) : null}
             </article>
           ))}
-          {streamingAnswer ? (
+          {stream.content ? (
             <article className="ai-message assistant streaming" aria-live="polite">
-              <StreamingMarkdown>{streamingAnswer}</StreamingMarkdown>
+              <StreamingMarkdown>{stream.content}</StreamingMarkdown>
             </article>
           ) : null}
         </section>
-      ) : streamingAnswer ? (
+      ) : stream.content ? (
         <section className="ai-thread" aria-label="论文问答消息">
           <article className="ai-message assistant streaming" aria-live="polite">
-            <div className="markdown-content">
-              <AcademicMarkdown>{streamingAnswer}</AcademicMarkdown>
-            </div>
+            <StreamingMarkdown>{stream.content}</StreamingMarkdown>
           </article>
         </section>
       ) : null}

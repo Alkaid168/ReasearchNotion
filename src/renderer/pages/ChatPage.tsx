@@ -6,6 +6,7 @@ import { AcademicMarkdown } from '../components/AcademicMarkdown'
 import { CitationStatus } from '../components/CitationStatus'
 import { ModelSelector } from '../components/ModelSelector'
 import { StreamingMarkdown } from '../components/StreamingMarkdown'
+import { useStreamingOutput } from '../hooks/useStreamingOutput'
 import { userFacingSendError } from '../utils/userFacingError'
 import { formatTokenCount } from '../utils/formatToken'
 import type { ChatContext, Citation, Conversation, Folder, Message, ModelProfile, Paper, TokenUsage } from '../../shared/types'
@@ -33,11 +34,6 @@ type SendProgress = {
   step: SendProgressStep
   startedAt: number
   detail?: string
-} | null
-
-type StreamingAnswer = {
-  requestId: string
-  content: string
 } | null
 
 const progressSteps: Array<{ step: SendProgressStep; label: string }> = [
@@ -90,7 +86,8 @@ export function ChatPage({
   const [draft, setDraft] = useState('')
   const [sending, setSending] = useState(false)
   const [sendProgress, setSendProgress] = useState<SendProgress>(null)
-  const [streamingAnswer, setStreamingAnswer] = useState<StreamingAnswer>(null)
+  const stream = useStreamingOutput()
+  const finalAssistantRef = useRef<Message | null>(null)
   const [sendError, setSendError] = useState<string | null>(null)
   const [selectedContext, setSelectedContext] = useState<ChatContext>(freeContext)
   const [availableFolders, setAvailableFolders] = useState<Folder[]>([])
@@ -157,7 +154,7 @@ export function ChatPage({
       setMessages([])
       setDraft('')
       setSendError(null)
-      setStreamingAnswer(null)
+      stream.reset()
       setSelectedContext(freeContext)
       return
     }
@@ -170,7 +167,7 @@ export function ChatPage({
         setMessages(rows)
         setDraft('')
         setSendError(null)
-        setStreamingAnswer(null)
+        stream.reset()
         setSelectedContext(conversations.find((conversation) => conversation.id === selectedConversationId)?.context ?? freeContext)
       }
     )
@@ -200,13 +197,24 @@ export function ChatPage({
   }
 
   useEffect(() => {
-    if (!messages.length && !streamingAnswer?.content) return
+    if (!messages.length && !stream.content) return
     if (followLatest) {
       scrollToLatest('smooth')
     } else {
       setShowJumpToLatest(true)
     }
-  }, [messages.length, streamingAnswer?.content])
+  }, [messages.length, stream.content])
+
+  // 流式排空完成后,把最终回答无缝落库为历史消息(streaming 版吐完最后一个字,
+  // 同文本变历史消息,视觉连续)。
+  useEffect(() => {
+    if (!stream.drained) return
+    const assistant = finalAssistantRef.current
+    if (!assistant) return
+    finalAssistantRef.current = null
+    setMessages((current) => [...current, assistant])
+    stream.reset()
+  }, [stream.drained])
 
   async function copyAnswer(message: Message): Promise<void> {
     if (!navigator.clipboard?.writeText) return
@@ -230,6 +238,7 @@ export function ChatPage({
     if (!content || sending) return
 
     setSending(true)
+    finalAssistantRef.current = null
     setSendProgress({ step: conversationId ? 'context' : 'prepare', startedAt: Date.now() })
     setSendError(null)
     setDraft('')
@@ -243,10 +252,7 @@ export function ChatPage({
       ? desktopApi.conversations.onSendProgress?.((event) => {
           if (event.requestId !== progressRequestId) return
           if (event.phase === 'delta') {
-            setStreamingAnswer((current) => ({
-              requestId: progressRequestId,
-              content: event.replaceAnswer ? event.delta ?? '' : current?.requestId === progressRequestId ? `${current.content}${event.delta ?? ''}` : event.delta ?? ''
-            }))
+            stream.push(event.delta ?? '', { replace: event.replaceAnswer })
           }
           if (event.phase === 'tool' && event.toolName) {
             const toolLabel = event.label || event.toolName
@@ -300,11 +306,11 @@ export function ChatPage({
         progressRequestId ? { progressRequestId } : undefined
       )
       setSendProgress((current) => ({ step: 'save', startedAt: current?.startedAt ?? Date.now() }))
-      setStreamingAnswer(null)
-      setMessages((current) => [...current, assistant])
+      finalAssistantRef.current = assistant
+      stream.finish(assistant.content)
       if (createdConversation) onConversationCreated?.(createdConversation)
     } catch (error) {
-      setStreamingAnswer(null)
+      stream.reset()
       if (optimisticMessageId) {
         setMessages((current) => current.filter((message) => message.id !== optimisticMessageId))
       }
@@ -421,11 +427,11 @@ export function ChatPage({
               </div>
             </article>
           ))}
-          {streamingAnswer?.content ? (
+          {stream.content ? (
             <article className="message assistant streaming" aria-live="polite">
               <img className="message-avatar" src={researchNotionMark} alt="" aria-hidden="true" />
               <div className="message-body">
-                <StreamingMarkdown>{streamingAnswer.content}</StreamingMarkdown>
+                <StreamingMarkdown>{stream.content}</StreamingMarkdown>
               </div>
             </article>
           ) : null}
