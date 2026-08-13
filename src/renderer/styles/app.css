@@ -4414,6 +4414,10 @@ button {
   gap: 2px;
 }
 
+.model-selector-option strong {
+  font-weight: 500;
+}
+
 .model-selector-option small {
   font-size: 11px;
   color: var(--rn-muted, rgba(13, 13, 13, 0.5));
@@ -4426,6 +4430,10 @@ button {
 .model-selector-option.active {
   color: var(--rn-text, #0d0d0d);
   font-weight: 600;
+}
+
+.model-selector-option.active strong {
+  font-weight: 700;
 }
 
 /* ============ 设置页：模型档卡片列表 ============ */

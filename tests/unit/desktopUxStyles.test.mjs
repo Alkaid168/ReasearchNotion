@@ -46,4 +46,9 @@ describe('desktop UX accessibility styles', () => {
     expect(tokens).toContain('--rn-radius-md: 12px;')
     expect(tokens).toContain('--rn-z-toast: 40;')
   })
+
+  it('differentiates the active model option weight from inactive options', () => {
+    expect(css).toContain('.model-selector-option strong {\n  font-weight: 500;')
+    expect(css).toContain('.model-selector-option.active strong {\n  font-weight: 700;')
+  })
 })
