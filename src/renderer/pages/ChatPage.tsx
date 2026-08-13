@@ -5,6 +5,7 @@ import researchNotionMark from '../assets/research-notion-mark.svg'
 import { AcademicMarkdown } from '../components/AcademicMarkdown'
 import { CitationStatus } from '../components/CitationStatus'
 import { ModelSelector } from '../components/ModelSelector'
+import { StreamingMarkdown } from '../components/StreamingMarkdown'
 import { userFacingSendError } from '../utils/userFacingError'
 import { formatTokenCount } from '../utils/formatToken'
 import type { ChatContext, Citation, Conversation, Folder, Message, ModelProfile, Paper, TokenUsage } from '../../shared/types'
@@ -424,9 +425,7 @@ export function ChatPage({
             <article className="message assistant streaming" aria-live="polite">
               <img className="message-avatar" src={researchNotionMark} alt="" aria-hidden="true" />
               <div className="message-body">
-                <div className="markdown-content">
-                  <AcademicMarkdown>{streamingAnswer.content}</AcademicMarkdown>
-                </div>
+                <StreamingMarkdown>{streamingAnswer.content}</StreamingMarkdown>
               </div>
             </article>
           ) : null}

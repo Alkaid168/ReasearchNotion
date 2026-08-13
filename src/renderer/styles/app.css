@@ -4621,8 +4621,9 @@ button {
 }
 
 /* ============ 流式光标（GPT 标志性细节） ============ */
-.message.streaming .markdown-content > :last-child::after {
-  content: '';
+/* 节点由 StreamingMarkdown 动态 append 到最后一个含文本的块元素内部,
+   始终跟随文字;闪烁动画纯 CSS,不加 JS 定时器。 */
+.streaming-cursor {
   display: inline-block;
   width: 8px;
   height: 1.1em;

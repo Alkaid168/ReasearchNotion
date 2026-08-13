@@ -4,6 +4,7 @@ import { desktopApi } from '../api/desktopApi'
 import { AcademicMarkdown } from './AcademicMarkdown'
 import { CitationStatus } from './CitationStatus'
 import { ModelSelector } from './ModelSelector'
+import { StreamingMarkdown } from './StreamingMarkdown'
 import { userFacingSendError } from '../utils/userFacingError'
 import { formatTokenCount } from '../utils/formatToken'
 import type { Citation, Message, ModelProfile, Paper, TokenUsage } from '../../shared/types'
@@ -292,9 +293,7 @@ export function AiDrawer({
           ))}
           {streamingAnswer ? (
             <article className="ai-message assistant streaming" aria-live="polite">
-              <div className="markdown-content">
-                <AcademicMarkdown>{streamingAnswer}</AcademicMarkdown>
-              </div>
+              <StreamingMarkdown>{streamingAnswer}</StreamingMarkdown>
             </article>
           ) : null}
         </section>
