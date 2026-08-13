@@ -1362,7 +1362,8 @@ describe('App shell', () => {
     await waitFor(() => expect(api.conversations.sendMessage).toHaveBeenCalled())
     const progressRequestId = vi.mocked(api.conversations.sendMessage).mock.calls[0][2]?.progressRequestId
     act(() => progressListener({ requestId: progressRequestId!, phase: 'answer', label: '生成回答' }))
-    fireEvent.click(screen.getByRole('button', { name: '停止生成' }))
+    expect(screen.queryByRole('button', { name: '停止生成' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '停止' }))
 
     expect(api.conversations.cancelSend).toHaveBeenCalledWith(progressRequestId)
   })

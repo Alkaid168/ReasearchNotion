@@ -1455,30 +1455,6 @@ button {
   }
 }
 
-.dock-stop-row {
-  width: min(768px, 100%);
-  display: flex;
-  justify-content: center;
-  margin: 0 0 8px;
-}
-
-.stop-generate-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  border: 1px solid var(--rn-border);
-  border-radius: 9999px;
-  background: var(--rn-surface);
-  color: var(--rn-text);
-  padding: 6px 14px;
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.stop-generate-pill:hover {
-  background: var(--rn-hover);
-}
-
 .chat-dock .composer {
   width: min(768px, 100%);
   min-width: 0;

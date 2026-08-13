@@ -442,20 +442,6 @@ export function ChatPage({
       {hasTimeline ? (
         <section className="chat-dock">
           {contextSwitchNotice ? <div className="context-switch-notice">{contextSwitchNotice}</div> : null}
-          {sending && activeProgressRequestId ? (
-            <div className="dock-stop-row">
-              <button
-                type="button"
-                className="stop-generate-pill"
-                onClick={() => {
-                  if (activeProgressRequestId) void desktopApi.conversations.cancelSend?.(activeProgressRequestId)
-                }}
-              >
-                <Square size={12} aria-hidden="true" fill="currentColor" />
-                停止生成
-              </button>
-            </div>
-          ) : null}
           {modelSelectorRow}
           {showCompressNotice ? (
             <div className="compress-notice">
