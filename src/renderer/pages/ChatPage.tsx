@@ -381,6 +381,7 @@ export function ChatPage({
       }, 600)
       return () => window.clearTimeout(timer)
     }
+    return undefined
   }, [hasTimeline])
 
   return (
