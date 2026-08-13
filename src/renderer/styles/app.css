@@ -4361,6 +4361,12 @@ button {
   animation: rn-dropdown-in var(--rn-duration-normal, 200ms) var(--rn-ease-out, ease);
 }
 
+/* 抽屉内下拉不越过 AI 抽屉边界：抽屉为 min(380px, 100vw-44px)，减去 header 内边距
+ * 两侧各 14px，故内容宽上限为 100vw-72px（结构式约束，非依赖 240px 巧合）。 */
+.ai-drawer .model-selector-dropdown {
+  max-width: min(240px, calc(100vw - 72px));
+}
+
 @keyframes rn-dropdown-in {
   from {
     opacity: 0;
