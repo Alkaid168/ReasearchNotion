@@ -986,6 +986,7 @@ export function KnowledgePage({ requestedPaperId, requestedFolderId, requestedPa
               return next
             })
           }}
+          onAskAi={() => setDrawerOpen(true)}
         />
         <AiDrawer
           open={drawerOpen}

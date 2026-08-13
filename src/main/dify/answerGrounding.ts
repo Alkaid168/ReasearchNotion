@@ -19,7 +19,39 @@ function requiresOriginalEvidence(question: string, context: ChatContext): boole
 }
 
 function normalizedTitle(title: string): string {
-  return title.trim().replace(/\.(pdf|md|markdown)$/i, '').replace(/\s+/g, ' ').toLocaleLowerCase()
+  return title.trim()
+    .replace(/\.(pdf|md|markdown)$/i, '')
+    .replace(/\s+/g, ' ')
+    .toLocaleLowerCase()
+    .replace(/[^一-龥a-z0-9\s]/gi, '')
+}
+
+function titlesMatch(candidate: string, target: string): boolean {
+  const normalizedCandidate = normalizedTitle(candidate)
+  const normalizedTarget = normalizedTitle(target)
+  if (normalizedCandidate === normalizedTarget) return true
+  const similarityScore = (normalizedCandidate.length + normalizedTarget.length - levenshteinDistance(normalizedCandidate, normalizedTarget)) / (normalizedCandidate.length + normalizedTarget.length)
+  return similarityScore > 0.85
+}
+
+function levenshteinDistance(a: string, b: string): number {
+  const matrix: number[][] = []
+  for (let i = 0; i <= b.length; i++) {
+    matrix[i] = [i]
+  }
+  for (let j = 0; j <= a.length; j++) {
+    matrix[0][j] = j
+  }
+  for (let i = 1; i <= b.length; i++) {
+    for (let j = 1; j <= a.length; j++) {
+      if (b.charAt(i - 1) === a.charAt(j - 1)) {
+        matrix[i][j] = matrix[i - 1][j - 1]
+      } else {
+        matrix[i][j] = Math.min(matrix[i - 1][j - 1] + 1, Math.min(matrix[i][j - 1] + 1, matrix[i - 1][j] + 1))
+      }
+    }
+  }
+  return matrix[b.length][a.length]
 }
 
 function hasAllowedEvidence(input: {
@@ -30,11 +62,11 @@ function hasAllowedEvidence(input: {
   if (input.context.type === 'free') return true
   if (input.context.type === 'paper') {
     const targetPaperId = input.context.paperId
-    const targetTitle = normalizedTitle(input.context.paperTitle)
+    const targetTitle = input.context.paperTitle
     return input.citations.some(
       (citation) =>
         citation.paperId === targetPaperId ||
-        (!citation.paperId && normalizedTitle(citation.paperTitle) === targetTitle)
+        (!citation.paperId && titlesMatch(citation.paperTitle, targetTitle))
     )
   }
 

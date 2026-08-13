@@ -53,34 +53,6 @@ function visibleThoughts(events: ResearchProgressEvent[], answer: string | undef
     })
 }
 
-function compactQuestion(question: string | undefined): string {
-  const normalized = question?.replace(/\s+/g, ' ').trim() ?? ''
-  if (!normalized) return '当前问题'
-  return normalized.length > 90 ? `${normalized.slice(0, 90)}…` : normalized
-}
-
-function questionIntentNarrative(question: string | undefined): string {
-  const compact = compactQuestion(question)
-  const source = question ?? ''
-  let reasoning: string
-
-  if (/作者|通讯|共同一作|单位|邮箱/.test(source)) {
-    reasoning = '这种问题看上去只要找个名字，其实最容易答错。姓名后的上标、脚注和单位经常挤在一起，我得回到首页一个个对上，不能凭位置猜。'
-  } else if (/对比|比较|区别|差异|哪个更/.test(source)) {
-    reasoning = '我先不急着列优缺点，因为对象和评价条件没对齐时，“谁更好”往往没有意义。得先把方法、数据和指标放到同一条线上，再看差异到底来自哪里。'
-  } else if (/总结|概括|全文|整篇|通读/.test(source)) {
-    reasoning = '这里要的不是把原文压短几倍。我更在意论文为什么提出这个问题、方法怎么回应它、实验又能不能撑住结论。这条线理顺了，总结才不会变成章节目录的复述。'
-  } else if (/方法|模型|算法|怎么|如何/.test(source)) {
-    reasoning = '我想先搞清它是在解决哪个具体卡点，然后再顺着输入、关键处理和输出往下走。只把模块名字翻译一遍不算解释，还得说明它为什么在这里有用。'
-  } else if (/评价|判断|是否|合理|正确|可靠/.test(source)) {
-    reasoning = '我注意到问题里已经带了一个可能的判断，但不能顺着它就往下写。先要问“我们用什么标准说它正确”，再去找支持和不支持的部分，结论才不会过头。'
-  } else {
-    reasoning = '我先想弄清用户此刻更想要一个可核对的事实，还是一个能帮助理解的解释。两者写法很不一样：前者得回到原文，后者则更重要的是把逻辑讲清楚。'
-  }
-
-  return `我重新看了一遍这个问题：“${compact}”。${reasoning}`
-}
-
 function contextNarrative(context: ChatContext): string {
   if (context.type === 'paper') {
     return `这次的上下文是《${context.paperTitle}》。这一点得时刻记着：我可以用常识帮着解释，但只要说“这篇论文认为”，就必须能在它自己的原文里找到依据。`
@@ -140,12 +112,6 @@ function evidenceNarrative(citations: Citation[]): string {
   return `读下来后，真正能抓住的是 ${citations.length} 处依据，来自 ${paperCount} 篇论文${locatedCount ? `，其中 ${locatedCount} 处能直接回到页码或章节` : ''}。这让我心里大概有了条线：原文明确说到的，可以答得肯定些；只是间接支持的，就得留一点余地；没有依据的地方，不替论文把话补完。`
 }
 
-function answerNarrative(answer: string | undefined): string {
-  const length = answer?.trim().length ?? 0
-  if (!length) return '到这里思路已经比较清楚了，但模型还没有交出正文。这种情况不应该用一段过程文字冒充答案，更合适的做法是重新生成。'
-  return '所以我最后会先把最直接的结论说出来，然后才是支撑它的解释和证据。写完后我还会回头看一遍：有没有把推测写成事实，有没有因为想答得完整就超出了手上的证据。'
-}
-
 function publicReasoningNarrative(input: {
   question?: string
   context: ChatContext
@@ -155,13 +121,13 @@ function publicReasoningNarrative(input: {
 }): string[] {
   const publicThoughts = visibleThoughts(input.events, input.answer)
 
+  // 仅保留基于实际数据的叙事 + 真实 thoughts；移除 questionIntentNarrative / answerNarrative
+  // 这类与具体问题无关的固定模板文本（实测反馈"思维链像预设模板"）。
   return [
-    questionIntentNarrative(input.question),
     contextNarrative(input.context),
     ...publicThoughts,
     activityNarrative(input.events),
-    evidenceNarrative(input.citations),
-    answerNarrative(input.answer)
+    evidenceNarrative(input.citations)
   ]
 }
 

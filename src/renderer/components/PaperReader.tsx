@@ -180,12 +180,11 @@ function PdfCanvasViewer({
   const pdfjsRef = useRef<PdfJsModule | null>(null)
   const onPageChangeRef = useRef(onPageChange)
   const onViewStateChangeRef = useRef(onViewStateChange)
-  const restoredPage = Math.max(1, Math.round(initialPage))
-  const restoredScale = initialScale ? Math.min(2.2, Math.max(0.72, initialScale)) : 1.12
-  const [pageNumber, setPageNumber] = useState(restoredPage)
-  const [pageField, setPageField] = useState(String(restoredPage))
+  const skipViewChangeRef = useRef(false)
+  const [pageNumber, setPageNumber] = useState(() => Math.max(1, Math.round(initialPage ?? 1)))
+  const [pageField, setPageField] = useState(String(Math.max(1, Math.round(initialPage ?? 1))))
   const [pageCount, setPageCount] = useState(0)
-  const [scale, setScale] = useState(restoredScale)
+  const [scale, setScale] = useState(() => initialScale ? Math.min(2.2, Math.max(0.72, initialScale)) : 1.12)
   const [fitMode, setFitMode] = useState(initialScale === undefined)
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
   const textFallback = plainText
@@ -195,6 +194,17 @@ function PdfCanvasViewer({
 
   onPageChangeRef.current = onPageChange
   onViewStateChangeRef.current = onViewStateChange
+
+  // Sync page number when initialPage changes externally (e.g., from citation clicks).
+  // 用 flag 跳过这次引发 onViewStateChange 回写，否则 pageNumber 变 → setPaperViews → initialPage 变 → 死循环
+  useEffect(() => {
+    if (initialPage && Number.isFinite(initialPage)) {
+      const targetPage = Math.max(1, Math.round(initialPage))
+      skipViewChangeRef.current = true
+      setPageNumber(targetPage)
+      setPageField(String(targetPage))
+    }
+  }, [initialPage])
 
   function clampScale(value: number): number {
     return Math.min(2.2, Math.max(0.72, Number(value.toFixed(2))))
@@ -241,11 +251,7 @@ function PdfCanvasViewer({
     let alive = true
     let loadingTask: ReturnType<PdfJsModule['getDocument']> | null = null
     setStatus('loading')
-    setPageNumber(restoredPage)
-    setPageField(String(restoredPage))
     setPageCount(0)
-    setScale(restoredScale)
-    setFitMode(initialScale === undefined)
     documentRef.current = null
     pdfjsRef.current = null
 
@@ -274,7 +280,6 @@ function PdfCanvasViewer({
       }
       documentRef.current = pdf
       setPageCount(pdf.numPages)
-      setPageNumber(Math.min(pdf.numPages, restoredPage))
       setStatus('ready')
     }).catch(() => {
       if (alive) setStatus('error')
@@ -287,7 +292,7 @@ function PdfCanvasViewer({
       if (loadedDocument && typeof loadedDocument.destroy === 'function') void loadedDocument.destroy()
       else if (loadingTask && typeof loadingTask.destroy === 'function') void loadingTask.destroy()
     }
-  }, [pdfData, initialScale, previewUrl, restoredPage, restoredScale])
+  }, [pdfData, previewUrl])
 
   useEffect(() => {
     setPageField(String(pageNumber))
@@ -296,6 +301,10 @@ function PdfCanvasViewer({
 
   useEffect(() => {
     if (status !== 'ready') return
+    if (skipViewChangeRef.current) {
+      skipViewChangeRef.current = false
+      return
+    }
     onViewStateChangeRef.current?.({ page: pageNumber, scale })
   }, [pageNumber, scale, status])
 
@@ -506,6 +515,12 @@ export function PaperReader({
     setSearchSubmitted(false)
     setRequestedPage(null)
   }, [paper?.id])
+
+  // 外部跳页（citation/openPaper 改 initialPage）时清掉用户大纲/搜索跳页状态，
+  // 否则 requestedPage 会遮住新的 initialPage，导致 citation 跳页失效（只弹首页）
+  useEffect(() => {
+    setRequestedPage(null)
+  }, [initialPage])
 
   function submitSearch(): void {
     const query = searchQuery.trim()

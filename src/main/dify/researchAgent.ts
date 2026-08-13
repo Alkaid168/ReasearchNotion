@@ -27,7 +27,11 @@ function contextScope(context: ChatContext): string {
     return [`当前论文库：${context.folderName}`, `当前论文库 folderId：${context.folderId}`].join('\n')
   }
   if (context.type === 'paper') {
-    return [`当前论文：${context.paperTitle}`, `当前论文 paperId：${context.paperId}`].join('\n')
+    return [
+      `当前论文：${context.paperTitle}`,
+      `当前论文 paperId：${context.paperId}`,
+      '工具范围：仅限当前论文的专用工具，不能使用论文库范围工具（list_library_papers、search_library、investigate_library）。'
+    ].join('\n')
   }
   return '当前没有限定论文库；如问题涉及本地资料，可用 list_library_papers 或 search_library 在全部本地论文中查找。'
 }
@@ -110,7 +114,10 @@ export function buildResearchAgentQuery(input: {
     '',
     '工具使用提示：',
     input.context.type === 'paper'
-      ? `- 当前论文工具参数优先使用 paperId=${input.context.paperId}；需要页码、章节、目录、全文片段时直接调用对应论文工具。`
+      ? [
+          `- 当前已限定为单篇论文《${input.context.paperTitle}》，只可使用该论文的专用工具（get_paper_*、investigate_paper）。`,
+          `- 当前论文工具参数优先使用 paperId=${input.context.paperId}；需要页码、章节、目录、全文片段时直接调用对应论文工具。`
+        ].join('\n')
       : null,
     input.context.type === 'folder'
       ? `- 当前论文库工具参数优先使用 folderId=${input.context.folderId}；如果要比较多篇论文，先 list_library_papers，再按 paperId 读取或检索。`

@@ -1245,9 +1245,9 @@ describe('App shell', () => {
 
     const processButton = screen.getByRole('button', { name: /已思考（用时 \d+ 秒）/ })
     expect(processButton).toHaveAttribute('aria-expanded', 'true')
-    expect(screen.getByLabelText('思考过程')).toHaveTextContent('我重新看了一遍这个问题')
+    expect(screen.getByLabelText('思考过程')).toHaveTextContent('这个问题没有锁定某一篇论文')
     expect(screen.getByLabelText('思考过程')).toHaveTextContent('我本来也可以去搜一圈资料')
-    expect(screen.getByLabelText('思考过程')).toHaveTextContent('所以我最后会先把最直接的结论说出来')
+    expect(screen.getByLabelText('思考过程')).toHaveTextContent('我会明确说这一点还没核实')
   })
 
   it('updates the waiting state from Dify streaming progress events', async () => {

@@ -476,10 +476,11 @@ async function readStreamingChatResponse(response: FetchResponseLike, onProgress
   rawText += decoder.decode()
   if (rawText.trim()) handleLine(rawText.replace(/\r$/, ''))
 
+  const finalCitations = uniqueCitations([...mapCitations(citationSource), ...toolCitations])
   return {
     answer: cleanAnswer(answer),
     difyConversationId,
-    citations: uniqueCitations([...mapCitations(citationSource), ...toolCitations]),
+    citations: finalCitations,
     usage: capturedUsage
   }
 }

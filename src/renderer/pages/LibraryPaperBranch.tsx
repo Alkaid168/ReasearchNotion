@@ -59,7 +59,7 @@ export function LibraryPaperBranch({
               }
             }}
           >
-            <Trash2 size={14} aria-hidden="true" />
+            <Trash2 size={15} aria-hidden="true" />
           </button>
         </div>
       ))}

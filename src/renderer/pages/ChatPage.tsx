@@ -127,6 +127,7 @@ export function ChatPage({
   const [sendProgress, setSendProgress] = useState<SendProgress>(null)
   const stream = useStreamingOutput(streamSpeed)
   const finalAssistantRef = useRef<Message | null>(null)
+  const thinkingStartedRef = useRef(false)
   const [liveResearchEvents, setLiveResearchEvents] = useState<ConversationProgressEvent[]>([])
   const [streamingAnswer, setStreamingAnswer] = useState<StreamingAnswer>(null)
   const [liveThinking, setLiveThinking] = useState<LiveThinking>(null)
@@ -272,37 +273,33 @@ export function ChatPage({
     stream.reset()
   }, [stream.drained])
 
+  // 打开引用侧边栏时加载论文原文；citationRequestRef 防止切换/关闭后的竞态回写
+  useEffect(() => {
+    if (!citationPanel?.loading) return
+    const citation = citationPanel.citation
+    if (!citation.paperId) return
+    const requestId = citationRequestRef.current
+    let cancelled = false
+    void desktopApi.papers
+      .read(citation.paperId)
+      .then((source) => {
+        if (cancelled || requestId !== citationRequestRef.current) return
+        setCitationPanel((prev) => (prev && prev.nonce === citationPanel.nonce ? { ...prev, source, loading: false } : prev))
+      })
+      .catch((error: unknown) => {
+        if (cancelled || requestId !== citationRequestRef.current) return
+        setCitationPanel((prev) => (prev && prev.nonce === citationPanel.nonce ? { ...prev, loading: false, error: error instanceof Error ? error.message : '加载论文原文失败' } : prev))
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [citationPanel?.nonce])
+
   async function copyAnswer(message: Message): Promise<void> {
     if (!navigator.clipboard?.writeText) return
     await navigator.clipboard.writeText(message.content)
     setCopiedMessageId(message.id)
     onNotify?.('回答已复制', 'success')
-  }
-
-  async function openCitationPanel(citation: Citation): Promise<void> {
-    if (!citation.paperId) {
-      onOpenCitation?.(citation)
-      return
-    }
-
-    const requestId = citationRequestRef.current + 1
-    citationRequestRef.current = requestId
-    setCitationPanel({ citation, source: null, loading: true, error: null, nonce: requestId })
-
-    try {
-      const source = await desktopApi.papers.read(citation.paperId)
-      if (citationRequestRef.current !== requestId) return
-      setCitationPanel({ citation, source, loading: false, error: null, nonce: requestId })
-    } catch (error) {
-      if (citationRequestRef.current !== requestId) return
-      setCitationPanel({
-        citation,
-        source: null,
-        loading: false,
-        error: error instanceof Error ? error.message : '无法读取论文原文',
-        nonce: requestId
-      })
-    }
   }
 
   async function exportConversation(): Promise<void> {
@@ -323,6 +320,7 @@ export function ChatPage({
     const observedProgressEvents: ConversationProgressEvent[] = []
     setSending(true)
     finalAssistantRef.current = null
+    thinkingStartedRef.current = false
     setSendProgress({ step: 'scope', startedAt: processStartedAt })
     setSendError(null)
     setDraft('')
@@ -349,7 +347,7 @@ export function ChatPage({
           if (event.requestId !== progressRequestId) return
           observedProgressEvents.push(event)
           if (event.phase !== 'delta') setLiveResearchEvents((current) => [...current, event])
-          if (event.phase === 'thought' || event.phase === 'tool') {
+          if ((event.phase === 'thought' || event.phase === 'tool') && !thinkingStartedRef.current) {
             setLiveThinking((current) => {
               if (!current || current.requestId !== progressRequestId) return current
               const thoughts = event.phase === 'thought' && event.thought?.trim()
@@ -361,6 +359,11 @@ export function ChatPage({
             })
           }
           if (event.phase === 'delta') {
+            // GPT 式时序：首个 delta 即进入正文阶段，之后不再回思考（即使后续有 thought 事件到达）
+            if (!thinkingStartedRef.current) {
+              thinkingStartedRef.current = true
+              setLiveThinking(null)
+            }
             stream.push(event.delta ?? '', { replace: event.replaceAnswer })
           }
           if (event.phase === 'tool' && event.toolName) {
@@ -565,6 +568,7 @@ export function ChatPage({
               {message.role === 'assistant' ? (
                 <>
                   <img className="message-avatar" src={researchNotionMark} alt="" aria-hidden="true" />
+                  <div className="message-content">
                   {message.researchProcess ? (
                     <AnswerProcessDisclosure
                       record={message.researchProcess}
@@ -586,7 +590,16 @@ export function ChatPage({
                     <CitationStatus
                       messageId={message.id}
                       citations={message.citations}
-                      onOpenCitation={(citation) => void openCitationPanel(citation)}
+                      onOpenCitation={(citation) => {
+                        citationRequestRef.current += 1
+                        setCitationPanel({
+                          citation,
+                          source: null,
+                          loading: Boolean(citation.paperId),
+                          error: citation.paperId ? null : '该引用未关联可打开的论文',
+                          nonce: citationRequestRef.current
+                        })
+                      }}
                     />
                     <div className="message-actions">
                       {message.id === [...messages].reverse().find((candidate) => candidate.role === 'assistant')?.id ? (
@@ -609,6 +622,7 @@ export function ChatPage({
                       </button>
                     </div>
                   </div>
+                  </div>
                 </>
               ) : (
                 <div className="markdown-content">
@@ -629,7 +643,7 @@ export function ChatPage({
               </div>
             </article>
           ) : null}
-          {sending && !liveThinking ? (
+          {sending ? (
             <div className="timeline-progress">
               <AgentProgress progress={sendProgress} toolCalls={toolCalls} events={liveResearchEvents} />
             </div>
@@ -737,7 +751,7 @@ function LiveThinkingDisclosure({ state }: { state: NonNullable<LiveThinking> })
   ]
 
   return (
-    <section className="thinking-disclosure live" role="status" aria-label="正在思考" aria-live="polite">
+    <section className="thinking-disclosure live" role="log" aria-label="正在思考" aria-live="polite">
       <div className="thinking-live-header">
         <BrainCircuit size={19} aria-hidden="true" />
         <strong>正在思考（用时 {elapsedSeconds} 秒）</strong>
@@ -760,8 +774,10 @@ function ThinkingContent({
       {paragraphs.length ? (
         <div className="thinking-summaries">
           {paragraphs.map((paragraph, index) => (
-            <div key={`${paragraph.slice(0, 40)}-${index}`} className="markdown-content">
-              <AcademicMarkdown>{paragraph}</AcademicMarkdown>
+            <div key={`${paragraph.slice(0, 40)}-${index}`} className="thinking-paragraph" style={{ animationDelay: `${index * 0.15}s` }}>
+              <div className="markdown-content">
+                <AcademicMarkdown>{paragraph}</AcademicMarkdown>
+              </div>
             </div>
           ))}
         </div>

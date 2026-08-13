@@ -12,6 +12,7 @@ function citationLabel(citation: Citation): string {
 }
 
 export function CitationStatus({ messageId, citations, onOpenCitation }: CitationStatusProps): JSX.Element {
+
   if (!citations.length) {
     return (
       <footer className="citation-status no-citations" aria-label="引用状态">
@@ -37,7 +38,9 @@ export function CitationStatus({ messageId, citations, onOpenCitation }: Citatio
           </>
         )
         return citation.paperId && onOpenCitation ? (
-          <button key={key} type="button" title={title} aria-label={label} onClick={() => onOpenCitation(citation)}>
+          <button key={key} type="button" title={title} aria-label={label} onClick={() => {
+            onOpenCitation?.(citation)
+          }}>
             {content}
           </button>
         ) : (
