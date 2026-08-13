@@ -4370,7 +4370,7 @@ button {
 @keyframes rn-dropdown-in {
   from {
     opacity: 0;
-    transform: scale(0.98) translateY(4px);
+    transform: scale(0.95) translateY(8px);
   }
 
   to {

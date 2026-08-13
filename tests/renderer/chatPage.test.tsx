@@ -1339,6 +1339,26 @@ describe('App shell', () => {
     expect(screen.queryByText('检索增强生成先检索，再生成。')).not.toBeInTheDocument()
   })
 
+  it('keeps the hero entrance alive through async re-renders before marking it played', async () => {
+    const api = createApiMock()
+    window.researchNotion = api
+
+    const { ChatPage } = await import('../../src/renderer/pages/ChatPage')
+    render(<ChatPage />)
+
+    // 初始挂载:动画进行中,不应标记已播
+    expect(document.querySelector('.chat-hero')?.className).not.toContain('hero-played')
+
+    // 异步数据到达引发重渲染(动画 delay 期间):仍不应标记已播
+    await waitFor(() => expect(api.folders.list).toHaveBeenCalled())
+    expect(document.querySelector('.chat-hero')?.className).not.toContain('hero-played')
+
+    // 动画期(600ms)结束后再发生重渲染:才标记已播
+    await new Promise((resolve) => setTimeout(resolve, 700))
+    fireEvent.click(screen.getByRole('button', { name: /总结论文/ }))
+    expect(document.querySelector('.chat-hero')?.className).toContain('hero-played')
+  })
+
   it('stops the active generation with its progress request id', async () => {
     const api = createApiMock()
     let progressListener!: Parameters<NonNullable<DesktopApi['conversations']['onSendProgress']>>[0]

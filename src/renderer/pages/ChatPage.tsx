@@ -375,7 +375,12 @@ export function ChatPage({
   const hasTimeline = messages.length > 0 || sending
 
   useEffect(() => {
-    if (!hasTimeline) heroPlayedRef.current = true
+    if (!hasTimeline) {
+      const timer = window.setTimeout(() => {
+        heroPlayedRef.current = true
+      }, 600)
+      return () => window.clearTimeout(timer)
+    }
   }, [hasTimeline])
 
   return (
