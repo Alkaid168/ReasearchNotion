@@ -1657,13 +1657,14 @@ button {
   display: grid;
   gap: 8px;
   margin: -3px 14px 12px;
-  border: 1px solid var(--rn-border);
-  border-radius: 8px;
+  border: 0;
+  border-radius: var(--rn-radius-md, 12px);
   background: #f9f9f9;
   padding: 9px 10px;
   color: var(--rn-muted-2);
   font-size: 12.5px;
   line-height: 1.4;
+  animation: rn-rise-in var(--rn-duration-normal, 200ms) var(--rn-ease-out, ease);
 }
 
 .agent-progress-header {
@@ -3755,12 +3756,13 @@ button {
   display: grid;
   gap: 8px;
   margin: 0 14px 10px;
-  border: 1px solid rgba(0, 0, 0, 0.12);
-  border-radius: 8px;
+  border: 0;
+  border-radius: var(--rn-radius-md, 12px);
   background: #f9f9f9;
   padding: 9px 10px;
   color: var(--rn-muted-2);
   font-size: 12.5px;
+  animation: rn-rise-in var(--rn-duration-normal, 200ms) var(--rn-ease-out, ease);
 }
 
 .drawer-quick-actions {
@@ -3783,6 +3785,7 @@ button {
   padding: 0 10px;
   font-size: 12px;
   cursor: pointer;
+  transition: background var(--rn-duration-fast, 120ms) var(--rn-ease-out, ease), color var(--rn-duration-fast, 120ms) var(--rn-ease-out, ease), border-color var(--rn-duration-fast, 120ms) var(--rn-ease-out, ease);
 }
 
 .drawer-chip:hover {
@@ -4243,7 +4246,7 @@ button {
   gap: 3px;
   height: 20px;
   padding: 0 7px;
-  border-radius: 4px;
+  border-radius: var(--rn-radius-sm, 6px);
   font-size: 11px;
   line-height: 1;
   background: #f4f4f4;
