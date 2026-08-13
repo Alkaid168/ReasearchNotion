@@ -4303,19 +4303,38 @@ button {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 28px;
-  padding: 0 12px;
+  height: 30px;
+  padding: 0 14px;
   border: 1px solid var(--rn-border, rgba(0, 0, 0, 0.1));
   border-radius: 9999px;
   background: var(--rn-surface, #ffffff);
   color: var(--rn-text, #0d0d0d);
-  font-size: 12px;
+  font-size: 13px;
+  font-weight: 500;
   cursor: pointer;
-  transition: background 0.15s ease;
+  transition: background var(--rn-duration-fast, 120ms) var(--rn-ease-out, ease), border-color var(--rn-duration-fast, 120ms) var(--rn-ease-out, ease);
 }
 
 .model-selector-chip:hover {
   background: var(--rn-hover, rgba(0, 0, 0, 0.05));
+  border-color: var(--rn-border-strong, rgba(0, 0, 0, 0.15));
+}
+
+.model-selector-chip:active {
+  transform: scale(0.98);
+}
+
+.model-selector-chip svg {
+  transition: transform var(--rn-duration-normal, 200ms) var(--rn-ease-out, ease);
+}
+
+.model-selector-chip[aria-expanded='true'] svg {
+  transform: rotate(180deg);
+}
+
+.model-selector-chip:focus-visible {
+  outline: 2px solid var(--rn-text, #0d0d0d);
+  outline-offset: 2px;
 }
 
 .model-selector-label {
@@ -4326,13 +4345,30 @@ button {
   position: absolute;
   bottom: calc(100% + 6px);
   left: 0;
-  min-width: 220px;
+  width: 240px;
+  max-width: 100%;
+  max-height: 320px;
+  overflow-y: auto;
   background: var(--rn-surface, #ffffff);
   border: 1px solid var(--rn-border, rgba(0, 0, 0, 0.1));
-  border-radius: 8px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+  border-radius: var(--rn-radius-md, 12px);
+  box-shadow: var(--rn-shadow-dropdown, 0 8px 28px rgba(0, 0, 0, 0.12));
   padding: 6px;
-  z-index: 20;
+  z-index: var(--rn-z-dropdown, 30);
+  transform-origin: bottom left;
+  animation: rn-dropdown-in var(--rn-duration-normal, 200ms) var(--rn-ease-out, ease);
+}
+
+@keyframes rn-dropdown-in {
+  from {
+    opacity: 0;
+    transform: scale(0.98) translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
 }
 
 .model-selector-group + .model-selector-group {
@@ -4357,10 +4393,11 @@ button {
   border: none;
   background: transparent;
   color: var(--rn-text, #0d0d0d);
-  border-radius: 6px;
+  border-radius: var(--rn-radius-sm, 6px);
   cursor: pointer;
   text-align: left;
   font-size: 13px;
+  transition: background var(--rn-duration-fast, 120ms) var(--rn-ease-out, ease);
 }
 
 .model-selector-option span {
@@ -4380,6 +4417,7 @@ button {
 
 .model-selector-option.active {
   color: var(--rn-text, #0d0d0d);
+  font-weight: 600;
 }
 
 /* ============ 设置页：模型档卡片列表 ============ */
