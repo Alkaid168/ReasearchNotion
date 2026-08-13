@@ -40,4 +40,20 @@ describe('StreamingCursor', () => {
     const lastItem = [...container.querySelectorAll('li')].at(-1)
     expect(cursor?.parentElement).toBe(lastItem)
   })
+
+  it('sticks to the very last text node after inline elements', () => {
+    const container = renderStreaming('**加粗** 后面的文字')
+    const cursor = container.querySelector('.streaming-cursor')
+    expect(cursor).not.toBeNull()
+    expect(cursor?.parentElement?.tagName).toBe('P')
+    // 光标必须紧跟在最后一个文本节点之后,而不是插进 strong 内部。
+    expect(cursor?.previousSibling?.textContent).toBe(' 后面的文字')
+  })
+
+  it('sticks to the trailing text after inline code', () => {
+    const container = renderStreaming('前缀 `code` 尾部文字')
+    const cursor = container.querySelector('.streaming-cursor')
+    expect(cursor).not.toBeNull()
+    expect(cursor?.previousSibling?.textContent).toBe(' 尾部文字')
+  })
 })
