@@ -44,12 +44,13 @@ pnpm verify:mvp
 ```powershell
 pnpm check:dify
 pnpm verify:mvp
+pnpm smoke:dify-agent-paper
 pnpm lint:types
 pnpm test
 pnpm build
 ```
 
-`check:dify` 验证当前 App 是否为 `agent-chat`、工具提供者与 Agent 是否都挂载了预期 16 个工具。`verify:mvp` 验证本地论文库、论文文件和当前 Dify Agent 配置。
+`check:dify` 验证当前 App 是否为 `agent-chat`、工具提供者与 Agent 是否都挂载了预期 16 个工具。`verify:mvp` 验证本地论文库、论文文件和当前 Dify Agent 配置。`smoke:dify-agent-paper` 用真实论文上下文跑一次 Tool Agent 冒烟回归，确认读取状态、工具调用与证据引用仍按预期工作。
 
 ## 常见问题
 
