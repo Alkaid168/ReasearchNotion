@@ -20,15 +20,24 @@
 
 ## 三档语义(速率表)
 
-| 档 | 基础速率 | 加速档(积压 >80 字) | 防积压直通(>240 字) |
+| 档 | 基础速率 | 加速档(积压 >120 字) | 防积压直通(>800 字保险丝) |
 |---|---|---|---|
-| `gentle` 优雅 | 2 字/tick(现速 50%) | 6 字/tick | 仍直通(不欠账) |
-| `normal` 常规 | 4 字/tick(现值) | 12 字/tick | 直通 |
+| `gentle` 优雅 | 1 字/tick(≈40 字/秒,GPT 打字机节奏) | 2 字/tick | 仍直通 |
+| `normal` 常规 | 4 字/tick(≈160 字/秒) | 12 字/tick | 直通 |
 | `fast` 性能 | 直通:不缓冲,出一个显一个 | — | — |
+
+> **2026-08-13 验收修订**:原 gentle=2 字/tick、直通阈值 240 下,真实 Dify 流
+> 大块到达(Workflow 非 token 级流式),显示端总能在下一块到达前吐完,三档
+> 速率上限从未生效——用户验收"看不出区别"。修订:gentle 降到 1 字/tick
+> (明显慢于典型生成速率,积压自然形成欠账),直通阈值抬到 800 作为极端欠账
+> 保险丝(单条回答数百字,正常不触发)。代价:慢档会在回答结束后继续打印
+> 欠账——`finish` 语义相应改为"欠账排空后才 drained"(排空期间忽略新 push)。
 
 实现统一路径:`SPEED_RATES` 表,fast 档 base/accel 均为 `Infinity` → `Math.min(shown + Infinity, len) = len` 一次全吐,零特判。fast 档 push 同步 tick 全吐后无积压,不排程定时器。
 
-**切换生效时机**:进行中的流,下一 tick 即用新速率(useCallback 依赖 speed);切到性能档立即直通。
+**切换生效时机**:进行中的流,下一 tick 即用新速率(interval 回调经 tickRef 取最新 tick);切到性能档立即直通。
+
+**finish 语义**:`finish(finalText)` 置 finishedRef 后,若显示已追平全文则立即 drained;否则继续排空(定时器按档位推进),排空完成后 drained,调用方落库切换——文字打印到最后一个字才定格,与 GPT 一致。
 
 ## 数据模型与持久化
 
@@ -77,7 +86,7 @@
 
 ## 测试计划(TDD)
 
-1. **hook**:gentle 档 2 字/tick;fast 档 push 即全显且无积压;rerender 切换档位即时生效(换参数后 tick 用新速率)
+1. **hook**:gentle 档 1 字/tick;fast 档 push 即全显且无积压;rerender 切换档位即时生效(换参数后 tick 用新速率);finish 后欠账继续排空、排空完成才 drained
 2. **settingsService**:save 后 get 读回 `streamSpeed`;旧库无该 key 时缺省 `'normal'`(注意该测试需真实或 mock DB,沿用现有 settings 测试风格)
 3. **ChatPage/Composer**:三档按钮渲染、选中态 aria-pressed、点击调用 `onStreamSpeedChange` 且 hook 收到新档
 4. 全量 vitest + tsc 零错误;`npm run rebuild:native` 后重启应用
@@ -85,7 +94,7 @@
 ## 验收标准
 
 - [ ] 速度条位于上下文选择框右侧,三档清晰可见
-- [ ] 优雅档明显慢于常规(2 字/tick),光标停留更从容
+- [ ] 优雅档明显慢于常规(1 字/tick,GPT 打字机节奏),光标停留更从容
 - [ ] 性能档即时全显(无打字机感,出一个显一个)
 - [ ] 进行中的流切换档位即时生效
 - [ ] 重启应用后速度档保留

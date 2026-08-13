@@ -4,6 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   STREAM_ACCEL_BACKLOG,
   STREAM_ACCEL_RATE,
+  STREAM_FINISH_RATE,
+  STREAM_FLUSH_BACKLOG,
   STREAM_RATE,
   STREAM_TICK_MS,
   useStreamingOutput
@@ -45,12 +47,12 @@ describe('useStreamingOutput', () => {
 
     const huge = renderHook(() => useStreamingOutput())
     act(() => {
-      huge.result.current.push('y'.repeat(300))
+      huge.result.current.push('y'.repeat(STREAM_FLUSH_BACKLOG + 100))
     })
-    expect(huge.result.current.content).toBe('y'.repeat(300))
+    expect(huge.result.current.content).toBe('y'.repeat(STREAM_FLUSH_BACKLOG + 100))
   })
 
-  it('reports drained immediately on finish without touching the display', () => {
+  it('keeps typing the final text after finish until drained', () => {
     const { result } = renderHook(() => useStreamingOutput())
     act(() => {
       result.current.push('abc')
@@ -60,20 +62,33 @@ describe('useStreamingOutput', () => {
     act(() => {
       result.current.finish('x'.repeat(200))
     })
-    // 流结束:立即 drained,流式显示保持现状,由调用方落库后 reset 清掉,
-    // 避免"流式版全文"的中间态闪烁。
-    expect(result.current.drained).toBe(true)
-    expect(result.current.content).toBe('abc')
-    // 定时器已停止,不再有进一步推进。
+    // 流已结束但仍有积压:先不 drained,以快进速率 STREAM_FINISH_RATE 排空。
+    expect(result.current.drained).toBe(false)
     act(() => {
-      vi.advanceTimersByTime(STREAM_TICK_MS * 10)
+      vi.advanceTimersByTime(STREAM_TICK_MS)
     })
-    expect(result.current.content).toBe('abc')
+    expect(result.current.content).toBe('x'.repeat(3 + STREAM_FINISH_RATE))
+    act(() => {
+      vi.advanceTimersByTime(STREAM_TICK_MS * 20)
+    })
+    expect(result.current.drained).toBe(true)
+    expect(result.current.content).toBe('x'.repeat(200))
     // 调用方落库后 reset:流式显示清空。
     act(() => {
       result.current.reset()
     })
     expect(result.current.content).toBeNull()
+  })
+
+  it('drains immediately on finish when everything is already shown', () => {
+    const { result } = renderHook(() => useStreamingOutput())
+    act(() => {
+      result.current.push('abc')
+      result.current.finish('abc')
+    })
+    // 无积压:finish 立即 drained。
+    expect(result.current.drained).toBe(true)
+    expect(result.current.content).toBe('abc')
   })
 
   it('resets immediately and discards buffered text', () => {
@@ -122,30 +137,32 @@ describe('useStreamingOutput', () => {
     expect(result.current.content).toBe('fresh')
   })
 
-  it('ignores pushes after finish (stream already ended)', () => {
+  it('ignores pushes after finish while draining the final text', () => {
     const { result } = renderHook(() => useStreamingOutput())
     act(() => {
       result.current.push('ok')
       result.current.finish('done text')
     })
-    expect(result.current.drained).toBe(true)
+    // 'ok' 已全显,finish 的 9 字还有 7 字积压:排空期间忽略新 push。
+    expect(result.current.drained).toBe(false)
     act(() => {
       result.current.push('late chunk')
-      vi.advanceTimersByTime(STREAM_TICK_MS)
+      vi.advanceTimersByTime(STREAM_TICK_MS * 3)
     })
-    expect(result.current.content).toBe('ok')
+    expect(result.current.drained).toBe(true)
+    expect(result.current.content).toBe('done text')
   })
 
-  it('gentle speed reveals at half the normal rate (2 chars per tick)', () => {
+  it('gentle speed reveals one char per tick (quarter of normal rate)', () => {
     const { result } = renderHook(() => useStreamingOutput('gentle'))
     act(() => {
       result.current.push('Hello, world!')
     })
-    expect(result.current.content).toBe('He')
+    expect(result.current.content).toBe('H')
     act(() => {
       vi.advanceTimersByTime(STREAM_TICK_MS)
     })
-    expect(result.current.content).toBe('Hell')
+    expect(result.current.content).toBe('He')
   })
 
   it('fast speed flushes everything on push without buffering', () => {
@@ -172,8 +189,8 @@ describe('useStreamingOutput', () => {
     act(() => {
       vi.advanceTimersByTime(STREAM_TICK_MS)
     })
-    // 换档后下一 tick 按 gentle 的 2 字/tick:4 + 2 = 6;若仍按 normal 会到 8。
-    expect(result.current.content).toBe('Hello,')
+    // 换档后下一 tick 按 gentle 的 1 字/tick:4 + 1 = 5;若仍按 normal 会到 8。
+    expect(result.current.content).toBe('Hello')
   })
 
   it('flushes the remaining backlog on the next tick when switching to fast', () => {
@@ -183,7 +200,7 @@ describe('useStreamingOutput', () => {
     act(() => {
       result.current.push('Hello, world!')
     })
-    expect(result.current.content).toBe('He')
+    expect(result.current.content).toBe('H')
     rerender({ speed: 'fast' })
     act(() => {
       vi.advanceTimersByTime(STREAM_TICK_MS)

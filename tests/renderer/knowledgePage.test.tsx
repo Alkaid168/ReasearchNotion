@@ -659,7 +659,10 @@ describe('KnowledgePage', () => {
       })
     })
     expect(screen.getByText('解释这一段')).toBeInTheDocument()
-    expect(await screen.findByText('这段话说明 RAG 会先检索资料，再生成回答。')).toBeInTheDocument()
+    // 抽屉回答流式排空→落库切换期间,每轮重新查询当前文档,避免 stale 元素。
+    await waitFor(() => {
+      expect(screen.getByText('这段话说明 RAG 会先检索资料，再生成回答。')).toBeInTheDocument()
+    })
     expect(screen.getAllByText('RAG Survey').length).toBeGreaterThan(0)
   })
 
@@ -722,7 +725,9 @@ describe('KnowledgePage', () => {
     fireEvent.keyDown(window, { key: 'i', ctrlKey: true })
     fireEvent.change(await screen.findByLabelText('论文提问输入'), { target: { value: '解释这一段' } })
     fireEvent.click(screen.getByRole('button', { name: '发送问题' }))
-    expect(await screen.findByText('这段话说明 RAG 会先检索资料，再生成回答。')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getByText('这段话说明 RAG 会先检索资料，再生成回答。')).toBeInTheDocument()
+    })
 
     fireEvent.click(screen.getByRole('button', { name: /RAG Evaluation/ }))
     expect(await screen.findByRole('heading', { name: 'RAG Evaluation' })).toBeInTheDocument()
@@ -730,7 +735,9 @@ describe('KnowledgePage', () => {
     expect(await screen.findByRole('heading', { name: 'RAG Survey' })).toBeInTheDocument()
     fireEvent.keyDown(window, { key: 'i', ctrlKey: true })
 
-    expect(await screen.findByText('这段话说明 RAG 会先检索资料，再生成回答。')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getByText('这段话说明 RAG 会先检索资料，再生成回答。')).toBeInTheDocument()
+    })
   })
 
   it('restores the latest saved paper conversation when the drawer opens', async () => {
@@ -842,7 +849,9 @@ describe('KnowledgePage', () => {
     expect(input).toHaveValue('')
 
     resolveReply(assistantMessage)
-    expect(await screen.findByText('这段话说明 RAG 会先检索资料，再生成回答。')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getByText('这段话说明 RAG 会先检索资料，再生成回答。')).toBeInTheDocument()
+    })
   })
 
   it('updates the paper AI drawer progress from Dify streaming events', async () => {
@@ -942,8 +951,10 @@ describe('KnowledgePage', () => {
     fireEvent.change(await screen.findByLabelText('论文提问输入'), { target: { value: '解释这一段' } })
     fireEvent.click(screen.getByRole('button', { name: '发送问题' }))
 
-    expect(await screen.findByText('这段话说明 RAG 会先检索资料，再生成回答。')).toBeInTheDocument()
-    expect(screen.getByText('通用分析')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getByText('这段话说明 RAG 会先检索资料，再生成回答。')).toBeInTheDocument()
+      expect(screen.getByText('通用分析')).toBeInTheDocument()
+    })
   })
 
   it('shows a readable AI drawer error and keeps the draft when paper chat fails', async () => {

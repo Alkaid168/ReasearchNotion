@@ -6,18 +6,25 @@ export const STREAM_TICK_MS = 25
 /** 正常速率:每 tick 显示字符数(≈160 字/秒,略快于阅读)。 */
 export const STREAM_RATE = 4
 /** 积压超过此值(字符数)进入加速档。 */
-export const STREAM_ACCEL_BACKLOG = 80
+export const STREAM_ACCEL_BACKLOG = 120
 /** 加速档速率:每 tick 显示字符数。 */
 export const STREAM_ACCEL_RATE = 12
-/** 积压超过此值(字符数)直接全量吐出,防止"假优雅"欠账。 */
-export const STREAM_FLUSH_BACKLOG = 240
+/**
+ * 积压超过此值(字符数)直接全量吐出。这是防极端欠账的保险丝,阈值远高于
+ * 单条回答(数百字),正常回答不触发——否则真实流的大块到达会把各档速率
+ * 全部拉平到网络到达率,速度档形同虚设。
+ */
+export const STREAM_FLUSH_BACKLOG = 800
+/** finish 后欠账排空的快进速率(≈1280 字/秒):优雅在生成过程,收尾不拖沓。 */
+export const STREAM_FINISH_RATE = 32
 
 /**
- * 三档速度表:gentle 为 normal 的半速;fast 用 Infinity 走同一条路径——
+ * 三档速度表:gentle 慢到低于典型生成速率(1 字/tick ≈ 40 字/秒,GPT 打字机
+ * 节奏),体感与 normal 明显拉开;fast 用 Infinity 走同一条路径——
  * `Math.min(shown + Infinity, len) = len`,一次全吐、零特判,也不排程定时器。
  */
 const SPEED_RATES: Record<StreamSpeed, { base: number; accel: number }> = {
-  gentle: { base: 2, accel: 6 },
+  gentle: { base: 1, accel: 2 },
   normal: { base: STREAM_RATE, accel: STREAM_ACCEL_RATE },
   fast: { base: Number.POSITIVE_INFINITY, accel: Number.POSITIVE_INFINITY }
 }
@@ -36,9 +43,10 @@ export type StreamOutput = {
  * 流式输出的本地节奏控制:到达的 delta 先进缓冲区,按平滑打字机节奏显示,
  * 而不是随网络 chunk 到达节奏一段段蹦出;光标因此获得稳定的展示窗口。
  *
- * 防积压:积压越多吐得越快,超过阈值直通。push 时同步吐出第一片(首字零延迟),
- * 之后由定时器按 tick 节奏继续;finish 表示流已结束、内容已全部到达,直接
- * 全量补全并置 drained,供调用方无缝落库切换(streaming 版变历史消息)。
+ * 防积压:积压越多吐得越快,超过保险丝阈值(800 字)才直通。push 时同步吐出
+ * 第一片(首字零延迟),之后由定时器按 tick 节奏继续;finish 表示流已结束、
+ * 内容已全部到达,欠账继续排空,排空完成后置 drained,供调用方无缝落库切换
+ * (streaming 版变历史消息,文本相同、视觉连续)。
  *
  * `speed` 三档(gentle 半速 / normal 常规 / fast 直通),由 `SPEED_RATES` 统一
  * 表达;切换档位后下一 tick 即按新速率推进,fast 档在 push 内一次全吐。
@@ -71,7 +79,9 @@ export function useStreamingOutput(speed: StreamSpeed = 'normal'): StreamOutput 
     }
     const rates = SPEED_RATES[speed]
     let rate: number
-    if (backlog > STREAM_FLUSH_BACKLOG) {
+    if (finishedRef.current) {
+      rate = STREAM_FINISH_RATE
+    } else if (backlog > STREAM_FLUSH_BACKLOG) {
       rate = backlog
     } else if (backlog > STREAM_ACCEL_BACKLOG) {
       rate = rates.accel
@@ -122,16 +132,20 @@ export function useStreamingOutput(speed: StreamSpeed = 'normal'): StreamOutput 
 
   const finish = useCallback(
     (finalText: string) => {
-      // 流已结束、内容全部到达:不再更新流式显示(避免"全文中间态"闪烁),
-      // 直接置 drained,由调用方把最终全文落库为历史消息并 reset 清掉流式版本,
-      // 视觉上消息在流结束瞬间定格。
+      // 流已结束、内容全部到达。慢档(gentle)可能还有积压未显示:以快进速率
+      // (STREAM_FINISH_RATE)排空剩余,排空完成后再置 drained,由调用方把最终
+      // 全文落库为历史消息并 reset 清掉流式版本——文字打到最后一个字才定格,
+      // 优雅节奏在生成过程,收尾快进不拖沓。
       fullTextRef.current = finalText
       finishedRef.current = true
-      shownRef.current = finalText.length
-      stopTimer()
-      setDrained(true)
+      if (shownRef.current >= finalText.length) {
+        stopTimer()
+        setDrained(true)
+      } else {
+        ensureTimer()
+      }
     },
-    [stopTimer]
+    [ensureTimer, stopTimer]
   )
 
   const reset = useCallback(() => {
