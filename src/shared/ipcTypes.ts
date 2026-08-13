@@ -22,13 +22,15 @@ import type {
 export type SendMessageOptions = {
   emphasisContext?: string | null
   progressRequestId?: string | null
+  regenerateMessageId?: string | null
 }
 
 export type ConversationProgressEvent = {
   requestId: string
-  phase: 'tool' | 'answer' | 'delta' | 'done' | 'usage'
+  phase: 'thought' | 'tool' | 'answer' | 'delta' | 'done' | 'usage'
   label: string
   toolName?: string
+  thought?: string
   delta?: string
   replaceAnswer?: boolean
   usage?: TokenUsage
@@ -103,6 +105,7 @@ export type DesktopApi = {
     list(folderId: string): Promise<Array<Paper & { card: PaperCard | null }>>
     import(folderId: string): Promise<Paper[]>
     importFiles(folderId: string, files: File[]): Promise<Paper[]>
+    copyToFolder(paperId: string, targetFolderId: string): Promise<Paper>
     updateReadingStatus(paperId: string, readingStatus: ReadingStatus): Promise<PaperCard>
     reindex(paperId: string): Promise<Paper>
     delete(paperId: string): Promise<Paper>

@@ -4761,3 +4761,48 @@ button {
     transform: translateY(0);
   }
 }
+
+
+/* PR #5 可视化研究过程面板（颜色中性化以匹配 GPT 石墨风格） */
+.live-research-trace {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 12px;
+  border-top: 1px solid var(--rn-border);
+  padding-top: 7px;
+}
+
+.live-research-trace span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--rn-muted-2);
+  font-size: 11.5px;
+}
+
+.live-research-trace i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--rn-accent);
+}
+
+.live-research-trace i.planning {
+  animation: rn-pulse 1.2s ease-in-out infinite;
+}
+
+.live-research-trace small {
+  color: var(--rn-muted);
+  font-size: 10.5px;
+}
+
+@keyframes rn-soft-breathe {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}

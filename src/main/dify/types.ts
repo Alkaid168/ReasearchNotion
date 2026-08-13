@@ -22,9 +22,10 @@ export type SendChatResult = {
 }
 
 export type DifyChatProgressEvent = {
-  phase: 'tool' | 'answer' | 'delta' | 'done' | 'usage'
+  phase: 'thought' | 'tool' | 'answer' | 'delta' | 'done' | 'usage'
   label: string
   toolName?: string
+  thought?: string
   delta?: string
   replaceAnswer?: boolean
   usage?: TokenUsage

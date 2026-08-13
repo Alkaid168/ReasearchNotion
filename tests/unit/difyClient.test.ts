@@ -568,7 +568,7 @@ describe('Dify client', () => {
           [
             'data: {"event":"agent_message","conversation_id":"dify-agent-conv","answer":"我先读取当前论文。"}',
             '',
-            'data: {"event":"agent_thought","conversation_id":"dify-agent-conv","tool":"get_current_context","tool_input":"{}"}',
+            'data: {"event":"agent_thought","conversation_id":"dify-agent-conv","thought":"先确认当前阅读范围。","tool":"get_current_context","tool_input":"{}"}',
             '',
             'data: {"event":"agent_message","conversation_id":"dify-agent-conv","answer":"接下来检索相关章节。"}',
             '',
@@ -609,7 +609,7 @@ describe('Dify client', () => {
         ok: true,
         text: async () =>
           [
-            'data: {"event":"agent_thought","conversation_id":"dify-agent-conv","tool":"get_current_context","tool_input":"{}"}',
+            'data: {"event":"agent_thought","conversation_id":"dify-agent-conv","thought":"先确认当前阅读范围。","tool":"get_current_context","tool_input":"{}"}',
             '',
             'data: {"event":"agent_thought","conversation_id":"dify-agent-conv","tool":"get_paper_outline","tool_input":"{\\"paperId\\":\\"paper-demo\\"}"}',
             '',
@@ -634,6 +634,7 @@ describe('Dify client', () => {
     })
 
     expect(progress).toHaveBeenCalledWith(expect.objectContaining({ phase: 'tool', toolName: 'get_current_context', label: '读取当前状态' }))
+    expect(progress).toHaveBeenCalledWith(expect.objectContaining({ phase: 'thought', thought: '先确认当前阅读范围。' }))
     expect(progress).toHaveBeenCalledWith(expect.objectContaining({ phase: 'tool', toolName: 'get_paper_outline', label: '读取论文大纲' }))
     expect(progress).toHaveBeenCalledWith(expect.objectContaining({ phase: 'answer', label: '生成回答' }))
     expect(progress).toHaveBeenCalledWith(expect.objectContaining({ phase: 'done', label: '完成' }))
@@ -864,6 +865,28 @@ describe('Dify client', () => {
     expect(result.answer).toBe('以下是这篇论文的局限分析。')
   })
 
+  it('keeps a valid response when boilerplate cleanup would make it empty', async () => {
+    const answer = '好的，我会帮助你分析论文。'
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        answer,
+        conversation_id: 'dify-conv-1',
+        metadata: { retriever_resources: [] }
+      })
+    })
+    const client = createDifyClient({
+      baseUrl: 'http://localhost:8080',
+      appApiKey: 'app-key',
+      knowledgeApiKey: '',
+      fetchImpl: fetchMock
+    })
+
+    const result = await client.sendChatMessage({ query: '你能做什么？', user: 'local-user', inputs: {} })
+
+    expect(result.answer).toBe(answer)
+  })
+
   it('uploads documents to a dataset with the knowledge key', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
@@ -980,5 +1003,27 @@ describe('Dify client', () => {
       conversation_id: 'stale-conversation-id'
     })
     expect(JSON.parse(String(fetchMock.mock.calls[3]?.[1]?.body))).not.toHaveProperty('conversation_id')
+  })
+
+  it('can stream immediately for an agent-chat app', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      body: null,
+      text: async () =>
+        'data: {"event":"agent_message","answer":"直接流式回答"}\n\ndata: {"event":"message_end","metadata":{"retriever_resources":[]}}\n\n'
+    })
+    const client = createDifyClient({
+      baseUrl: 'http://localhost:8080',
+      appApiKey: 'app-key',
+      knowledgeApiKey: '',
+      preferredResponseMode: 'streaming',
+      fetchImpl: fetchMock
+    })
+
+    const result = await client.sendChatMessage({ query: '你好', user: 'local-user', inputs: {} })
+
+    expect(result.answer).toBe('直接流式回答')
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toMatchObject({ response_mode: 'streaming' })
   })
 })

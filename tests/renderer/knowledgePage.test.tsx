@@ -140,6 +140,7 @@ function createApiMock(): DesktopApi {
       list: vi.fn().mockResolvedValue([{ ...paper, card }]),
       import: vi.fn(),
       importFiles: vi.fn(),
+      copyToFolder: vi.fn(),
       updateReadingStatus: vi.fn().mockImplementation(async (_paperId: string, readingStatus: ReadingStatus) => ({
         ...card,
         readingStatus
@@ -514,10 +515,11 @@ describe('KnowledgePage', () => {
     })
   })
 
-  it('shows per-file import feedback and skips duplicate paper titles', async () => {
+  it('allows a same-title file so the backend can decide duplication by content', async () => {
     const api = createApiMock()
+    const sameTitlePaper: Paper = { ...paper, id: 'paper-same-title', filePath: 'same-title.md' }
     const importedPaper: Paper = { ...pdfPaper, title: 'New Evidence' }
-    const importFiles = vi.fn().mockResolvedValue([importedPaper])
+    const importFiles = vi.fn().mockResolvedValueOnce([sameTitlePaper]).mockResolvedValueOnce([importedPaper])
     Object.assign(api.papers, { importFiles })
     window.researchNotion = api
 
@@ -531,14 +533,37 @@ describe('KnowledgePage', () => {
     ]
     fireEvent.drop(dropZone, { dataTransfer: { files, types: ['Files'] } })
 
-    await waitFor(() => expect(importFiles).toHaveBeenCalledWith(folder.id, [files[1]]))
+    await waitFor(() => {
+      expect(importFiles).toHaveBeenNthCalledWith(1, folder.id, [files[0]])
+      expect(importFiles).toHaveBeenNthCalledWith(2, folder.id, [files[1]])
+    })
     expect(screen.getByText('RAG Survey.md')).toBeInTheDocument()
-    expect(screen.getByText('已跳过重复文件')).toBeInTheDocument()
     expect(screen.getByText('New Evidence.pdf')).toBeInTheDocument()
-    expect(screen.getByText('已导入')).toBeInTheDocument()
+    expect(screen.getAllByText('已导入')).toHaveLength(2)
+    expect(screen.queryByText('已跳过重复文件')).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: '清除导入记录' }))
     expect(screen.queryByLabelText('导入队列')).not.toBeInTheDocument()
+  })
+
+  it('shows a backend content duplicate as skipped instead of failed', async () => {
+    const api = createApiMock()
+    const importFiles = vi.fn().mockRejectedValue(
+      new Error("Error invoking remote method 'papers:importFiles': Error: 该文件内容与论文库中的「RAG Survey」重复，已跳过导入。")
+    )
+    Object.assign(api.papers, { importFiles })
+    window.researchNotion = api
+
+    const { KnowledgePage } = await import('../../src/renderer/pages/KnowledgePage')
+    render(<KnowledgePage />)
+
+    const dropZone = await screen.findByLabelText('论文拖放导入区')
+    const file = new File(['same content'], 'Renamed Survey.md', { type: 'text/markdown' })
+    fireEvent.drop(dropZone, { dataTransfer: { files: [file], types: ['Files'] } })
+
+    expect(await screen.findByText('已跳过重复文件')).toBeInTheDocument()
+    expect(screen.getByText('该文件内容与论文库中的「RAG Survey」重复，已跳过导入。')).toBeInTheDocument()
+    expect(screen.queryByText('导入失败')).not.toBeInTheDocument()
   })
 
   it('rejects unsupported files before starting a dropped import', async () => {
@@ -1057,6 +1082,57 @@ describe('KnowledgePage', () => {
     })
     expect(await screen.findByText('RAG 论文库')).toBeInTheDocument()
     expect(screen.queryByText(folder.name)).not.toBeInTheDocument()
+  })
+
+  it('copies a dragged paper to another folder while keeping the source paper visible', async () => {
+    const api = createApiMock()
+    const targetFolder: Folder = { ...folder, id: 'folder-2', name: '写作参考', difyDatasetId: 'dataset-2' }
+    const copiedPaper: Paper = {
+      ...paper,
+      id: 'paper-copy-1',
+      folderId: targetFolder.id,
+      filePath: 'paper-copy-1.md',
+      difyDocumentId: 'doc-copy-1'
+    }
+    let resolveCopy!: (paper: Paper) => void
+    api.folders.list = vi.fn().mockResolvedValue([folder, targetFolder])
+    api.papers.list = vi.fn().mockImplementation(async (folderId: string) =>
+      folderId === folder.id ? [{ ...paper, card }] : [{ ...copiedPaper, card: { ...card, paperId: copiedPaper.id } }]
+    )
+    api.papers.copyToFolder = vi.fn().mockImplementation(
+      () => new Promise<Paper>((resolve) => {
+        resolveCopy = resolve
+      })
+    )
+    window.researchNotion = api
+
+    const { KnowledgePage } = await import('../../src/renderer/pages/KnowledgePage')
+    render(<KnowledgePage />)
+
+    const sourceRow = await screen.findByRole('button', { name: /RAG Survey/ })
+    const targetFolderButton = screen.getByRole('button', { name: '写作参考' })
+    const targetLine = targetFolderButton.closest('.library-folder-line') as HTMLElement
+    const dragData = new Map<string, string>()
+    const dataTransfer = {
+      effectAllowed: '',
+      dropEffect: '',
+      setData: (type: string, value: string) => dragData.set(type, value),
+      getData: (type: string) => dragData.get(type) ?? ''
+    }
+
+    fireEvent.dragStart(sourceRow, { dataTransfer })
+    fireEvent.dragOver(targetLine, { dataTransfer })
+    expect(targetLine).toHaveClass('copy-drop-target')
+    fireEvent.drop(targetLine, { dataTransfer })
+
+    expect(await screen.findByText('复制中')).toBeInTheDocument()
+    expect(targetLine).toHaveClass('copying')
+    expect(api.papers.copyToFolder).toHaveBeenCalledWith(paper.id, targetFolder.id)
+
+    await act(async () => resolveCopy(copiedPaper))
+    await waitFor(() => expect(api.papers.list).toHaveBeenCalledWith(targetFolder.id))
+    await waitFor(() => expect(screen.queryByText('复制中')).not.toBeInTheDocument())
+    expect(screen.getAllByText('RAG Survey')).toHaveLength(2)
   })
 
   it('deletes a paper folder from the library sidebar and selects the next folder', async () => {

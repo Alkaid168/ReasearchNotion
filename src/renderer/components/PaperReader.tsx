@@ -24,6 +24,7 @@ type PaperReaderProps = {
   searching?: boolean
   searchError?: string | null
   onSearch?: (query: string) => void
+  onOutlineRequest?: () => void
 }
 
 type ReaderNavigationMode = 'search' | 'outline' | null
@@ -238,6 +239,7 @@ function PdfCanvasViewer({
 
   useEffect(() => {
     let alive = true
+    let loadingTask: ReturnType<PdfJsModule['getDocument']> | null = null
     setStatus('loading')
     setPageNumber(restoredPage)
     setPageField(String(restoredPage))
@@ -260,7 +262,7 @@ function PdfCanvasViewer({
       const source: Omit<PdfDocumentSource, 'standardFontDataUrl' | 'useSystemFonts'> = pdfData
         ? { data: new Uint8Array(pdfData) }
         : { url: previewUrl ?? '' }
-      const loadingTask = pdfjs.getDocument({
+      loadingTask = pdfjs.getDocument({
         ...source,
         standardFontDataUrl,
         useSystemFonts: true
@@ -280,6 +282,10 @@ function PdfCanvasViewer({
 
     return () => {
       alive = false
+      const loadedDocument = documentRef.current
+      documentRef.current = null
+      if (loadedDocument && typeof loadedDocument.destroy === 'function') void loadedDocument.destroy()
+      else if (loadingTask && typeof loadingTask.destroy === 'function') void loadingTask.destroy()
     }
   }, [pdfData, initialScale, previewUrl, restoredPage, restoredScale])
 
@@ -485,7 +491,8 @@ export function PaperReader({
   searching = false,
   searchError = null,
   onSearch,
-  onAskAi
+  onAskAi,
+  onOutlineRequest
 }: PaperReaderProps): JSX.Element {
   const markdownContentRef = useRef<HTMLElement | null>(null)
   const [navigationMode, setNavigationMode] = useState<ReaderNavigationMode>(null)
@@ -540,7 +547,10 @@ export function PaperReader({
         type="button"
         aria-label="论文目录"
         title="论文目录"
-        onClick={() => setNavigationMode((mode) => (mode === 'outline' ? null : 'outline'))}
+        onClick={() => {
+          setNavigationMode((mode) => (mode === 'outline' ? null : 'outline'))
+          if (navigationMode !== 'outline') onOutlineRequest?.()
+        }}
       >
         <ListTree size={15} aria-hidden="true" />
       </button>

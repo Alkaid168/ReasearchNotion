@@ -1,7 +1,10 @@
+import { createReadStream } from 'node:fs'
 import fs from 'node:fs/promises'
+import { createHash } from 'node:crypto'
 import path from 'node:path'
 import type { FileType, Paper } from '../../shared/types'
 import { copyPaperToStorage } from '../files/storage'
+import { validatePaperSource } from '../files/importPaper'
 import type { createRepositories } from '../db/repositories'
 import { generatePaperCard } from './generatePaperCard'
 
@@ -34,6 +37,46 @@ function detectFileType(sourcePath: string): FileType {
 function difyUploadFilename(paper: Paper): string {
   const extension = path.extname(paper.filePath)
   return `${paper.title}${extension}`
+}
+
+type CopyWorkflowInput = {
+  paperId: string
+  targetFolderId: string
+  folderDatasetId?: string | null
+  userDataDir: string
+  repos: ReturnType<typeof createRepositories>
+  dify?: NonNullable<ImportWorkflowInput['dify']>
+}
+
+async function fileSha256(filePath: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const hash = createHash('sha256')
+    const stream = createReadStream(filePath)
+    stream.on('error', reject)
+    stream.on('data', (chunk) => hash.update(chunk))
+    stream.on('end', () => resolve(hash.digest('hex')))
+  })
+}
+
+async function findDuplicatePaper(input: {
+  folderId: string
+  sourcePath: string
+  repos: ReturnType<typeof createRepositories>
+}): Promise<Paper | null> {
+  const sourceStat = await fs.stat(input.sourcePath)
+  let sourceHash: string | null = null
+
+  for (const paper of input.repos.papers.listByFolder(input.folderId)) {
+    try {
+      const storedStat = await fs.stat(paper.filePath)
+      if (!storedStat.isFile() || storedStat.size !== sourceStat.size) continue
+      sourceHash ??= await fileSha256(input.sourcePath)
+      if ((await fileSha256(paper.filePath)) === sourceHash) return paper
+    } catch {
+      // An unavailable old file must not prevent importing a healthy new paper.
+    }
+  }
+  return null
 }
 
 async function uploadAndGenerateCard(input: {
@@ -101,9 +144,39 @@ async function uploadAndGenerateCard(input: {
   }
 }
 
+async function uploadCopiedPaper(input: {
+  paper: Paper
+  datasetId: string
+  repos: ReturnType<typeof createRepositories>
+  dify: NonNullable<ImportWorkflowInput['dify']>
+}): Promise<Paper> {
+  try {
+    const bytes = await fs.readFile(input.paper.filePath)
+    input.repos.papers.setIndexStatus(input.paper.id, 'indexing', null)
+    const result = await input.dify.uploadDocumentByFile({
+      datasetId: input.datasetId,
+      file: new Blob([bytes]),
+      filename: difyUploadFilename(input.paper)
+    })
+    input.repos.papers.setIndexStatus(input.paper.id, 'indexed', result.documentId)
+    return input.repos.papers.getById(input.paper.id) ?? {
+      ...input.paper,
+      difyDocumentId: result.documentId,
+      indexStatus: 'indexed'
+    }
+  } catch (error) {
+    input.repos.papers.setIndexStatus(input.paper.id, 'failed', null)
+    throw error
+  }
+}
+
 export async function importAndIndexPaper(input: ImportWorkflowInput): Promise<Paper> {
   const extension = path.extname(input.sourcePath)
   const fileType = detectFileType(input.sourcePath)
+  await validatePaperSource(input.sourcePath, fileType)
+  const duplicate = await findDuplicatePaper({ folderId: input.folderId, sourcePath: input.sourcePath, repos: input.repos })
+  if (duplicate) throw new Error(`该文件内容与论文库中的「${duplicate.title}」重复，已跳过导入。`)
+
   const paper = input.repos.papers.create({
     folderId: input.folderId,
     title: path.basename(input.sourcePath, extension),
@@ -153,6 +226,73 @@ export async function importAndIndexPaper(input: ImportWorkflowInput): Promise<P
       filePath: storedPath,
       indexStatus: 'failed'
     }
+  }
+}
+
+export async function copyPaperToFolder(input: CopyWorkflowInput): Promise<Paper> {
+  const sourcePaper = input.repos.papers.getById(input.paperId)
+  if (!sourcePaper) throw new Error('论文不存在。')
+  if (sourcePaper.folderId === input.targetFolderId) throw new Error('论文已经在目标文件夹中。')
+  if (!input.repos.folders.getById(input.targetFolderId)) throw new Error('目标论文文件夹不存在。')
+
+  await validatePaperSource(sourcePaper.filePath, sourcePaper.fileType)
+  const duplicate = await findDuplicatePaper({
+    folderId: input.targetFolderId,
+    sourcePath: sourcePaper.filePath,
+    repos: input.repos
+  })
+  if (duplicate) throw new Error(`目标文件夹中已有内容相同的论文「${duplicate.title}」，未重复复制。`)
+
+  const extension = path.extname(sourcePaper.filePath) || (sourcePaper.fileType === 'pdf' ? '.pdf' : '.md')
+  const copiedPaper = input.repos.papers.create({
+    folderId: input.targetFolderId,
+    title: sourcePaper.title,
+    fileType: sourcePaper.fileType,
+    filePath: sourcePaper.filePath
+  })
+
+  let storedPath: string | null = null
+  try {
+    storedPath = await copyPaperToStorage({
+      userDataDir: input.userDataDir,
+      sourcePath: sourcePaper.filePath,
+      paperId: copiedPaper.id,
+      extension
+    })
+    input.repos.papers.updateFilePath(copiedPaper.id, storedPath)
+
+    const sourceCard = input.repos.papers.getCard(sourcePaper.id)
+    if (sourceCard) {
+      input.repos.paperCards.upsert({
+        paperId: copiedPaper.id,
+        authors: sourceCard.authors,
+        year: sourceCard.year,
+        oneSentenceSummary: sourceCard.oneSentenceSummary,
+        researchProblem: sourceCard.researchProblem,
+        methodSummary: sourceCard.methodSummary,
+        contributions: [...sourceCard.contributions],
+        keywords: [...sourceCard.keywords],
+        readingStatus: sourceCard.readingStatus
+      })
+    }
+  } catch (error) {
+    input.repos.papers.delete(copiedPaper.id)
+    if (storedPath) await fs.rm(storedPath, { force: true })
+    throw error
+  }
+
+  const storedPaper = input.repos.papers.getById(copiedPaper.id) ?? { ...copiedPaper, filePath: storedPath }
+  if (!input.dify || !input.folderDatasetId) return storedPaper
+
+  try {
+    return await uploadCopiedPaper({
+      paper: storedPaper,
+      datasetId: input.folderDatasetId,
+      repos: input.repos,
+      dify: input.dify
+    })
+  } catch {
+    return input.repos.papers.getById(copiedPaper.id) ?? { ...storedPaper, indexStatus: 'failed' }
   }
 }
 

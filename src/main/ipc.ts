@@ -60,6 +60,7 @@ export type IpcServices = {
     list(folderId: string): Promise<Array<Paper & { card: PaperCard | null }>>
     import(folderId: string): Promise<Paper[]>
     importFiles(folderId: string, filePaths: string[]): Promise<Paper[]>
+    copyToFolder(paperId: string, targetFolderId: string): Promise<Paper>
     updateReadingStatus(paperId: string, readingStatus: ReadingStatus): Promise<PaperCard>
     reindex(paperId: string): Promise<Paper>
     delete(paperId: string): Promise<Paper>
@@ -141,6 +142,9 @@ export function registerIpc(services: IpcServices): void {
   ipcMain.handle('papers:import', (_event, input: { folderId: string }) => services.papers.import(input.folderId))
   ipcMain.handle('papers:importFiles', (_event, input: { folderId: string; filePaths: string[] }) =>
     services.papers.importFiles(input.folderId, input.filePaths)
+  )
+  ipcMain.handle('papers:copyToFolder', (_event, input: { paperId: string; targetFolderId: string }) =>
+    services.papers.copyToFolder(input.paperId, input.targetFolderId)
   )
   ipcMain.handle('papers:updateReadingStatus', (_event, input: { paperId: string; readingStatus: ReadingStatus }) =>
     services.papers.updateReadingStatus(input.paperId, input.readingStatus)

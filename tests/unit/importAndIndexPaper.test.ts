@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AppDatabase } from '../../src/main/db/database'
 import { createDatabase } from '../../src/main/db/database'
 import { createRepositories } from '../../src/main/db/repositories'
-import { importAndIndexPaper, reindexPaper } from '../../src/main/workflows/importAndIndexPaper'
+import { copyPaperToFolder, importAndIndexPaper, reindexPaper } from '../../src/main/workflows/importAndIndexPaper'
 
 let tempDir = ''
 let databases: AppDatabase[] = []
@@ -144,6 +144,146 @@ describe('import and index paper workflow', () => {
         dify: { uploadDocumentByFile: vi.fn(), sendChatMessage: vi.fn() }
       })
     ).rejects.toThrow('当前仅支持 PDF 和 Markdown 文件。')
+  })
+
+  it('rejects an invalid PDF before creating a paper record', async () => {
+    const sourcePath = path.join(tempDir, 'broken.pdf')
+    writeFileSync(sourcePath, 'this is not a PDF', 'utf8')
+    const db = createDatabase(path.join(tempDir, 'broken-pdf.sqlite'))
+    databases.push(db)
+    const repos = createRepositories(db)
+    const folder = repos.folders.create({ name: 'PDF 校验', parentId: null })
+
+    await expect(
+      importAndIndexPaper({ folderId: folder.id, sourcePath, userDataDir: tempDir, repos })
+    ).rejects.toThrow('该文件不是有效的 PDF，可能只是扩展名被改成了 .pdf。')
+
+    expect(repos.papers.listByFolder(folder.id)).toEqual([])
+  })
+
+  it('skips identical paper content even when the second file was renamed', async () => {
+    const firstPath = path.join(tempDir, 'Original.md')
+    const renamedPath = path.join(tempDir, 'Renamed.md')
+    const content = '# Same paper\n\nIdentical content.'
+    writeFileSync(firstPath, content, 'utf8')
+    writeFileSync(renamedPath, content, 'utf8')
+    const db = createDatabase(path.join(tempDir, 'duplicate.sqlite'))
+    databases.push(db)
+    const repos = createRepositories(db)
+    const folder = repos.folders.create({ name: '重复检查', parentId: null })
+
+    await importAndIndexPaper({ folderId: folder.id, sourcePath: firstPath, userDataDir: tempDir, repos })
+    await expect(
+      importAndIndexPaper({ folderId: folder.id, sourcePath: renamedPath, userDataDir: tempDir, repos })
+    ).rejects.toThrow('该文件内容与论文库中的「Original」重复，已跳过导入。')
+
+    expect(repos.papers.listByFolder(folder.id)).toHaveLength(1)
+  })
+
+  it('copies a paper into another folder with independent storage and the existing card', async () => {
+    const sourcePath = path.join(tempDir, 'Reusable.md')
+    writeFileSync(sourcePath, '# Reusable\n\nCopy this paper.', 'utf8')
+    const db = createDatabase(path.join(tempDir, 'copy.sqlite'))
+    databases.push(db)
+    const repos = createRepositories(db)
+    const sourceFolder = repos.folders.create({ name: '来源', parentId: null })
+    const targetFolder = repos.folders.create({ name: '目标', parentId: null })
+    const sourcePaper = await importAndIndexPaper({
+      folderId: sourceFolder.id,
+      sourcePath,
+      userDataDir: tempDir,
+      repos
+    })
+    repos.paperCards.upsert({
+      paperId: sourcePaper.id,
+      authors: 'Research Team',
+      year: '2026',
+      oneSentenceSummary: 'Existing summary.',
+      researchProblem: 'Avoid repeated analysis.',
+      methodSummary: 'Copy known metadata.',
+      contributions: ['Fast copy'],
+      keywords: ['copy'],
+      readingStatus: 'reading'
+    })
+
+    const copied = await copyPaperToFolder({
+      paperId: sourcePaper.id,
+      targetFolderId: targetFolder.id,
+      userDataDir: tempDir,
+      repos
+    })
+
+    expect(copied).toMatchObject({
+      folderId: targetFolder.id,
+      title: sourcePaper.title,
+      fileType: sourcePaper.fileType,
+      indexStatus: 'local-only'
+    })
+    expect(copied.id).not.toBe(sourcePaper.id)
+    expect(copied.filePath).not.toBe(sourcePaper.filePath)
+    expect(readFileSync(copied.filePath, 'utf8')).toBe(readFileSync(sourcePaper.filePath, 'utf8'))
+    expect(repos.papers.getCard(copied.id)).toMatchObject({
+      paperId: copied.id,
+      authors: 'Research Team',
+      oneSentenceSummary: 'Existing summary.',
+      readingStatus: 'reading'
+    })
+
+    repos.papers.delete(copied.id)
+    expect(repos.papers.getById(sourcePaper.id)).not.toBeNull()
+    expect(existsSync(sourcePaper.filePath)).toBe(true)
+  })
+
+  it('rejects a content duplicate in the target folder but allows the source to remain', async () => {
+    const firstPath = path.join(tempDir, 'First.md')
+    const existingPath = path.join(tempDir, 'Existing.md')
+    writeFileSync(firstPath, '# Same content', 'utf8')
+    writeFileSync(existingPath, '# Same content', 'utf8')
+    const db = createDatabase(path.join(tempDir, 'copy-duplicate.sqlite'))
+    databases.push(db)
+    const repos = createRepositories(db)
+    const sourceFolder = repos.folders.create({ name: '来源', parentId: null })
+    const targetFolder = repos.folders.create({ name: '目标', parentId: null })
+    const sourcePaper = await importAndIndexPaper({ folderId: sourceFolder.id, sourcePath: firstPath, userDataDir: tempDir, repos })
+    await importAndIndexPaper({ folderId: targetFolder.id, sourcePath: existingPath, userDataDir: tempDir, repos })
+
+    await expect(
+      copyPaperToFolder({
+        paperId: sourcePaper.id,
+        targetFolderId: targetFolder.id,
+        userDataDir: tempDir,
+        repos
+      })
+    ).rejects.toThrow('目标文件夹中已有内容相同的论文「Existing」，未重复复制。')
+
+    expect(repos.papers.listByFolder(sourceFolder.id)).toHaveLength(1)
+    expect(repos.papers.listByFolder(targetFolder.id)).toHaveLength(1)
+  })
+
+  it('uploads a copied paper as a separate Dify document without regenerating its card', async () => {
+    const sourcePath = path.join(tempDir, 'Indexed Copy.md')
+    writeFileSync(sourcePath, '# Indexed Copy', 'utf8')
+    const db = createDatabase(path.join(tempDir, 'indexed-copy.sqlite'))
+    databases.push(db)
+    const repos = createRepositories(db)
+    const sourceFolder = repos.folders.create({ name: '来源', parentId: null })
+    const targetFolder = repos.folders.create({ name: '目标', parentId: null })
+    const sourcePaper = await importAndIndexPaper({ folderId: sourceFolder.id, sourcePath, userDataDir: tempDir, repos })
+    const uploadDocumentByFile = vi.fn().mockResolvedValue({ documentId: 'doc-copy' })
+    const sendChatMessage = vi.fn()
+
+    const copied = await copyPaperToFolder({
+      paperId: sourcePaper.id,
+      targetFolderId: targetFolder.id,
+      folderDatasetId: 'dataset-target',
+      userDataDir: tempDir,
+      repos,
+      dify: { uploadDocumentByFile, sendChatMessage }
+    })
+
+    expect(copied).toMatchObject({ difyDocumentId: 'doc-copy', indexStatus: 'indexed' })
+    expect(uploadDocumentByFile).toHaveBeenCalledWith(expect.objectContaining({ datasetId: 'dataset-target' }))
+    expect(sendChatMessage).not.toHaveBeenCalled()
   })
 
   it('rolls back the local paper record when the source file cannot be copied', async () => {

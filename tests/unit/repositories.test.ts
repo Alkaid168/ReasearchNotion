@@ -242,7 +242,11 @@ describe('repositories', () => {
       conversationId: conversation.id,
       role: 'assistant',
       content: '这篇论文提出了检索增强生成。',
-      citations: [{ paperId: 'paper-1', paperTitle: 'RAG Survey', snippet: 'retrieval augmented generation', score: 0.91 }]
+      citations: [{ paperId: 'paper-1', paperTitle: 'RAG Survey', snippet: 'retrieval augmented generation', score: 0.91 }],
+      researchProcess: {
+        durationMs: 1800,
+        steps: [{ phase: 'read', label: '读取论文原文', detail: '已读取第 3 页' }]
+      }
     })
 
     expect(repos.conversations.list()[0]).toMatchObject({
@@ -251,6 +255,10 @@ describe('repositories', () => {
     })
     expect(repos.conversations.getById(conversation.id)?.id).toBe(conversation.id)
     expect(repos.messages.listByConversation(conversation.id)[0].citations[0].paperTitle).toBe('RAG Survey')
+    expect(repos.messages.listByConversation(conversation.id)[0].researchProcess).toMatchObject({
+      durationMs: 1800,
+      steps: [{ phase: 'read', label: '读取论文原文' }]
+    })
   })
 
   it('persists the Dify conversation id for follow-up messages', () => {
@@ -564,5 +572,38 @@ describe('repositories', () => {
     expect(messages).toHaveLength(2)
     expect(messages[0].tokenUsage).toBeUndefined()
     expect(messages[1].tokenUsage).toEqual({ promptTokens: 100, completionTokens: 20, totalTokens: 120 })
+  })
+
+  it('migrates older message tables before storing research processes', () => {
+    const dbPath = path.join(tempDir, 'old-message-research-process.sqlite')
+    const oldDb = new Database(dbPath)
+    oldDb.exec(`
+      CREATE TABLE conversations (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        folder_id TEXT,
+        conversation_folder_id TEXT,
+        dify_conversation_id TEXT,
+        context_json TEXT NOT NULL,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE TABLE messages (
+        id TEXT PRIMARY KEY,
+        conversation_id TEXT NOT NULL,
+        role TEXT NOT NULL,
+        content TEXT NOT NULL,
+        citations_json TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+    `)
+    oldDb.close()
+
+    const db = createDatabase(dbPath)
+    databases.push(db)
+    const columns = db.pragma('table_info(messages)') as Array<{ name: string }>
+
+    expect(columns.map((column) => column.name)).toContain('research_process_json')
   })
 })

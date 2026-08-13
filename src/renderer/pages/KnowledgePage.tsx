@@ -1,10 +1,19 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type FormEvent, type JSX, type PointerEvent } from 'react'
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type DragEvent,
+  type FormEvent,
+  type JSX,
+  type PointerEvent
+} from 'react'
 import {
   BookOpenText,
   Check,
   ChevronRight,
   FilePlus2,
-  FileText,
   FolderClosed,
   FolderOpen,
   FolderPlus,
@@ -19,16 +28,10 @@ import { desktopApi } from '../api/desktopApi'
 import { AiDrawer, createEmptyAiDrawerSession, type AiDrawerSession } from '../components/AiDrawer'
 import { PaperReader } from '../components/PaperReader'
 import { readWorkspacePreferences, updateWorkspacePreferences, type PaperViewPreference } from '../state/workspacePreferences'
+import { LibraryPaperBranch } from './LibraryPaperBranch'
+import type { PaperRow } from './paperLibraryUtils'
+import { usePaperImport } from './usePaperImport'
 import type { Folder, ModelProfile, Paper, PaperOutlineItem, PaperSearchResult } from '../../shared/types'
-
-import {
-  type ImportQueueItem,
-  type PaperRow,
-  containsFiles,
-  normalizedPaperTitle,
-  paperMeta,
-  supportedPaperFile
-} from './knowledgeHelpers'
 
 type KnowledgePageProps = {
   requestedPaperId?: string
@@ -70,7 +73,6 @@ export function KnowledgePage({ requestedPaperId, requestedFolderId, requestedPa
   const [focusMode, setFocusMode] = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [emphasisContext, setEmphasisContext] = useState<string | null>(null)
-  const [selectionToolbar, setSelectionToolbar] = useState<{ text: string; top: number; left: number } | null>(null)
   const [drawerSessions, setDrawerSessions] = useState<Record<string, AiDrawerSession>>({})
   const [drawerWidth, setDrawerWidth] = useState(380)
   const [knowledgeSidebarWidth, setKnowledgeSidebarWidth] = useState(initialPreferences.knowledge.sidebarWidth)
@@ -83,18 +85,19 @@ export function KnowledgePage({ requestedPaperId, requestedFolderId, requestedPa
   const [editingFolderName, setEditingFolderName] = useState('')
   const [deleteConfirmFolderId, setDeleteConfirmFolderId] = useState<string | null>(null)
   const [deletingFolderId, setDeletingFolderId] = useState<string | null>(null)
-  const [importing, setImporting] = useState(false)
   const [importError, setImportError] = useState<string | null>(null)
-  const [importQueue, setImportQueue] = useState<ImportQueueItem[]>([])
-  const [dropActive, setDropActive] = useState(false)
   const [deleteConfirmPaperId, setDeleteConfirmPaperId] = useState<string | null>(null)
   const [deletingPaperId, setDeletingPaperId] = useState<string | null>(null)
+  const [draggedPaperId, setDraggedPaperId] = useState<string | null>(null)
+  const [paperDropTargetFolderId, setPaperDropTargetFolderId] = useState<string | null>(null)
+  const [copyingTargetFolderId, setCopyingTargetFolderId] = useState<string | null>(null)
   const [paperSearchQuery, setPaperSearchQuery] = useState('')
   const activePaperRef = useRef<Paper | null>(null)
   const currentPageRef = useRef(1)
   const drawerOpenRef = useRef(false)
-  const dragDepthRef = useRef(0)
   const knowledgeResizeCleanupRef = useRef<(() => void) | null>(null)
+  const outlinePaperIdRef = useRef<string | null>(null)
+  const outlineRequestRef = useRef<Promise<void> | null>(null)
 
   activePaperRef.current = activePaper
   currentPageRef.current = currentPage
@@ -118,22 +121,22 @@ export function KnowledgePage({ requestedPaperId, requestedFolderId, requestedPa
     [activeFolderId, folders]
   )
   const activeFolderPapers = activeFolderId ? (papersByFolderId[activeFolderId] ?? []) : []
-
-  function filteredPapersFor(folderId: string): PaperRow[] {
-    const query = paperSearchQuery.trim().toLowerCase()
-    return (papersByFolderId[folderId] ?? []).filter((paper) => {
-      const searchableValues = [
-        paper.title,
-        paper.card?.oneSentenceSummary,
-        paper.card?.authors,
-        paper.card?.year,
-        ...(paper.card?.keywords ?? [])
-      ]
-      const matchesQuery =
-        !query || searchableValues.filter(Boolean).some((value) => String(value).toLowerCase().includes(query))
-      return matchesQuery
-    })
-  }
+  const {
+    importing,
+    importQueue,
+    dropActive,
+    importPaper,
+    clearImportQueue,
+    onPaperDragEnter,
+    onPaperDragOver,
+    onPaperDragLeave,
+    onPaperDrop
+  } = usePaperImport({
+    activeFolderId,
+    loadFolderPapers,
+    onNotify,
+    onError: setImportError
+  })
 
   async function loadFolderPapers(folderId: string): Promise<PaperRow[]> {
     setLoadingFolderIds((current) => new Set(current).add(folderId))
@@ -247,41 +250,6 @@ export function KnowledgePage({ requestedPaperId, requestedFolderId, requestedPa
   }, [])
 
   useEffect(() => {
-    if (!activePaper) return
-    let raf = 0
-    function update(): void {
-      raf = 0
-      const selection = window.getSelection()
-      const text = selection?.toString().trim() ?? ''
-      if (!text || !selection || selection.rangeCount === 0) {
-        setSelectionToolbar(null)
-        return
-      }
-      const rect = selection.getRangeAt(0).getBoundingClientRect()
-      if (rect.width === 0 && rect.height === 0) {
-        setSelectionToolbar(null)
-        return
-      }
-      setSelectionToolbar({ text, top: rect.top, left: rect.left + rect.width / 2 })
-    }
-    function onMouseUp(): void {
-      if (raf) cancelAnimationFrame(raf)
-      raf = window.setTimeout(update, 10) as unknown as number
-    }
-    function onSelectionChange(): void {
-      const selection = window.getSelection()
-      if (!selection?.toString().trim()) setSelectionToolbar(null)
-    }
-    document.addEventListener('mouseup', onMouseUp)
-    document.addEventListener('selectionchange', onSelectionChange)
-    return () => {
-      document.removeEventListener('mouseup', onMouseUp)
-      document.removeEventListener('selectionchange', onSelectionChange)
-      if (raf) cancelAnimationFrame(raf)
-    }
-  }, [activePaper])
-
-  useEffect(() => {
     const paperId = activePaper?.id
     if (!drawerOpen || !paperId || drawerSessions[paperId]) return
 
@@ -330,6 +298,8 @@ export function KnowledgePage({ requestedPaperId, requestedFolderId, requestedPa
     setPreviewUrl(result.previewUrl)
     setPdfData(result.pdfData)
     setPaperOutline([])
+    outlinePaperIdRef.current = null
+    outlineRequestRef.current = null
     setReaderSearchResults([])
     setReaderSearching(false)
     setReaderSearchError(null)
@@ -362,13 +332,24 @@ export function KnowledgePage({ requestedPaperId, requestedFolderId, requestedPa
     setEmphasisContext(null)
     setDeleteConfirmPaperId(null)
 
-    void desktopApi.papers
-      .getOutline(result.paper.id)
+  }
+
+  function loadActivePaperOutline(): void {
+    const paperId = activePaperRef.current?.id
+    if (!paperId || outlinePaperIdRef.current === paperId || outlineRequestRef.current) return
+
+    outlineRequestRef.current = desktopApi.papers
+      .getOutline(paperId)
       .then((outline) => {
-        if (activePaperRef.current?.id === result.paper.id) setPaperOutline(outline)
+        if (activePaperRef.current?.id !== paperId) return
+        outlinePaperIdRef.current = paperId
+        setPaperOutline(outline)
       })
       .catch(() => {
-        if (activePaperRef.current?.id === result.paper.id) setPaperOutline([])
+        if (activePaperRef.current?.id === paperId) setPaperOutline([])
+      })
+      .finally(() => {
+        outlineRequestRef.current = null
       })
   }
 
@@ -387,108 +368,6 @@ export function KnowledgePage({ requestedPaperId, requestedFolderId, requestedPa
       setReaderSearchError(error instanceof Error ? error.message : '搜索论文失败。')
     } finally {
       if (activePaperRef.current?.id === paper.id) setReaderSearching(false)
-    }
-  }
-
-  async function importPaper(): Promise<void> {
-    if (!activeFolderId || importing) return
-
-    setImporting(true)
-    setImportError(null)
-    try {
-      const importedPapers = await desktopApi.papers.import(activeFolderId)
-      await loadFolderPapers(activeFolderId)
-      if (importedPapers.length === 1) onNotify?.(`已导入「${importedPapers[0].title}」`, 'success')
-      else onNotify?.(`已导入 ${importedPapers.length} 篇论文`, 'success')
-    } catch (error) {
-      const message = error instanceof Error ? error.message : '导入论文失败。'
-      setImportError(message)
-      onNotify?.(message, 'error')
-    } finally {
-      setImporting(false)
-    }
-  }
-
-  function updateImportQueueItem(id: string, update: Partial<ImportQueueItem>): void {
-    setImportQueue((current) => current.map((item) => (item.id === id ? { ...item, ...update } : item)))
-  }
-
-  async function importDroppedFiles(folderId: string, files: File[]): Promise<void> {
-    const existingTitles = new Set(activeFolderPapers.map((paper) => normalizedPaperTitle(paper.title)))
-    const incomingTitles = new Set<string>()
-    const items = files.map((file, index) => {
-      const title = normalizedPaperTitle(file.name)
-      const duplicate = existingTitles.has(title) || incomingTitles.has(title)
-      incomingTitles.add(title)
-      return {
-        id: `import-${Date.now()}-${index}`,
-        fileName: file.name,
-        status: duplicate ? 'skipped' : 'queued',
-        detail: duplicate ? '当前论文库或本次导入中已有同名论文。' : undefined
-      } satisfies ImportQueueItem
-    })
-    setImportQueue(items)
-
-    let importedCount = 0
-    let failedCount = 0
-    for (const [index, file] of files.entries()) {
-      const item = items[index]
-      if (item.status === 'skipped') continue
-      updateImportQueueItem(item.id, { status: 'importing' })
-      try {
-        const imported = await desktopApi.papers.importFiles(folderId, [file])
-        const importedPaper = imported[0]
-        if (!importedPaper) throw new Error('导入没有返回论文记录。')
-        existingTitles.add(normalizedPaperTitle(importedPaper.title))
-        importedCount += 1
-        updateImportQueueItem(item.id, { status: 'imported' })
-      } catch (error) {
-        failedCount += 1
-        updateImportQueueItem(item.id, {
-          status: 'failed',
-          detail: error instanceof Error ? error.message : '导入失败。'
-        })
-      }
-    }
-
-    await loadFolderPapers(folderId)
-    if (failedCount > 0) setImportError(`${failedCount} 个文件导入失败。`)
-    if (importedCount > 0) onNotify?.(importedCount === 1 ? '已导入 1 篇论文' : `已导入 ${importedCount} 篇论文`, 'success')
-  }
-
-  function onPaperDragEnter(event: DragEvent<HTMLElement>): void {
-    if (!containsFiles(event)) return
-    event.preventDefault()
-    dragDepthRef.current += 1
-    setDropActive(true)
-  }
-
-  function onPaperDragLeave(event: DragEvent<HTMLElement>): void {
-    if (!containsFiles(event)) return
-    event.preventDefault()
-    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1)
-    if (dragDepthRef.current === 0) setDropActive(false)
-  }
-
-  async function onPaperDrop(event: DragEvent<HTMLElement>): Promise<void> {
-    event.preventDefault()
-    dragDepthRef.current = 0
-    setDropActive(false)
-    if (!activeFolderId || importing) return
-
-    const files = Array.from(event.dataTransfer.files)
-    if (files.length === 0) return
-    if (files.some((file) => !supportedPaperFile(file))) {
-      setImportError('仅支持 PDF、Markdown（.md / .markdown）文件。')
-      return
-    }
-
-    setImporting(true)
-    setImportError(null)
-    try {
-      await importDroppedFiles(activeFolderId, files)
-    } finally {
-      setImporting(false)
     }
   }
 
@@ -525,6 +404,97 @@ export function KnowledgePage({ requestedPaperId, requestedFolderId, requestedPa
       setImportError(error instanceof Error ? error.message : '删除论文失败。')
     } finally {
       setDeletingPaperId(null)
+    }
+  }
+
+  async function deletePaperFromLibrary(paperId: string): Promise<void> {
+    if (deletingPaperId) return
+    const paper = Object.values(papersByFolderId)
+      .flat()
+      .find((candidate) => candidate.id === paperId)
+    if (!paper) return
+
+    setDeletingPaperId(paperId)
+    setImportError(null)
+    try {
+      await desktopApi.papers.delete(paperId)
+      await loadFolderPapers(paper.folderId)
+      if (activePaperRef.current?.id === paperId) clearActivePaper()
+    } catch (error) {
+      setImportError(error instanceof Error ? error.message : '删除论文失败。')
+    } finally {
+      setDeletingPaperId(null)
+    }
+  }
+
+  function loadedPaper(paperId: string): PaperRow | null {
+    return Object.values(papersByFolderId)
+      .flat()
+      .find((candidate) => candidate.id === paperId) ?? null
+  }
+
+  function startPaperCopyDrag(event: DragEvent<HTMLButtonElement>, paperId: string): void {
+    if (copyingTargetFolderId) {
+      event.preventDefault()
+      return
+    }
+    event.dataTransfer.effectAllowed = 'copy'
+    event.dataTransfer.setData('application/x-research-notion-paper', paperId)
+    setDraggedPaperId(paperId)
+    setPaperDropTargetFolderId(null)
+  }
+
+  function finishPaperCopyDrag(): void {
+    setDraggedPaperId(null)
+    setPaperDropTargetFolderId(null)
+  }
+
+  function paperIdFromDrag(event: DragEvent<HTMLElement>): string | null {
+    return draggedPaperId || event.dataTransfer.getData('application/x-research-notion-paper') || null
+  }
+
+  function markPaperCopyTarget(event: DragEvent<HTMLElement>, targetFolderId: string): void {
+    const paperId = paperIdFromDrag(event)
+    const sourcePaper = paperId ? loadedPaper(paperId) : null
+    if (!sourcePaper || sourcePaper.folderId === targetFolderId || copyingTargetFolderId) return
+    event.preventDefault()
+    event.stopPropagation()
+    event.dataTransfer.dropEffect = 'copy'
+    setPaperDropTargetFolderId(targetFolderId)
+  }
+
+  function leavePaperCopyTarget(event: DragEvent<HTMLElement>, targetFolderId: string): void {
+    const nextTarget = event.relatedTarget
+    if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) return
+    setPaperDropTargetFolderId((current) => (current === targetFolderId ? null : current))
+  }
+
+  async function copyPaperFromDrop(event: DragEvent<HTMLElement>, targetFolderId: string): Promise<void> {
+    const paperId = paperIdFromDrag(event)
+    const sourcePaper = paperId ? loadedPaper(paperId) : null
+    if (!sourcePaper || sourcePaper.folderId === targetFolderId || copyingTargetFolderId) return
+
+    event.preventDefault()
+    event.stopPropagation()
+    setDraggedPaperId(null)
+    setPaperDropTargetFolderId(null)
+    setCopyingTargetFolderId(targetFolderId)
+    setImportError(null)
+    setExpandedFolderIds((current) => {
+      const next = new Set(current).add(targetFolderId)
+      updateWorkspacePreferences({ knowledge: { expandedFolderIds: [...next] } })
+      return next
+    })
+
+    try {
+      const copiedPaper = await desktopApi.papers.copyToFolder(sourcePaper.id, targetFolderId)
+      await loadFolderPapers(targetFolderId)
+      const targetFolder = folders.find((folder) => folder.id === targetFolderId)
+      onNotify?.(`已将《${copiedPaper.title}》复制到「${targetFolder?.name ?? '目标文件夹'}」。`, 'success')
+    } catch (error) {
+      setImportError(error instanceof Error ? error.message : '复制论文失败。')
+    } finally {
+      setCopyingTargetFolderId(null)
     }
   }
 
@@ -657,11 +627,7 @@ export function KnowledgePage({ requestedPaperId, requestedFolderId, requestedPa
         className={dropActive ? 'knowledge-list drag-active' : 'knowledge-list'}
         aria-label="论文拖放导入区"
         onDragEnter={onPaperDragEnter}
-        onDragOver={(event) => {
-          if (!containsFiles(event)) return
-          event.preventDefault()
-          event.dataTransfer.dropEffect = 'copy'
-        }}
+        onDragOver={onPaperDragOver}
         onDragLeave={onPaperDragLeave}
         onDrop={(event) => void onPaperDrop(event)}
       >
@@ -754,8 +720,9 @@ export function KnowledgePage({ requestedPaperId, requestedFolderId, requestedPa
             const isActive = folder.id === activeFolderId
             const isExpanded = expandedFolderIds.has(folder.id)
             const folderPapers = papersByFolderId[folder.id] ?? []
-            const filteredPapers = filteredPapersFor(folder.id)
             const isLoadingFolder = loadingFolderIds.has(folder.id)
+            const isPaperDropTarget = paperDropTargetFolderId === folder.id
+            const isCopyingHere = copyingTargetFolderId === folder.id
             return (
               <div className="library-folder-block" key={folder.id}>
                 {editingFolderId === folder.id ? (
@@ -781,7 +748,13 @@ export function KnowledgePage({ requestedPaperId, requestedFolderId, requestedPa
                     </button>
                   </form>
                 ) : (
-                  <div className={isActive ? 'library-folder-line active' : 'library-folder-line'}>
+                  <div
+                    className={`library-folder-line${isActive ? ' active' : ''}${isPaperDropTarget ? ' copy-drop-target' : ''}${isCopyingHere ? ' copying' : ''}`}
+                    onDragEnter={(event) => markPaperCopyTarget(event, folder.id)}
+                    onDragOver={(event) => markPaperCopyTarget(event, folder.id)}
+                    onDragLeave={(event) => leavePaperCopyTarget(event, folder.id)}
+                    onDrop={(event) => void copyPaperFromDrop(event, folder.id)}
+                  >
                     <button
                       className={isActive ? 'library-folder-row active' : 'library-folder-row'}
                       type="button"
@@ -791,6 +764,7 @@ export function KnowledgePage({ requestedPaperId, requestedFolderId, requestedPa
                       <ChevronRight className={isExpanded ? 'folder-chevron open' : 'folder-chevron'} size={14} aria-hidden="true" />
                       {isExpanded ? <FolderOpen size={15} aria-hidden="true" /> : <FolderClosed size={15} aria-hidden="true" />}
                       <span>{folder.name}</span>
+                      {isCopyingHere ? <small className="library-folder-copying">复制中</small> : null}
                     </button>
                     <button
                       className="library-row-icon-button"
@@ -843,30 +817,16 @@ export function KnowledgePage({ requestedPaperId, requestedFolderId, requestedPa
                 ) : null}
 
                 {isExpanded ? (
-                  <div className="library-paper-branch">
-                    {isLoadingFolder ? <p className="subtle-text compact">正在载入论文...</p> : null}
-                    {!isLoadingFolder && folderPapers.length === 0 ? (
-                      <p className="subtle-text compact">当前文件夹还没有论文。</p>
-                    ) : null}
-                    {!isLoadingFolder && folderPapers.length > 0 && filteredPapers.length === 0 ? (
-                      <p className="subtle-text compact">没有匹配的论文。</p>
-                    ) : null}
-                    {filteredPapers.map((paper) => (
-                      <button
-                        key={paper.id}
-                        className={activePaper?.id === paper.id ? 'library-paper-row active' : 'library-paper-row'}
-                        data-paper-row-id={paper.id}
-                        type="button"
-                        onClick={() => void openPaper(paper.id)}
-                      >
-                        <FileText size={15} aria-hidden="true" />
-                        <span>
-                          <strong>{paper.title}</strong>
-                          <small>{paperMeta(paper)}</small>
-                        </span>
-                      </button>
-                    ))}
-                  </div>
+                  <LibraryPaperBranch
+                    papers={folderPapers}
+                    query={paperSearchQuery}
+                    loading={isLoadingFolder}
+                    activePaperId={activePaper?.id ?? null}
+                    onOpenPaper={(paperId) => void openPaper(paperId)}
+                    onDeletePaper={(paperId) => void deletePaperFromLibrary(paperId)}
+                    onPaperDragStart={startPaperCopyDrag}
+                    onPaperDragEnd={finishPaperCopyDrag}
+                  />
                 ) : null}
               </div>
             )
@@ -891,7 +851,7 @@ export function KnowledgePage({ requestedPaperId, requestedFolderId, requestedPa
                 aria-label="清除导入记录"
                 title="清除导入记录"
                 disabled={importing}
-                onClick={() => setImportQueue([])}
+                onClick={clearImportQueue}
               >
                 <X size={14} aria-hidden="true" />
               </button>
@@ -905,6 +865,9 @@ export function KnowledgePage({ requestedPaperId, requestedFolderId, requestedPa
                     {item.status === 'skipped' ? '已跳过重复文件' : null}
                     {item.status === 'failed' ? '导入失败' : null}
                   </small>
+                  {item.detail && (item.status === 'failed' || item.status === 'skipped') ? (
+                    <span className="import-queue-detail">{item.detail}</span>
+                  ) : null}
                 </div>
               ))}
             </section>
@@ -999,23 +962,11 @@ export function KnowledgePage({ requestedPaperId, requestedFolderId, requestedPa
           searching={readerSearching}
           searchError={readerSearchError}
           onSearch={(query) => void searchActivePaper(query)}
+          onOutlineRequest={loadActivePaperOutline}
           initialPage={activePaper ? paperViews[activePaper.id]?.page : undefined}
           initialScale={activePaper ? paperViews[activePaper.id]?.scale : undefined}
           focusMode={focusMode}
           onFocusModeChange={setFocusMode}
-          onAskAi={() => {
-            if (!activePaper) return
-            const selectedText = window.getSelection()?.toString().trim() || null
-            setEmphasisContext(selectedText)
-            void desktopApi.reading.updateState({
-              activeFolderId: activePaper.folderId,
-              activePaperId: activePaper.id,
-              currentPage: currentPage ?? null,
-              selectedText
-            })
-            drawerOpenRef.current = true
-            setDrawerOpen(true)
-          }}
           onPageChange={(pageNumber) => {
             setCurrentPage(pageNumber)
             if (!activePaperRef.current) return
@@ -1071,71 +1022,7 @@ export function KnowledgePage({ requestedPaperId, requestedFolderId, requestedPa
             void openPaper(citation.paperId, citation.pageNumber ?? undefined)
           }}
         />
-        {selectionToolbar ? (
-          <SelectionToolbar
-            text={selectionToolbar.text}
-            top={selectionToolbar.top}
-            left={selectionToolbar.left}
-            onAction={(prompt) => {
-              setEmphasisContext(selectionToolbar.text)
-              void desktopApi.reading.updateState({
-                activeFolderId: activePaper?.folderId ?? null,
-                activePaperId: activePaper?.id ?? null,
-                currentPage: currentPage ?? null,
-                selectedText: selectionToolbar.text
-              })
-              if (activePaper) {
-                setDrawerSessions((current) => {
-                  const previous = current[activePaper.id] ?? createEmptyAiDrawerSession()
-                  return { ...current, [activePaper.id]: { ...previous, draft: prompt } }
-                })
-              }
-              drawerOpenRef.current = true
-              setDrawerOpen(true)
-              setSelectionToolbar(null)
-              window.getSelection()?.removeAllRanges()
-            }}
-          />
-        ) : null}
       </main>
-    </div>
-  )
-}
-
-type SelectionToolbarProps = {
-  text: string
-  top: number
-  left: number
-  onAction: (prompt: string) => void
-}
-
-const selectionActions = [
-  { label: '解释', prompt: '请解释下面这段内容的含义、背景和关键概念：' },
-  { label: '翻译', prompt: '请把下面这段内容翻译成通顺的中文：' },
-  { label: '总结', prompt: '请用 3-5 个要点总结下面这段内容：' }
-]
-
-function SelectionToolbar({ text: _text, top, left, onAction }: SelectionToolbarProps): JSX.Element {
-  return (
-    <div
-      className="selection-toolbar"
-      style={{ top: `${top}px`, left: `${left}px` }}
-      role="toolbar"
-      aria-label="选中文字操作"
-    >
-      {selectionActions.map((action) => (
-        <button
-          key={action.label}
-          type="button"
-          className="selection-toolbar-action"
-          onMouseDown={(event) => {
-            event.preventDefault()
-            onAction(action.prompt)
-          }}
-        >
-          {action.label}
-        </button>
-      ))}
     </div>
   )
 }

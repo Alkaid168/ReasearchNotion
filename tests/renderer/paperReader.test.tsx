@@ -199,6 +199,7 @@ describe('PaperReader', () => {
 
   it('opens the paper outline and navigates to a selected section', async () => {
     const onPageChange = vi.fn()
+    const onOutlineRequest = vi.fn()
     render(
       <PaperReader
         paper={pdfPaper}
@@ -208,12 +209,14 @@ describe('PaperReader', () => {
         pdfData={new Uint8Array([1, 2, 3])}
         {...({
           outline: [{ level: 2, heading: '3 Method', pageNumber: 2, preview: 'The model uses evidence planning.' }],
-          onPageChange
+          onPageChange,
+          onOutlineRequest
         } as Record<string, unknown>)}
       />
     )
 
     fireEvent.click(await screen.findByRole('button', { name: '论文目录' }))
+    expect(onOutlineRequest).toHaveBeenCalledTimes(1)
     fireEvent.click(screen.getByRole('button', { name: /3 Method/ }))
     await waitFor(() => expect(onPageChange).toHaveBeenCalledWith(2))
   })

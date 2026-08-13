@@ -68,6 +68,7 @@ CREATE TABLE IF NOT EXISTS messages (
   content TEXT NOT NULL,
   citations_json TEXT NOT NULL,
   token_usage_json TEXT,
+  research_process_json TEXT,
   created_at TEXT NOT NULL,
   FOREIGN KEY(conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
 );

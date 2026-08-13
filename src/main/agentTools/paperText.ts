@@ -32,6 +32,7 @@ export type PaperOutlineItem = {
 export type PaperTextChunk = {
   chunkIndex: number
   totalChunks: number
+  documentPageCount: number
   pageStart: number
   pageEnd: number
   nextChunkIndex: number | null
@@ -536,6 +537,7 @@ export function chunkPaperText(
   return {
     chunkIndex,
     totalChunks: safeChunks.length,
+    documentPageCount: pages.length,
     pageStart: chunk.pageStart,
     pageEnd: chunk.pageEnd,
     nextChunkIndex: chunkIndex < safeChunks.length ? chunkIndex + 1 : null,

@@ -36,7 +36,7 @@ describe('demo preparation scripts', () => {
 
     const launcher = readFileSync(launcherPath, 'utf8')
     const prepareScript = readFileSync(scriptPath, 'utf8')
-    expect(launcher).toContain('deepseek:bridge')
+    expect(launcher).toContain('deepseek-bridge.mjs')
     expect(launcher).toContain('http://127.0.0.1:17778/health')
     expect(launcher).toContain('Test-Dify')
     expect(launcher).toContain('scripts\\start-dify.ps1')
@@ -50,6 +50,8 @@ describe('demo preparation scripts', () => {
     expect(runbook).toContain('pnpm use:deepseek-bridge')
     expect(runbook).toContain('host.docker.internal:17777')
     expect(runbook).toContain('start-research-notion.bat')
+    expect(runbook).toContain('DeepSeek')
+    expect(runbook).toContain('pnpm demo:prepare')
   })
 
   it('lets the Dify launcher start quietly for desktop startup', () => {
@@ -58,6 +60,8 @@ describe('demo preparation scripts', () => {
 
     expect(script).toContain('param(')
     expect(script).toContain('[switch]$NoOpen')
+    expect(script).toContain("'D:\\Dify\\dify-main'")
+    expect(script).toContain("@composeArgs 'up' '-d'")
     expect(script).toContain('if (-not $NoOpen)')
     expect(script).toContain('Start-Process $DifyUrl')
   })
