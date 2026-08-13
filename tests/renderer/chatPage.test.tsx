@@ -11,7 +11,8 @@ const emptySettings: AppSettings = {
   difyKnowledgeApiKey: '',
     deepseekApiKey: '',
   defaultFolderId: null,
-  activeModelProfileId: null
+  activeModelProfileId: null,
+  streamSpeed: 'normal'
 }
 
 function createApiMock(): DesktopApi {
@@ -1339,6 +1340,26 @@ describe('App shell', () => {
     expect(screen.queryByText('检索增强生成先检索，再生成。')).not.toBeInTheDocument()
   })
 
+  it('keeps the hero entrance alive through async re-renders before marking it played', async () => {
+    const api = createApiMock()
+    window.researchNotion = api
+
+    const { ChatPage } = await import('../../src/renderer/pages/ChatPage')
+    render(<ChatPage />)
+
+    // 初始挂载:动画进行中,不应标记已播
+    expect(document.querySelector('.chat-hero')?.className).not.toContain('hero-played')
+
+    // 异步数据到达引发重渲染(动画 delay 期间):仍不应标记已播
+    await waitFor(() => expect(api.folders.list).toHaveBeenCalled())
+    expect(document.querySelector('.chat-hero')?.className).not.toContain('hero-played')
+
+    // 动画期(600ms)结束后再发生重渲染:才标记已播
+    await new Promise((resolve) => setTimeout(resolve, 700))
+    fireEvent.click(screen.getByRole('button', { name: /总结论文/ }))
+    expect(document.querySelector('.chat-hero')?.className).toContain('hero-played')
+  })
+
   it('stops the active generation with its progress request id', async () => {
     const api = createApiMock()
     let progressListener!: Parameters<NonNullable<DesktopApi['conversations']['onSendProgress']>>[0]
@@ -1362,7 +1383,8 @@ describe('App shell', () => {
     await waitFor(() => expect(api.conversations.sendMessage).toHaveBeenCalled())
     const progressRequestId = vi.mocked(api.conversations.sendMessage).mock.calls[0][2]?.progressRequestId
     act(() => progressListener({ requestId: progressRequestId!, phase: 'answer', label: '生成回答' }))
-    fireEvent.click(screen.getByRole('button', { name: '停止生成' }))
+    expect(screen.queryByRole('button', { name: '停止生成' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '停止' }))
 
     expect(api.conversations.cancelSend).toHaveBeenCalledWith(progressRequestId)
   })
@@ -1470,5 +1492,46 @@ describe('App shell', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('大模型服务暂时不可用，已保留你的问题，请稍后重新发送。')
     expect(screen.getByRole('alert')).not.toHaveTextContent('deepseek_bridge_upstream_error')
+  })
+
+  it('shows the three stream speed options with normal selected by default', async () => {
+    const api = createApiMock()
+    window.researchNotion = api
+
+    render(<App />)
+
+    expect(await screen.findByRole('group', { name: '输出速度' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '优雅' })).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByRole('button', { name: '常规' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: '性能' })).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  it('switches the stream speed and persists it without dropping other settings', async () => {
+    const api = createApiMock()
+    window.researchNotion = api
+
+    render(<App />)
+    await screen.findByRole('group', { name: '输出速度' })
+
+    fireEvent.click(screen.getByRole('button', { name: '优雅' }))
+
+    expect(screen.getByRole('button', { name: '优雅' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: '常规' })).toHaveAttribute('aria-pressed', 'false')
+    await waitFor(() => {
+      // save 传全量合并对象:速度档写入,且其余字段不被覆盖丢失。
+      expect(api.settings.save).toHaveBeenCalledWith(
+        expect.objectContaining({ streamSpeed: 'gentle', difyBaseUrl: '', activeModelProfileId: null })
+      )
+    })
+  })
+
+  it('restores the saved stream speed from settings', async () => {
+    const api = createApiMock()
+    api.settings.get = vi.fn().mockResolvedValue({ ...emptySettings, streamSpeed: 'fast' })
+    window.researchNotion = api
+
+    render(<App />)
+
+    expect(await screen.findByRole('button', { name: '性能' })).toHaveAttribute('aria-pressed', 'true')
   })
 })

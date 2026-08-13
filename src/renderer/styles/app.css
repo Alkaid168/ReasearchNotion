@@ -1425,39 +1425,34 @@ button {
 }
 
 .context-switch-notice {
-  width: min(768px, 100%);
-  margin: 0 0 8px;
-  padding: 6px 12px;
+  position: fixed;
+  top: 12px;
+  right: 16px;
+  width: auto;
+  max-width: min(420px, calc(100vw - 32px));
+  margin: 0;
+  padding: 8px 14px;
   border: 1px solid var(--rn-border);
-  border-radius: 8px;
-  background: #f9f9f9;
+  border-radius: var(--rn-radius-md, 12px);
+  background: var(--rn-surface);
+  box-shadow: var(--rn-shadow-float, 0 4px 20px rgba(0, 0, 0, 0.08));
   color: var(--rn-muted);
   font-size: 12px;
   line-height: 1.4;
+  z-index: var(--rn-z-toast, 40);
+  animation: rn-toast-in var(--rn-duration-normal, 200ms) var(--rn-ease-out, ease);
 }
 
-.dock-stop-row {
-  width: min(768px, 100%);
-  display: flex;
-  justify-content: center;
-  margin: 0 0 8px;
-}
+@keyframes rn-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
 
-.stop-generate-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  border: 1px solid var(--rn-border);
-  border-radius: 9999px;
-  background: var(--rn-surface);
-  color: var(--rn-text);
-  padding: 6px 14px;
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.stop-generate-pill:hover {
-  background: var(--rn-hover);
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .chat-dock .composer {
@@ -1507,12 +1502,14 @@ button {
   text-align: left;
   cursor: pointer;
   min-width: 120px;
-  transition: border-color 0.15s, background 0.15s;
+  transition: border-color var(--rn-duration-fast, 120ms) var(--rn-ease-out, ease), background var(--rn-duration-fast, 120ms) var(--rn-ease-out, ease), transform var(--rn-duration-fast, 120ms) var(--rn-ease-out, ease), box-shadow var(--rn-duration-fast, 120ms) var(--rn-ease-out, ease);
 }
 
 .suggestion-card:hover {
   border-color: var(--rn-border-strong);
-  background: var(--rn-hover);
+  background: var(--rn-surface);
+  transform: translateY(-1px);
+  box-shadow: var(--rn-shadow-float, 0 4px 20px rgba(0, 0, 0, 0.08));
 }
 
 .suggestion-card-title {
@@ -1537,16 +1534,76 @@ button {
   overflow: hidden;
 }
 
+/* 顶部工具行:上下文选择 + 输出速度三档,共用一条下边线。 */
+.composer-toolbar {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--rn-border);
+}
+
 .composer-context {
+  flex: 1 1 auto;
+  min-width: 0;
   min-height: 38px;
   display: flex;
   align-items: center;
   gap: 7px;
-  border-bottom: 1px solid var(--rn-border);
   background: transparent;
   color: var(--rn-muted-2);
   padding: 0 14px;
   font-size: 12.5px;
+}
+
+/* 输出速度三档:分段 pill,与模型选择器 chip 同视觉语言。 */
+.stream-speed {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-right: 12px;
+  padding: 2px;
+  border: 1px solid var(--rn-border);
+  border-radius: var(--rn-radius-sm);
+  background: #f7f7f7;
+}
+
+.stream-speed button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: calc(var(--rn-radius-sm) - 2px);
+  background: transparent;
+  color: var(--rn-muted);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background var(--rn-duration-fast, 120ms) var(--rn-ease-out, ease),
+    color var(--rn-duration-fast, 120ms) var(--rn-ease-out, ease);
+}
+
+.stream-speed button:hover {
+  background: var(--rn-hover);
+  color: var(--rn-text);
+}
+
+.stream-speed button:focus-visible {
+  outline: 2px solid var(--rn-text);
+  outline-offset: 1px;
+}
+
+/* 选中档:石墨底白字(与体系内 active chip 一致)。 */
+.stream-speed button.active,
+.stream-speed button.active:hover {
+  background: var(--rn-text);
+  color: #ffffff;
+}
+
+.stream-speed button:active {
+  transform: scale(0.97);
 }
 
 .composer-context span {
@@ -1662,13 +1719,14 @@ button {
   display: grid;
   gap: 8px;
   margin: -3px 14px 12px;
-  border: 1px solid var(--rn-border);
-  border-radius: 8px;
+  border: 0;
+  border-radius: var(--rn-radius-md, 12px);
   background: #f9f9f9;
   padding: 9px 10px;
   color: var(--rn-muted-2);
   font-size: 12.5px;
   line-height: 1.4;
+  animation: rn-rise-in var(--rn-duration-normal, 200ms) var(--rn-ease-out, ease);
 }
 
 .agent-progress-header {
@@ -3760,12 +3818,13 @@ button {
   display: grid;
   gap: 8px;
   margin: 0 14px 10px;
-  border: 1px solid rgba(0, 0, 0, 0.12);
-  border-radius: 8px;
+  border: 0;
+  border-radius: var(--rn-radius-md, 12px);
   background: #f9f9f9;
   padding: 9px 10px;
   color: var(--rn-muted-2);
   font-size: 12.5px;
+  animation: rn-rise-in var(--rn-duration-normal, 200ms) var(--rn-ease-out, ease);
 }
 
 .drawer-quick-actions {
@@ -3788,6 +3847,7 @@ button {
   padding: 0 10px;
   font-size: 12px;
   cursor: pointer;
+  transition: background var(--rn-duration-fast, 120ms) var(--rn-ease-out, ease), color var(--rn-duration-fast, 120ms) var(--rn-ease-out, ease), border-color var(--rn-duration-fast, 120ms) var(--rn-ease-out, ease);
 }
 
 .drawer-chip:hover {
@@ -3965,10 +4025,12 @@ button {
   display: grid;
   gap: 12px;
   border: 1px solid var(--rn-border-strong);
-  border-radius: 8px;
+  border-radius: var(--rn-radius-md, 12px);
   background: var(--rn-surface);
+  box-shadow: var(--rn-shadow-float, 0 4px 20px rgba(0, 0, 0, 0.08));
   padding: 16px;
   margin-bottom: 4px;
+  animation: rn-rise-in var(--rn-duration-normal, 200ms) var(--rn-ease-out, ease);
 }
 
 .settings-memory-select {
@@ -4248,7 +4310,7 @@ button {
   gap: 3px;
   height: 20px;
   padding: 0 7px;
-  border-radius: 4px;
+  border-radius: var(--rn-radius-sm, 6px);
   font-size: 11px;
   line-height: 1;
   background: #f4f4f4;
@@ -4303,19 +4365,38 @@ button {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 28px;
-  padding: 0 12px;
+  height: 30px;
+  padding: 0 14px;
   border: 1px solid var(--rn-border, rgba(0, 0, 0, 0.1));
   border-radius: 9999px;
   background: var(--rn-surface, #ffffff);
   color: var(--rn-text, #0d0d0d);
-  font-size: 12px;
+  font-size: 13px;
+  font-weight: 500;
   cursor: pointer;
-  transition: background 0.15s ease;
+  transition: background var(--rn-duration-fast, 120ms) var(--rn-ease-out, ease), border-color var(--rn-duration-fast, 120ms) var(--rn-ease-out, ease);
 }
 
 .model-selector-chip:hover {
   background: var(--rn-hover, rgba(0, 0, 0, 0.05));
+  border-color: var(--rn-border-strong, rgba(0, 0, 0, 0.15));
+}
+
+.model-selector-chip:active {
+  transform: scale(0.98);
+}
+
+.model-selector-chip svg {
+  transition: transform var(--rn-duration-normal, 200ms) var(--rn-ease-out, ease);
+}
+
+.model-selector-chip[aria-expanded='true'] svg {
+  transform: rotate(180deg);
+}
+
+.model-selector-chip:focus-visible {
+  outline: 2px solid var(--rn-text, #0d0d0d);
+  outline-offset: 2px;
 }
 
 .model-selector-label {
@@ -4326,13 +4407,36 @@ button {
   position: absolute;
   bottom: calc(100% + 6px);
   left: 0;
-  min-width: 220px;
+  width: 240px;
+  max-width: 100%;
+  max-height: 320px;
+  overflow-y: auto;
   background: var(--rn-surface, #ffffff);
   border: 1px solid var(--rn-border, rgba(0, 0, 0, 0.1));
-  border-radius: 8px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+  border-radius: var(--rn-radius-md, 12px);
+  box-shadow: var(--rn-shadow-dropdown, 0 8px 28px rgba(0, 0, 0, 0.12));
   padding: 6px;
-  z-index: 20;
+  z-index: var(--rn-z-dropdown, 30);
+  transform-origin: bottom left;
+  animation: rn-dropdown-in var(--rn-duration-normal, 200ms) var(--rn-ease-out, ease);
+}
+
+/* 抽屉内下拉不越过 AI 抽屉边界：抽屉为 min(380px, 100vw-44px)，减去 header 内边距
+ * 两侧各 14px，故内容宽上限为 100vw-72px（结构式约束，非依赖 240px 巧合）。 */
+.ai-drawer .model-selector-dropdown {
+  max-width: min(240px, calc(100vw - 72px));
+}
+
+@keyframes rn-dropdown-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
 }
 
 .model-selector-group + .model-selector-group {
@@ -4357,16 +4461,21 @@ button {
   border: none;
   background: transparent;
   color: var(--rn-text, #0d0d0d);
-  border-radius: 6px;
+  border-radius: var(--rn-radius-sm, 6px);
   cursor: pointer;
   text-align: left;
   font-size: 13px;
+  transition: background var(--rn-duration-fast, 120ms) var(--rn-ease-out, ease);
 }
 
 .model-selector-option span {
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+
+.model-selector-option strong {
+  font-weight: 500;
 }
 
 .model-selector-option small {
@@ -4380,6 +4489,11 @@ button {
 
 .model-selector-option.active {
   color: var(--rn-text, #0d0d0d);
+  font-weight: 600;
+}
+
+.model-selector-option.active strong {
+  font-weight: 700;
 }
 
 /* ============ 设置页：模型档卡片列表 ============ */
@@ -4420,12 +4534,20 @@ button {
   justify-content: space-between;
   padding: 10px 12px;
   border: 1px solid var(--rn-border, rgba(0, 0, 0, 0.1));
-  border-radius: 8px;
+  border-radius: var(--rn-radius-md, 12px);
   background: var(--rn-surface, #ffffff);
+  transition: border-color var(--rn-duration-fast, 120ms) var(--rn-ease-out, ease), background var(--rn-duration-fast, 120ms) var(--rn-ease-out, ease);
+  animation: rn-rise-in var(--rn-duration-normal, 200ms) var(--rn-ease-out, ease);
+}
+
+.settings-model-card:hover {
+  border-color: var(--rn-border-strong, rgba(0, 0, 0, 0.15));
+  background: var(--rn-hover, rgba(0, 0, 0, 0.05));
 }
 
 .settings-model-card.active {
   border-color: var(--rn-text, #0d0d0d);
+  background: #fafafa;
 }
 
 .settings-model-info {
@@ -4489,7 +4611,7 @@ button {
 }
 
 .token-counter {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--rn-muted, rgba(13, 13, 13, 0.5));
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -4507,19 +4629,32 @@ button {
 
 /* ============ 上下文压缩提示 ============ */
 .compress-notice {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 12px;
-  width: 100%;
-  max-width: 768px;
+  width: auto;
+  max-width: min(768px, 100%);
   margin: 0 auto 8px;
-  padding: 6px 12px;
+  padding: 6px 14px;
   border: 1px solid var(--rn-border, rgba(0, 0, 0, 0.1));
-  border-radius: 8px;
+  border-radius: 9999px;
   background: rgba(192, 57, 43, 0.04);
   font-size: 12px;
   color: var(--rn-text, #0d0d0d);
+  animation: rn-rise-in var(--rn-duration-normal, 200ms) var(--rn-ease-out, ease);
+}
+
+@keyframes rn-rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .compress-notice span {
@@ -4543,4 +4678,86 @@ button {
 .compress-notice button:disabled {
   opacity: 0.55;
   cursor: default;
+}
+
+/* ============ 流式光标（GPT 标志性细节） ============ */
+/* 节点由 StreamingMarkdown 动态 append 到最后一个含文本的块元素内部,
+   始终跟随文字;闪烁动画纯 CSS,不加 JS 定时器。 */
+.streaming-cursor {
+  display: inline-block;
+  width: 8px;
+  height: 1.1em;
+  margin-left: 2px;
+  border-radius: 1px;
+  background: var(--rn-text);
+  vertical-align: -0.15em;
+  animation: rn-cursor-blink 1s steps(2, start) infinite;
+}
+
+@keyframes rn-cursor-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0;
+  }
+}
+
+/* ============ 空态入场序列（仅播一次） ============ */
+.chat-hero .empty-avatar,
+.chat-hero h1,
+.chat-hero .suggestion-card,
+.chat-hero .dock-model-row,
+.chat-hero .composer {
+  animation: rn-hero-in 150ms var(--rn-ease-out, ease) both;
+}
+
+.chat-hero h1 {
+  animation-delay: 40ms;
+}
+
+.chat-hero .suggestion-card:nth-child(1) {
+  animation-delay: 80ms;
+}
+
+.chat-hero .suggestion-card:nth-child(2) {
+  animation-delay: 120ms;
+}
+
+.chat-hero .suggestion-card:nth-child(3) {
+  animation-delay: 160ms;
+}
+
+.chat-hero .suggestion-card:nth-child(4) {
+  animation-delay: 200ms;
+}
+
+.chat-hero .dock-model-row {
+  animation-delay: 240ms;
+}
+
+.chat-hero .composer {
+  animation-delay: 280ms;
+}
+
+.chat-hero.hero-played .empty-avatar,
+.chat-hero.hero-played h1,
+.chat-hero.hero-played .suggestion-card,
+.chat-hero.hero-played .dock-model-row,
+.chat-hero.hero-played .composer {
+  animation: none;
+}
+
+@keyframes rn-hero-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }

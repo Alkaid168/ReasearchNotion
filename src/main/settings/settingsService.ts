@@ -1,5 +1,5 @@
 import type Database from 'better-sqlite3'
-import type { AppSettings } from '../../shared/types'
+import type { AppSettings, StreamSpeed } from '../../shared/types'
 import type { SecretBox } from './secretBox'
 
 const keys = {
@@ -8,7 +8,8 @@ const keys = {
   difyKnowledgeApiKey: 'difyKnowledgeApiKey',
   deepseekApiKey: 'deepseekApiKey',
   defaultFolderId: 'defaultFolderId',
-  activeModelProfileId: 'activeModelProfileId'
+  activeModelProfileId: 'activeModelProfileId',
+  streamSpeed: 'streamSpeed'
 } as const
 
 export function createSettingsService(db: Database.Database, secretBox: SecretBox) {
@@ -31,7 +32,8 @@ export function createSettingsService(db: Database.Database, secretBox: SecretBo
       difyKnowledgeApiKey: secretBox.unseal(getRaw(keys.difyKnowledgeApiKey)),
       deepseekApiKey: secretBox.unseal(getRaw(keys.deepseekApiKey)),
       defaultFolderId: getRaw(keys.defaultFolderId) || null,
-      activeModelProfileId: getRaw(keys.activeModelProfileId) || null
+      activeModelProfileId: getRaw(keys.activeModelProfileId) || null,
+      streamSpeed: (getRaw(keys.streamSpeed) || 'normal') as StreamSpeed
     }
   }
 
@@ -44,6 +46,7 @@ export function createSettingsService(db: Database.Database, secretBox: SecretBo
       setRaw(keys.deepseekApiKey, secretBox.seal(settings.deepseekApiKey.trim()))
       setRaw(keys.defaultFolderId, settings.defaultFolderId ?? '')
       setRaw(keys.activeModelProfileId, settings.activeModelProfileId ?? '')
+      setRaw(keys.streamSpeed, settings.streamSpeed)
       return readSettings()
     }
   }

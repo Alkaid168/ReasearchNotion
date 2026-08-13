@@ -90,6 +90,9 @@ export type TokenUsage = {
   totalTokens: number
 }
 
+/** 流式输出速度档:gentle 优雅(半速)、normal 常规、fast 性能(直通)。 */
+export type StreamSpeed = 'gentle' | 'normal' | 'fast'
+
 export type Message = {
   id: string
   conversationId: string
@@ -107,6 +110,7 @@ export type AppSettings = {
   deepseekApiKey: string
   defaultFolderId: string | null
   activeModelProfileId: string | null
+  streamSpeed: StreamSpeed
 }
 
 export type ModelProvider = 'deepseek' | 'qwen' | 'zhipu'

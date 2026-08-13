@@ -9,7 +9,7 @@ import { ChatPage } from './pages/ChatPage'
 import { KnowledgePage } from './pages/KnowledgePage'
 import { SettingsPage } from './pages/SettingsPage'
 import { readWorkspacePreferences, updateWorkspacePreferences } from './state/workspacePreferences'
-import type { AppSettings, Conversation, ModelProfile } from '../shared/types'
+import type { AppSettings, Conversation, ModelProfile, StreamSpeed } from '../shared/types'
 
 type DifyStatus = {
   label: string
@@ -41,6 +41,7 @@ export function App(): JSX.Element {
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
   const [knowledgeRequest, setKnowledgeRequest] = useState<{ paperId?: string; folderId?: string; page?: number; nonce: number } | null>(null)
   const [difyStatus, setDifyStatus] = useState<DifyStatus>({ label: 'Dify 未配置', tone: 'neutral' })
+  const [settings, setSettings] = useState<AppSettings | null>(null)
   const [modelProfiles, setModelProfiles] = useState<ModelProfile[]>([])
   const activeModelProfile = modelProfiles.find((profile) => profile.isActive) ?? null
   const [toasts, setToasts] = useState<ToastItem[]>([])
@@ -69,11 +70,22 @@ export function App(): JSX.Element {
     [notify, reloadModelProfiles]
   )
 
+  const handleStreamSpeedChange = useCallback((streamSpeed: StreamSpeed) => {
+    setSettings((current) => {
+      if (!current) return current
+      // save 收全量对象:只传速度字段会把其余设置覆盖为空。
+      const merged = { ...current, streamSpeed }
+      void desktopApi.settings.save(merged)
+      return merged
+    })
+  }, [])
+
   useEffect(() => {
     let alive = true
-    void Promise.all([desktopApi.settings.get(), desktopApi.modelProfiles.list()]).then(([settings, profiles]) => {
+    void Promise.all([desktopApi.settings.get(), desktopApi.modelProfiles.list()]).then(([loaded, profiles]) => {
       if (!alive) return
-      setDifyStatus(statusFromSettings(settings))
+      setSettings(loaded)
+      setDifyStatus(statusFromSettings(loaded))
       setModelProfiles(profiles)
     })
     return () => {
@@ -209,6 +221,8 @@ export function App(): JSX.Element {
           modelProfiles={modelProfiles}
           activeModelProfile={activeModelProfile}
           onActivateModel={handleActivateModel}
+          streamSpeed={settings?.streamSpeed ?? 'normal'}
+          onStreamSpeedChange={handleStreamSpeedChange}
           onOpenCitation={(citation) => {
             if (!citation.paperId) return
             updateWorkspacePreferences({ activeTab: 'knowledge', knowledge: { activePaperId: citation.paperId } })
@@ -231,7 +245,10 @@ export function App(): JSX.Element {
       ) : null}
       {activeTab === 'settings' ? (
         <SettingsPage
-          onSettingsSaved={(settings) => setDifyStatus(statusFromSettings(settings))}
+          onSettingsSaved={(saved) => {
+            setSettings(saved)
+            setDifyStatus(statusFromSettings(saved))
+          }}
           onConnectionTested={(result) =>
             setDifyStatus(
               result.ok

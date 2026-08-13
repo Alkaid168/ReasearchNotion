@@ -37,4 +37,18 @@ describe('desktop UX accessibility styles', () => {
     expect(css).toContain('.emphasis-context p {\n  max-height: 84px;\n  overflow: auto;')
     expect(css).toContain('font-size: 12px;\n  line-height: 1.55;')
   })
+
+  it('provides GPT refinement tokens for motion, float shadows, radius and z-order', () => {
+    expect(tokens).toContain('--rn-ease-out: cubic-bezier(0.16, 1, 0.3, 1);')
+    expect(tokens).toContain('--rn-duration-normal: 200ms;')
+    expect(tokens).toContain('--rn-shadow-dropdown: 0 8px 28px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.06);')
+    expect(tokens).toContain('--rn-shadow-float: 0 4px 20px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.04);')
+    expect(tokens).toContain('--rn-radius-md: 12px;')
+    expect(tokens).toContain('--rn-z-toast: 40;')
+  })
+
+  it('differentiates the active model option weight from inactive options', () => {
+    expect(css).toContain('.model-selector-option strong {\n  font-weight: 500;')
+    expect(css).toContain('.model-selector-option.active strong {\n  font-weight: 700;')
+  })
 })

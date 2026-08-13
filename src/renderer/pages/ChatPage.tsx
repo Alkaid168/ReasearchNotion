@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useRef, useState, type JSX } from 'react'
-import { ArrowDown, ArrowUp, BookOpen, Check, Copy, Download, GitCompare, LibraryBig, Lightbulb, ListChecks, Quote, RotateCcw, Square } from 'lucide-react'
+import { ArrowDown, ArrowUp, BookOpen, Check, Copy, Download, Feather, Gauge, GitCompare, LibraryBig, Lightbulb, ListChecks, Quote, RotateCcw, Square, Zap } from 'lucide-react'
 import { desktopApi } from '../api/desktopApi'
 import researchNotionMark from '../assets/research-notion-mark.svg'
 import { AcademicMarkdown } from '../components/AcademicMarkdown'
 import { CitationStatus } from '../components/CitationStatus'
 import { ModelSelector } from '../components/ModelSelector'
+import { StreamingMarkdown } from '../components/StreamingMarkdown'
+import { useStreamingOutput } from '../hooks/useStreamingOutput'
 import { userFacingSendError } from '../utils/userFacingError'
 import { formatTokenCount } from '../utils/formatToken'
-import type { ChatContext, Citation, Conversation, Folder, Message, ModelProfile, Paper, TokenUsage } from '../../shared/types'
+import type { ChatContext, Citation, Conversation, Folder, Message, ModelProfile, Paper, StreamSpeed, TokenUsage } from '../../shared/types'
 
 type ChatPageProps = {
   selectedConversationId?: string | null
@@ -18,6 +20,8 @@ type ChatPageProps = {
   modelProfiles?: ModelProfile[]
   activeModelProfile?: ModelProfile | null
   onActivateModel?: (id: string) => void | Promise<void>
+  streamSpeed?: StreamSpeed
+  onStreamSpeedChange?: (speed: StreamSpeed) => void
 }
 
 type ContextOption = {
@@ -32,11 +36,6 @@ type SendProgress = {
   step: SendProgressStep
   startedAt: number
   detail?: string
-} | null
-
-type StreamingAnswer = {
-  requestId: string
-  content: string
 } | null
 
 const progressSteps: Array<{ step: SendProgressStep; label: string }> = [
@@ -82,14 +81,17 @@ export function ChatPage({
   onOpenCitation,
   modelProfiles,
   activeModelProfile,
-  onActivateModel
+  onActivateModel,
+  streamSpeed = 'normal',
+  onStreamSpeedChange
 }: ChatPageProps): JSX.Element {
   const [conversationId, setConversationId] = useState<string | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
   const [draft, setDraft] = useState('')
   const [sending, setSending] = useState(false)
   const [sendProgress, setSendProgress] = useState<SendProgress>(null)
-  const [streamingAnswer, setStreamingAnswer] = useState<StreamingAnswer>(null)
+  const stream = useStreamingOutput(streamSpeed)
+  const finalAssistantRef = useRef<Message | null>(null)
   const [sendError, setSendError] = useState<string | null>(null)
   const [selectedContext, setSelectedContext] = useState<ChatContext>(freeContext)
   const [availableFolders, setAvailableFolders] = useState<Folder[]>([])
@@ -108,6 +110,7 @@ export function ChatPage({
     setTokenUsage(lastAssistant?.tokenUsage ?? null)
   }, [messages])
   const messageListRef = useRef<HTMLElement | null>(null)
+  const heroPlayedRef = useRef(false)
 
   function handleContextChange(context: ChatContext): void {
     setSelectedContext(context)
@@ -155,7 +158,7 @@ export function ChatPage({
       setMessages([])
       setDraft('')
       setSendError(null)
-      setStreamingAnswer(null)
+      stream.reset()
       setSelectedContext(freeContext)
       return
     }
@@ -168,7 +171,7 @@ export function ChatPage({
         setMessages(rows)
         setDraft('')
         setSendError(null)
-        setStreamingAnswer(null)
+        stream.reset()
         setSelectedContext(conversations.find((conversation) => conversation.id === selectedConversationId)?.context ?? freeContext)
       }
     )
@@ -198,13 +201,24 @@ export function ChatPage({
   }
 
   useEffect(() => {
-    if (!messages.length && !streamingAnswer?.content) return
+    if (!messages.length && !stream.content) return
     if (followLatest) {
       scrollToLatest('smooth')
     } else {
       setShowJumpToLatest(true)
     }
-  }, [messages.length, streamingAnswer?.content])
+  }, [messages.length, stream.content])
+
+  // 流式排空完成后,把最终回答无缝落库为历史消息(streaming 版吐完最后一个字,
+  // 同文本变历史消息,视觉连续)。
+  useEffect(() => {
+    if (!stream.drained) return
+    const assistant = finalAssistantRef.current
+    if (!assistant) return
+    finalAssistantRef.current = null
+    setMessages((current) => [...current, assistant])
+    stream.reset()
+  }, [stream.drained])
 
   async function copyAnswer(message: Message): Promise<void> {
     if (!navigator.clipboard?.writeText) return
@@ -228,6 +242,7 @@ export function ChatPage({
     if (!content || sending) return
 
     setSending(true)
+    finalAssistantRef.current = null
     setSendProgress({ step: conversationId ? 'context' : 'prepare', startedAt: Date.now() })
     setSendError(null)
     setDraft('')
@@ -241,10 +256,7 @@ export function ChatPage({
       ? desktopApi.conversations.onSendProgress?.((event) => {
           if (event.requestId !== progressRequestId) return
           if (event.phase === 'delta') {
-            setStreamingAnswer((current) => ({
-              requestId: progressRequestId,
-              content: event.replaceAnswer ? event.delta ?? '' : current?.requestId === progressRequestId ? `${current.content}${event.delta ?? ''}` : event.delta ?? ''
-            }))
+            stream.push(event.delta ?? '', { replace: event.replaceAnswer })
           }
           if (event.phase === 'tool' && event.toolName) {
             const toolLabel = event.label || event.toolName
@@ -298,11 +310,11 @@ export function ChatPage({
         progressRequestId ? { progressRequestId } : undefined
       )
       setSendProgress((current) => ({ step: 'save', startedAt: current?.startedAt ?? Date.now() }))
-      setStreamingAnswer(null)
-      setMessages((current) => [...current, assistant])
+      finalAssistantRef.current = assistant
+      stream.finish(assistant.content)
       if (createdConversation) onConversationCreated?.(createdConversation)
     } catch (error) {
-      setStreamingAnswer(null)
+      stream.reset()
       if (optimisticMessageId) {
         setMessages((current) => current.filter((message) => message.id !== optimisticMessageId))
       }
@@ -325,11 +337,13 @@ export function ChatPage({
       contextOptions={contextOptions}
       tokenUsage={tokenUsage}
       contextWindowTokens={activeModelProfile?.contextWindowTokens}
+      streamSpeed={streamSpeed}
       onContextChange={handleContextChange}
       onDraftChange={(value) => {
         setDraft(value)
         if (sendError) setSendError(null)
       }}
+      onStreamSpeedChange={(speed) => onStreamSpeedChange?.(speed)}
       onSend={() => void send()}
       onCancel={() => {
         if (activeProgressRequestId) void desktopApi.conversations.cancelSend?.(activeProgressRequestId)
@@ -373,6 +387,16 @@ export function ChatPage({
 
   const hasTimeline = messages.length > 0 || sending
 
+  useEffect(() => {
+    if (!hasTimeline) {
+      const timer = window.setTimeout(() => {
+        heroPlayedRef.current = true
+      }, 600)
+      return () => window.clearTimeout(timer)
+    }
+    return undefined
+  }, [hasTimeline])
+
   return (
     <main className={hasTimeline ? 'chat-page has-messages' : 'chat-page'}>
       {hasTimeline ? (
@@ -409,13 +433,11 @@ export function ChatPage({
               </div>
             </article>
           ))}
-          {streamingAnswer?.content ? (
+          {stream.content ? (
             <article className="message assistant streaming" aria-live="polite">
               <img className="message-avatar" src={researchNotionMark} alt="" aria-hidden="true" />
               <div className="message-body">
-                <div className="markdown-content">
-                  <AcademicMarkdown>{streamingAnswer.content}</AcademicMarkdown>
-                </div>
+                <StreamingMarkdown>{stream.content}</StreamingMarkdown>
               </div>
             </article>
           ) : null}
@@ -428,7 +450,7 @@ export function ChatPage({
         </section>
         </>
       ) : (
-        <section className="chat-hero">
+        <section className={heroPlayedRef.current ? 'chat-hero hero-played' : 'chat-hero'}>
           <div className="empty-avatar" aria-hidden="true">
             <img src={researchNotionMark} alt="" />
           </div>
@@ -442,20 +464,6 @@ export function ChatPage({
       {hasTimeline ? (
         <section className="chat-dock">
           {contextSwitchNotice ? <div className="context-switch-notice">{contextSwitchNotice}</div> : null}
-          {sending && activeProgressRequestId ? (
-            <div className="dock-stop-row">
-              <button
-                type="button"
-                className="stop-generate-pill"
-                onClick={() => {
-                  if (activeProgressRequestId) void desktopApi.conversations.cancelSend?.(activeProgressRequestId)
-                }}
-              >
-                <Square size={12} aria-hidden="true" fill="currentColor" />
-                停止生成
-              </button>
-            </div>
-          ) : null}
           {modelSelectorRow}
           {showCompressNotice ? (
             <div className="compress-notice">
@@ -488,12 +496,20 @@ type ComposerProps = {
   }
   tokenUsage?: TokenUsage | null
   contextWindowTokens?: number
+  streamSpeed: StreamSpeed
   onContextChange: (context: ChatContext) => void
   onDraftChange: (value: string) => void
+  onStreamSpeedChange: (speed: StreamSpeed) => void
   onSend: () => void
   onCancel: () => void
   onRetry: () => void
 }
+
+const speedOptions: Array<{ value: StreamSpeed; label: string; icon: typeof Feather }> = [
+  { value: 'gentle', label: '优雅', icon: Feather },
+  { value: 'normal', label: '常规', icon: Gauge },
+  { value: 'fast', label: '性能', icon: Zap }
+]
 
 function Composer({
   draft,
@@ -503,8 +519,10 @@ function Composer({
   contextOptions,
   tokenUsage,
   contextWindowTokens,
+  streamSpeed,
   onContextChange,
   onDraftChange,
+  onStreamSpeedChange,
   onSend,
   onCancel,
   onRetry
@@ -523,37 +541,59 @@ function Composer({
 
   return (
     <div className="composer" aria-label="研究问答输入区">
-      <label className="composer-context">
-        <LibraryBig size={14} aria-hidden="true" />
-        <span>上下文</span>
-        <select
-          aria-label="问答上下文"
-          value={contextValue(selectedContext)}
-          onChange={(event) => {
-            onContextChange(options.find((option) => option.value === event.target.value)?.context ?? freeContext)
-          }}
-        >
-          <option value="free">不限定</option>
-          {contextOptions.folderOptions.length ? (
-            <optgroup label="论文库">
-              {contextOptions.folderOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </optgroup>
-          ) : null}
-          {contextOptions.paperOptions.length ? (
-            <optgroup label="论文">
-              {contextOptions.paperOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </optgroup>
-          ) : null}
-        </select>
-      </label>
+      <div className="composer-toolbar">
+        <label className="composer-context">
+          <LibraryBig size={14} aria-hidden="true" />
+          <span>上下文</span>
+          <select
+            aria-label="问答上下文"
+            value={contextValue(selectedContext)}
+            onChange={(event) => {
+              onContextChange(options.find((option) => option.value === event.target.value)?.context ?? freeContext)
+            }}
+          >
+            <option value="free">不限定</option>
+            {contextOptions.folderOptions.length ? (
+              <optgroup label="论文库">
+                {contextOptions.folderOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </optgroup>
+            ) : null}
+            {contextOptions.paperOptions.length ? (
+              <optgroup label="论文">
+                {contextOptions.paperOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </optgroup>
+            ) : null}
+          </select>
+        </label>
+
+        <div className="stream-speed" role="group" aria-label="输出速度">
+          {speedOptions.map((option) => {
+            const Icon = option.icon
+            const active = streamSpeed === option.value
+            return (
+              <button
+                key={option.value}
+                type="button"
+                className={active ? 'active' : ''}
+                aria-pressed={active}
+                title={option.value === 'gentle' ? '优雅：放慢节奏' : option.value === 'fast' ? '性能：即时直出' : '常规：默认节奏'}
+                onClick={() => onStreamSpeedChange(option.value)}
+              >
+                <Icon size={12} aria-hidden="true" />
+                {option.label}
+              </button>
+            )
+          })}
+        </div>
+      </div>
 
       <textarea
         ref={textareaRef}

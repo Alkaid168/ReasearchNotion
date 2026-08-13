@@ -10,7 +10,8 @@ const emptySettings: AppSettings = {
   difyKnowledgeApiKey: '',
     deepseekApiKey: '',
   defaultFolderId: null,
-  activeModelProfileId: null
+  activeModelProfileId: null,
+  streamSpeed: 'normal'
 }
 
 const conversation: Conversation = {
@@ -107,7 +108,11 @@ describe('ChatPage', () => {
       expect(api.conversations.sendMessage).toHaveBeenCalledWith(conversation.id, '总结 RAG 的核心思路')
     })
     expect(screen.getByText('总结 RAG 的核心思路')).toBeInTheDocument()
-    expect(await screen.findByText('RAG 的核心是先检索相关资料，再生成回答。')).toBeInTheDocument()
+    // 回答流式排空→落库切换期间,findByText 可能抓到被替换的流式中间态元素;
+    // waitFor+getByText 每轮重新查询当前文档,落库稳定后命中历史消息。
+    await waitFor(() => {
+      expect(screen.getByText('RAG 的核心是先检索相关资料，再生成回答。')).toBeInTheDocument()
+    })
     expect(screen.getByText('RAG Survey')).toBeInTheDocument()
   })
 
@@ -137,7 +142,9 @@ describe('ChatPage', () => {
     expect(screen.getByPlaceholderText('询问论文、比较方法、提取创新点、解释术语...')).toHaveValue('')
 
     resolveReply(assistantMessage)
-    expect(await screen.findByText('RAG 的核心是先检索相关资料，再生成回答。')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getByText('RAG 的核心是先检索相关资料，再生成回答。')).toBeInTheDocument()
+    })
   })
 
   it('shows a retrieval notice when an assistant answer has no citations', async () => {
@@ -153,7 +160,9 @@ describe('ChatPage', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: '发送' }))
 
-    expect(await screen.findByText('RAG 的核心是先检索相关资料，再生成回答。')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getByText('RAG 的核心是先检索相关资料，再生成回答。')).toBeInTheDocument()
+    })
     expect(screen.getByText('通用分析')).toBeInTheDocument()
     expect(screen.queryByText('可切换论文库、重试检索，或在问题中加入更具体的论文标题。')).not.toBeInTheDocument()
   })
@@ -173,7 +182,9 @@ describe('ChatPage', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: '发送' }))
 
-    expect(await screen.findByText('核心结论')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getByText('核心结论')).toBeInTheDocument()
+    })
     expect(screen.getByText('核心结论').tagName).toBe('STRONG')
     expect(screen.getByText('先检索资料').tagName).toBe('LI')
     expect(screen.getByText('再生成回答').tagName).toBe('LI')
@@ -194,9 +205,11 @@ describe('ChatPage', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: '发送' }))
 
-    expect(await screen.findByRole('table')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getByRole('cell', { name: '架构创新' })).toBeInTheDocument()
+    })
+    expect(screen.getByRole('table')).toBeInTheDocument()
     expect(screen.getByRole('columnheader', { name: '论文' })).toBeInTheDocument()
-    expect(screen.getByRole('cell', { name: '架构创新' })).toBeInTheDocument()
   })
 
   it('renders inline and block LaTeX in assistant Markdown', async () => {
@@ -213,8 +226,10 @@ describe('ChatPage', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: '发送' }))
 
-    expect(await screen.findAllByText('α')).not.toHaveLength(0)
-    expect(document.querySelector('.katex-display')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getAllByText('α').length).toBeGreaterThan(0)
+      expect(document.querySelector('.katex-display')).not.toBeNull()
+    })
   })
 
   it('keeps the active answer in view when conversation messages change', async () => {
@@ -292,7 +307,9 @@ describe('ChatPage', () => {
     expect(input).toHaveValue('总结 RAG')
     fireEvent.click(screen.getByRole('button', { name: '重新发送' }))
 
-    expect(await screen.findByText(assistantMessage.content)).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getByText(assistantMessage.content)).toBeInTheDocument()
+    })
     expect(api.conversations.sendMessage).toHaveBeenCalledTimes(2)
   })
 })
