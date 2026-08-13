@@ -93,6 +93,21 @@ export type TokenUsage = {
 /** 流式输出速度档:gentle 优雅(半速)、normal 常规、fast 性能(直通)。 */
 export type StreamSpeed = 'gentle' | 'normal' | 'fast'
 
+export type ResearchProcessPhase = 'scope' | 'search' | 'read' | 'answer' | 'verify'
+
+export type ResearchProcessStep = {
+  phase: ResearchProcessPhase
+  label: string
+  detail: string
+  toolName?: string
+}
+
+export type ResearchProcess = {
+  durationMs: number
+  steps: ResearchProcessStep[]
+  thoughts?: string[]
+}
+
 export type Message = {
   id: string
   conversationId: string
@@ -100,6 +115,7 @@ export type Message = {
   content: string
   citations: Citation[]
   tokenUsage?: TokenUsage
+  researchProcess?: ResearchProcess | null
   createdAt: string
 }
 

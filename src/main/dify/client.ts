@@ -17,6 +17,7 @@ type DifyClientOptions = {
   appApiKey: string
   knowledgeApiKey: string
   fetchImpl?: FetchImpl
+  preferredResponseMode?: 'blocking' | 'streaming'
 }
 
 function wait(ms: number): Promise<void> {
@@ -261,6 +262,21 @@ function stripBoilerplate(answer: string): string {
   return stripExecutionNarration(stripInlineExecutionNarration(withoutCommonBoilerplate).trim())
 }
 
+function cleanAnswer(answer: string): string {
+  const withoutReasoning = stripReasoning(answer)
+  const withoutBoilerplate = stripBoilerplate(withoutReasoning)
+
+  // A useful answer is better than an empty message. Some short, general
+  // responses can consist entirely of wording that resembles execution
+  // narration, so fall back to the reasoning-free response when the optional
+  // presentation cleanup removes everything.
+  return withoutBoilerplate || withoutReasoning
+}
+
+function cleanStreamingAnswer(answer: string): string {
+  return stripBoilerplate(stripReasoning(answer))
+}
+
 function retrieverResourcesFromResponse(json: Record<string, unknown>): unknown {
   if (Array.isArray(json.retriever_resources)) return json.retriever_resources
   const metadata = json.metadata
@@ -311,8 +327,13 @@ function progressLabelForTool(toolName: string): string {
     get_paper_outline: '读取论文大纲',
     get_paper_text_chunk: '读取论文文本',
     investigate_paper: '调查论文证据',
+    investigate_library: '逐篇调查论文库',
     search_current_paper: '检索当前论文',
-    search_library: '检索论文库'
+    search_library: '检索论文库',
+    search_arxiv: '检索 arXiv',
+    search_semantic_scholar: '检索 Semantic Scholar',
+    search_openalex: '检索 OpenAlex',
+    save_memory: '保存研究偏好'
   }
   return labels[toolName] ?? '调用研究工具'
 }
@@ -320,8 +341,19 @@ function progressLabelForTool(toolName: string): string {
 function emitStreamingProgress(event: Record<string, unknown>, onProgress?: (event: DifyChatProgressEvent) => void): void {
   if (!onProgress) return
 
-  if (event.event === 'agent_thought' && typeof event.tool === 'string' && event.tool) {
-    onProgress({ phase: 'tool', toolName: event.tool, label: progressLabelForTool(event.tool) })
+  if (event.event === 'agent_thought') {
+    const thought = typeof event.thought === 'string' ? event.thought.trim() : ''
+    // Dify also emits a final agent_thought that repeats the completed answer.
+    // Tool-bound thoughts are the useful public planning summaries for this UI.
+    if (thought && typeof event.tool === 'string' && event.tool) {
+      onProgress({ phase: 'thought', label: '梳理问题与证据', thought })
+    }
+
+    if (typeof event.tool === 'string' && event.tool) {
+      for (const toolName of event.tool.split(';').map((value) => value.trim()).filter(Boolean)) {
+        onProgress({ phase: 'tool', toolName, label: progressLabelForTool(toolName) })
+      }
+    }
     return
   }
 
@@ -383,6 +415,10 @@ async function readStreamingChatResponse(response: FetchResponseLike, onProgress
     }
 
     if (event.event === 'agent_thought' && typeof event.tool === 'string' && event.tool && answer) {
+      const interimThought = stripReasoning(answer).trim()
+      if (interimThought) {
+        onProgress?.({ phase: 'thought', label: '梳理问题与证据', thought: interimThought })
+      }
       onProgress?.({ phase: 'delta', label: '生成回答', delta: '', replaceAnswer: true })
       answer = ''
       emittedAnswer = ''
@@ -408,7 +444,7 @@ async function readStreamingChatResponse(response: FetchResponseLike, onProgress
     }
     if (typeof event.answer === 'string') {
       answer += event.answer
-      const cleanedAnswer = stripBoilerplate(stripReasoning(answer))
+      const cleanedAnswer = cleanStreamingAnswer(answer)
       if (cleanedAnswer) {
         onProgress?.({ phase: 'answer', label: '生成回答' })
         if (cleanedAnswer.startsWith(emittedAnswer)) {
@@ -440,10 +476,11 @@ async function readStreamingChatResponse(response: FetchResponseLike, onProgress
   rawText += decoder.decode()
   if (rawText.trim()) handleLine(rawText.replace(/\r$/, ''))
 
+  const finalCitations = uniqueCitations([...mapCitations(citationSource), ...toolCitations])
   return {
-    answer: stripBoilerplate(stripReasoning(answer)),
+    answer: cleanAnswer(answer),
     difyConversationId,
-    citations: uniqueCitations([...mapCitations(citationSource), ...toolCitations]),
+    citations: finalCitations,
     usage: capturedUsage
   }
 }
@@ -554,6 +591,7 @@ export function createDifyClient(options: DifyClientOptions) {
     },
     async sendChatMessage(input: SendChatInput): Promise<SendChatResult> {
       let lastError: unknown = null
+      const preferredResponseMode = options.preferredResponseMode ?? 'blocking'
 
       const send = async (responseMode: 'blocking' | 'streaming'): Promise<SendChatResult> => {
         const response = await fetchImpl(`${baseUrl}/v1/chat-messages`, {
@@ -578,7 +616,7 @@ export function createDifyClient(options: DifyClientOptions) {
 
         const json = (await readJson(response)) as Record<string, unknown>
         return {
-          answer: stripBoilerplate(stripReasoning(String(json.answer ?? ''))),
+          answer: cleanAnswer(String(json.answer ?? '')),
           difyConversationId: typeof json.conversation_id === 'string' ? json.conversation_id : null,
           citations: mapCitations(retrieverResourcesFromResponse(json))
         }
@@ -586,12 +624,19 @@ export function createDifyClient(options: DifyClientOptions) {
 
       for (let attempt = 0; attempt < 2; attempt += 1) {
         try {
-          return await send('blocking')
+          return await send(preferredResponseMode)
         } catch (error) {
           lastError = error
           if (input.conversationId && isConversationNotFound(error)) {
             input.conversationId = undefined
             if (attempt === 0) continue
+          }
+          if (preferredResponseMode === 'streaming') {
+            if (attempt === 0 && isTransientDifyFailure(error)) {
+              await wait(1600)
+              continue
+            }
+            throw error
           }
           if (isBlockingModeUnsupported(error)) {
             try {

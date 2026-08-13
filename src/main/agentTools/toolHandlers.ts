@@ -53,7 +53,15 @@ function paperScopeError(paper: Paper, readingState: ReadingStateStore): ToolErr
 }
 
 function folderScopeError(folderId: string | null | undefined, readingState: ReadingStateStore): ToolError | null {
-  const activeFolderId = readingState.get().activeFolderId
+  const state = readingState.get()
+
+  // If paper context is active, reject all library-wide operations
+  // This ensures single-paper context means "this paper only"
+  if (state.activePaperId) {
+    return { ok: false, error: '当前对话已限定为当前论文，不能检索论文库。请直接使用当前论文的工具（如 get_paper_metadata、get_paper_page_text）。' }
+  }
+
+  const activeFolderId = state.activeFolderId
   if (activeFolderId && folderId && folderId !== activeFolderId) {
     return { ok: false, error: '当前对话已限定为当前论文库，不能检索其他论文库。' }
   }
@@ -220,6 +228,7 @@ export function createAgentToolHandlers({ repos, readingState, memories }: ToolD
     async investigatePaper(input: { paperId: string; query: string; limit?: number; aspects?: InvestigationAspectInput[] }): Promise<
       | ToolOk<{
           paper: ReturnType<typeof paperCardSummary>
+          pageCount: number
           outline: AgentOutlineItem[]
           evidence: ReturnType<typeof collectPaperEvidence>['evidence']
           fallbackUsed: boolean
@@ -238,6 +247,7 @@ export function createAgentToolHandlers({ repos, readingState, memories }: ToolD
       return {
         ok: true,
         paper: paperCardSummary(paper, repos),
+        pageCount: pages.length,
         outline: compactOutline(extractOutline(pages)),
         ...result,
         evidenceByAspect,

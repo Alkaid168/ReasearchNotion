@@ -2,7 +2,7 @@ import '@testing-library/jest-dom/vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DesktopApi } from '../../src/shared/ipcTypes'
-import type { AppSettings, Conversation, Message } from '../../src/shared/types'
+import type { AppSettings, Conversation, Message, Paper } from '../../src/shared/types'
 
 const emptySettings: AppSettings = {
   difyBaseUrl: '',
@@ -56,7 +56,7 @@ function createApiMock(): DesktopApi {
       })
     },
     memories: { list: vi.fn().mockResolvedValue([]), save: vi.fn(), delete: vi.fn() },
-    papers: { list: vi.fn().mockResolvedValue([]), import: vi.fn(), importFiles: vi.fn(), updateReadingStatus: vi.fn(), reindex: vi.fn(), delete: vi.fn(), getOutline: vi.fn().mockResolvedValue([]), searchText: vi.fn().mockResolvedValue([]), read: vi.fn() },
+    papers: { list: vi.fn().mockResolvedValue([]), import: vi.fn(), importFiles: vi.fn(), copyToFolder: vi.fn(), updateReadingStatus: vi.fn(), reindex: vi.fn(), delete: vi.fn(), getOutline: vi.fn().mockResolvedValue([]), searchText: vi.fn().mockResolvedValue([]), read: vi.fn() },
     conversations: {
       list: vi.fn().mockResolvedValue([]),
       create: vi.fn().mockResolvedValue(conversation),
@@ -114,6 +114,59 @@ describe('ChatPage', () => {
       expect(screen.getByText('RAG 的核心是先检索相关资料，再生成回答。')).toBeInTheDocument()
     })
     expect(screen.getByText('RAG Survey')).toBeInTheDocument()
+  })
+
+  it('opens a cited paper at the referenced page in a right-side source panel', async () => {
+    const citedPaper: Paper = {
+      id: 'paper-citation',
+      folderId: 'folder-citation',
+      title: 'Evidence Paper',
+      fileType: 'markdown',
+      filePath: 'F:/papers/evidence.md',
+      difyDocumentId: 'doc-citation',
+      indexStatus: 'indexed',
+      createdAt: '2026-07-08T00:00:00.000Z',
+      updatedAt: '2026-07-08T00:00:00.000Z'
+    }
+    const citedReply: Message = {
+      ...assistantMessage,
+      citations: [
+        {
+          paperId: citedPaper.id,
+          paperTitle: citedPaper.title,
+          snippet: 'This is the exact passage used by the answer.',
+          score: 0.94,
+          pageNumber: 2
+        }
+      ]
+    }
+    api.conversations.sendMessage = vi.fn().mockResolvedValue(citedReply)
+    api.papers.read = vi.fn().mockResolvedValue({
+      paper: citedPaper,
+      markdownText: '# Evidence Paper\n\nOriginal paper content shown beside the answer.',
+      plainText: null,
+      previewUrl: null,
+      pdfData: null
+    })
+
+    const { ChatPage } = await import('../../src/renderer/pages/ChatPage')
+    render(<ChatPage />)
+    fireEvent.change(screen.getByPlaceholderText('询问论文、比较方法、提取创新点、解释术语...'), {
+      target: { value: 'Show the supporting passage' }
+    })
+    fireEvent.click(screen.getByRole('button', { name: '发送' }))
+
+    const citationButton = await screen.findByRole('button', { name: 'Evidence Paper，第 2 页' })
+    expect(citationButton).toHaveTextContent('查看原文')
+    fireEvent.click(citationButton)
+
+    expect(await screen.findByLabelText('论文原文侧边栏')).toBeInTheDocument()
+    expect(screen.getByText('This is the exact passage used by the answer.')).toBeInTheDocument()
+    expect(await screen.findByText('Original paper content shown beside the answer.')).toBeInTheDocument()
+    expect(api.papers.read).toHaveBeenCalledWith(citedPaper.id)
+
+    fireEvent.click(screen.getByRole('button', { name: '关闭论文原文侧边栏' }))
+    expect(screen.queryByLabelText('论文原文侧边栏')).not.toBeInTheDocument()
   })
 
   it('sends with Enter, keeps Shift+Enter for new lines, and clears the composer immediately', async () => {
@@ -289,6 +342,39 @@ describe('ChatPage', () => {
     fireEvent.click(await screen.findByRole('button', { name: '复制回答' }))
     expect(writeText).toHaveBeenCalledWith(assistantMessage.content)
     expect(await screen.findByRole('button', { name: '已复制' })).toBeInTheDocument()
+  })
+
+  it('regenerates the latest answer in place without duplicating the user question', async () => {
+    const userMessage: Message = {
+      id: 'message-1',
+      conversationId: conversation.id,
+      role: 'user',
+      content: '请重新解释 RAG',
+      citations: [],
+      createdAt: '2026-07-08T00:00:00.000Z'
+    }
+    api.conversations.list = vi.fn().mockResolvedValue([conversation])
+    api.messages.list = vi.fn().mockResolvedValue([userMessage, assistantMessage])
+    api.conversations.sendMessage = vi.fn().mockResolvedValue({
+      ...assistantMessage,
+      content: '这是重新生成后的回答。'
+    })
+
+    const { ChatPage } = await import('../../src/renderer/pages/ChatPage')
+    render(<ChatPage selectedConversationId={conversation.id} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: '重新生成回答' }))
+
+    await waitFor(() => {
+      expect(api.conversations.sendMessage).toHaveBeenCalledWith(
+        conversation.id,
+        userMessage.content,
+        { regenerateMessageId: assistantMessage.id }
+      )
+    })
+    expect(await screen.findByText('这是重新生成后的回答。')).toBeInTheDocument()
+    expect(screen.queryByText(assistantMessage.content)).not.toBeInTheDocument()
+    expect(screen.getAllByText(userMessage.content)).toHaveLength(1)
   })
 
   it('retries a failed message from the inline error without losing the draft', async () => {

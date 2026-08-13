@@ -1,5 +1,6 @@
 import type { SendMessageOptions } from '../../shared/ipcTypes'
 import type { ChatContext, Citation, Message } from '../../shared/types'
+import { requestsWholePaperSummary } from './answerGrounding'
 
 export const researchAgentRequiredInputs = [
   'task',
@@ -26,7 +27,11 @@ function contextScope(context: ChatContext): string {
     return [`当前论文库：${context.folderName}`, `当前论文库 folderId：${context.folderId}`].join('\n')
   }
   if (context.type === 'paper') {
-    return [`当前论文：${context.paperTitle}`, `当前论文 paperId：${context.paperId}`].join('\n')
+    return [
+      `当前论文：${context.paperTitle}`,
+      `当前论文 paperId：${context.paperId}`,
+      '工具范围：仅限当前论文的专用工具，不能使用论文库范围工具（list_library_papers、search_library、investigate_library）。'
+    ].join('\n')
   }
   return '当前没有限定论文库；如问题涉及本地资料，可用 list_library_papers 或 search_library 在全部本地论文中查找。'
 }
@@ -83,6 +88,7 @@ export function buildResearchAgentQuery(input: {
   const inventory = input.contextInventory?.trim()
   const history = input.conversationHistory?.trim()
   const memories = input.memoriesPrefix?.trim()
+  const wholePaperSummaryRequested = requestsWholePaperSummary(input.content, input.context)
 
   return [
     'ResearchNotion runtime context for this turn:',
@@ -108,7 +114,10 @@ export function buildResearchAgentQuery(input: {
     '',
     '工具使用提示：',
     input.context.type === 'paper'
-      ? `- 当前论文工具参数优先使用 paperId=${input.context.paperId}；需要页码、章节、目录、全文片段时直接调用对应论文工具。`
+      ? [
+          `- 当前已限定为单篇论文《${input.context.paperTitle}》，只可使用该论文的专用工具（get_paper_*、investigate_paper）。`,
+          `- 当前论文工具参数优先使用 paperId=${input.context.paperId}；需要页码、章节、目录、全文片段时直接调用对应论文工具。`
+        ].join('\n')
       : null,
     input.context.type === 'folder'
       ? `- 当前论文库工具参数优先使用 folderId=${input.context.folderId}；如果要比较多篇论文，先 list_library_papers，再按 paperId 读取或检索。`
@@ -118,6 +127,13 @@ export function buildResearchAgentQuery(input: {
       : null,
     '- 对“第几篇论文、这篇论文、它、上面那篇”等指代，优先结合最近对话历史和当前上下文资料清单确定具体 paperId。',
     '- 宽泛论文问题优先调用 investigate_paper，一次取得元数据、大纲和相关页级证据；页码、明确章节和结构计数等精确问题仍使用对应专用工具。',
+    '- 作者、作者顺序、共同第一作者、通讯作者、单位和邮箱属于高风险书目信息：必须读取目标论文第 1 页或明确的作者信息页，逐字依据作者栏作答。脚注或单位段落中出现姓名不等于该姓名属于作者列表；星号、上标和脚注含义不清时必须标为尚未确认，禁止根据常识、论文卡片空缺或姓名位置推断作者角色。',
+    input.context.type === 'paper' && !wholePaperSummaryRequested
+      ? '- 用户要求总结 scenario、方法、实验、局限等特定主题时，只检索并读取与该主题相关的原文页或章节，并在回答中标明页码或章节出处；不要因此强制读取整篇论文。'
+      : null,
+    wholePaperSummaryRequested
+      ? '- 本轮要求总结整篇论文：先用 investigate_paper 获取 pageCount 和大纲，再按顺序调用 get_paper_text_chunk；每次固定使用 maxChars=8000，从 chunkIndex=1 开始并沿 nextChunkIndex 继续，直到 nextChunkIndex=null。只有最后一次结果同时满足 chunkIndex=totalChunks、nextChunkIndex=null 且 pageEnd=documentPageCount，才可以声称通读全文。回答末尾必须单列“读取覆盖”，写明文档总页数、正文页范围、参考文献页范围、已读文本块数和最终覆盖页码。结论必须覆盖全文的研究问题、方法、实验、结果、局限和结论；不得只读摘要、开头几页或部分文本块后声称“通读全文”。若某页没有可提取文本，应明确说明该页未能读取。'
+      : null,
     '- 复合问题优先用 aspects 将 2 至 4 个方面分别取证，例如“训练成本、局限、适用条件”分别给出一个 label 和简短中英文 query；单方面无正文证据时，明确标为“尚未确认”，不得用工具的开头回退文本或常识补全。',
     '- 只要问题要求当前页内容、当前页摘要或当前页主要内容，必须先调用 get_current_context，再调用 get_current_page_text；阅读状态中的页码、标题或选中文本不能替代当前页正文证据。',
     '- 跨论文比较、综述、归纳或冲突判断时，先 list_library_papers 确认候选，优先调用 investigate_library 逐篇调查论文库。若改用 investigate_paper 逐篇深读，每次只读一篇并且必须覆盖所有参与结论的论文；跨论文比较必须形成每篇独立正文证据，不能用一次全库搜索、标题、年份、目录或模型常识替代。某篇没有返回证据时，只能说明该篇尚未确认，不能把没有证据当作否定事实。',
@@ -129,6 +145,7 @@ export function buildResearchAgentQuery(input: {
     '- 直接回答用户当前问题，不要自我介绍，不要复述任务。',
     '- 首句直接给出结论、定义或最关键事实；禁止以“现在我已经获取了足够的信息”“我已经读取”“下面我将分析”“我先”之类的过程性表述开头。',
     '- 能用工具确认的论文事实先用工具确认；通用概念、写作建议、学习建议和研究思路可以直接解释。',
+    '- 只要回答使用了论文原文事实，就在相应结论旁标明页码或章节出处，使依据可以核对。',
     '- 不要轻易说不知道；如果工具证据仍不完整，先给出可确认的部分，再把基于通用知识的分析单独标明，最后说明尚不能确认的细节。',
     '- 支持 Markdown：可使用短标题、列表、加粗和引用，但不要堆砌表格。',
     '- 如果问题涉及创新点、方法、实验、局限或可扩展方向，请分别展开。',

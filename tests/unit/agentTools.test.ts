@@ -166,6 +166,7 @@ describe('agent paper text helpers', () => {
     expect(firstChunk).toMatchObject({
       chunkIndex: 1,
       totalChunks: expect.any(Number),
+      documentPageCount: 1,
       pageStart: 1,
       pageEnd: 1,
       nextChunkIndex: 2
@@ -396,6 +397,7 @@ describe('agent tool handlers', () => {
       paperId: paper.id,
       chunkIndex: 1,
       totalChunks: expect.any(Number),
+      documentPageCount: expect.any(Number),
       text: expect.stringContaining('BERT')
     })
     await expect(tools.investigatePaper({ paperId: paper.id, query: 'fine tuning downstream tasks' })).resolves.toMatchObject({

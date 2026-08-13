@@ -1,13 +1,26 @@
 const { rebuildNative } = require('../scripts/rebuild-node.cjs')
 
-// Ensures better-sqlite3 is rebuilt for the Node.js ABI before vitest runs.
-// Implemented as a vitest globalSetup so `pnpm test` stays a single command,
-// avoiding pnpm's Windows script-shell mis-parsing of `node <path> && ...`.
+function nativeModuleWorks() {
+  try {
+    const Database = require('better-sqlite3')
+    const database = new Database(':memory:')
+    database.close()
+    return true
+  } catch {
+    return false
+  }
+}
+
+// Electron and Node use different native ABIs. Only rebuild when the installed
+// better-sqlite3 binary cannot be loaded by the Node process running Vitest.
 module.exports = async function rebuildNativeForVitest() {
+  if (nativeModuleWorks()) return
+
   const status = rebuildNative()
-  if (status !== 0) {
+  if (status !== 0 || !nativeModuleWorks()) {
     throw new Error(
-      `Native rebuild failed (exit ${status}). Run \`pnpm rebuild better-sqlite3\` manually.`
+      `Native rebuild failed (exit ${status}). Run \`pnpm rebuild better-sqlite3\` manually. ` +
+        'On Windows, use a short project path if the compiler reports a 260-character path limit.'
     )
   }
 }
