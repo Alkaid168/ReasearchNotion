@@ -90,3 +90,20 @@
 | 阅读器控件溢出 | `max-width: calc(100% - 44px)` 与 `@media (max-width: 900px)` 规则是否仍在 |
 | toast 不消失 / 累积 | ToastRegion 的 live region 与键盘关闭逻辑 |
 | 拖拽不落位 | Sidebar 拖拽算法与 native pointer 事件 |
+
+---
+
+## 7. 验收记录
+
+### GPT 细腻度升级验收（2026-08-13）
+
+- **范围**：GPT 风格细腻度升级两批次 8 任务（`docs/superpowers/specs/2026-08-13-gpt-ui-refinement-design.md` → `docs/gpt-ui-refinement-plan.md`），含流式光标、空态 stagger 入场、模型选择器弹性下拉、设置页模型档卡片、流式输出平滑打字机、输出速度三档切换。
+- **自动化**：vitest 342/342 全绿；`pnpm lint:types` 零错误；`pnpm build` 产出正常。
+- **实地验收**（应用内人工确认）：
+  - [x] 流式光标跟随最后一个文本节点（不重叠、不脱节）
+  - [x] 空态入场 stagger（仅播一次）、下拉弹性动画、选中项加粗
+  - [x] 输出速度三档在真实 Dify 流下体感可辨（优雅逐字 / 常规流畅 / 性能直通）
+  - [x] 流输出中途切档下一 tick 即时生效；切性能立即直通
+  - [x] 优雅档回答结束时欠账快进收尾（不丢字、不拖沓）
+  - [x] 档位重启后保留；论文抽屉（AiDrawer）跟随全局速度
+- **修订记录**：首版速率表（gentle 2 字/tick、直通阈值 240）在真实 Workflow 大块 delta 到达下三档无区别，修订为 gentle 1 字/tick + 直通阈值 800 保险丝 + finish 欠账快进排空（见 `docs/stream-speed-control-design.md`「2026-08-13 验收修订」）。
