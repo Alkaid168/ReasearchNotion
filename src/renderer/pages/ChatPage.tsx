@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type JSX } from 'react'
-import { ArrowDown, ArrowUp, BookOpen, Check, Copy, Download, GitCompare, LibraryBig, Lightbulb, ListChecks, Quote, RotateCcw, Square } from 'lucide-react'
+import { ArrowDown, ArrowUp, BookOpen, Check, Copy, Download, Feather, Gauge, GitCompare, LibraryBig, Lightbulb, ListChecks, Quote, RotateCcw, Square, Zap } from 'lucide-react'
 import { desktopApi } from '../api/desktopApi'
 import researchNotionMark from '../assets/research-notion-mark.svg'
 import { AcademicMarkdown } from '../components/AcademicMarkdown'
@@ -9,7 +9,7 @@ import { StreamingMarkdown } from '../components/StreamingMarkdown'
 import { useStreamingOutput } from '../hooks/useStreamingOutput'
 import { userFacingSendError } from '../utils/userFacingError'
 import { formatTokenCount } from '../utils/formatToken'
-import type { ChatContext, Citation, Conversation, Folder, Message, ModelProfile, Paper, TokenUsage } from '../../shared/types'
+import type { ChatContext, Citation, Conversation, Folder, Message, ModelProfile, Paper, StreamSpeed, TokenUsage } from '../../shared/types'
 
 type ChatPageProps = {
   selectedConversationId?: string | null
@@ -20,6 +20,8 @@ type ChatPageProps = {
   modelProfiles?: ModelProfile[]
   activeModelProfile?: ModelProfile | null
   onActivateModel?: (id: string) => void | Promise<void>
+  streamSpeed?: StreamSpeed
+  onStreamSpeedChange?: (speed: StreamSpeed) => void
 }
 
 type ContextOption = {
@@ -79,14 +81,16 @@ export function ChatPage({
   onOpenCitation,
   modelProfiles,
   activeModelProfile,
-  onActivateModel
+  onActivateModel,
+  streamSpeed = 'normal',
+  onStreamSpeedChange
 }: ChatPageProps): JSX.Element {
   const [conversationId, setConversationId] = useState<string | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
   const [draft, setDraft] = useState('')
   const [sending, setSending] = useState(false)
   const [sendProgress, setSendProgress] = useState<SendProgress>(null)
-  const stream = useStreamingOutput()
+  const stream = useStreamingOutput(streamSpeed)
   const finalAssistantRef = useRef<Message | null>(null)
   const [sendError, setSendError] = useState<string | null>(null)
   const [selectedContext, setSelectedContext] = useState<ChatContext>(freeContext)
@@ -333,11 +337,13 @@ export function ChatPage({
       contextOptions={contextOptions}
       tokenUsage={tokenUsage}
       contextWindowTokens={activeModelProfile?.contextWindowTokens}
+      streamSpeed={streamSpeed}
       onContextChange={handleContextChange}
       onDraftChange={(value) => {
         setDraft(value)
         if (sendError) setSendError(null)
       }}
+      onStreamSpeedChange={(speed) => onStreamSpeedChange?.(speed)}
       onSend={() => void send()}
       onCancel={() => {
         if (activeProgressRequestId) void desktopApi.conversations.cancelSend?.(activeProgressRequestId)
@@ -490,12 +496,20 @@ type ComposerProps = {
   }
   tokenUsage?: TokenUsage | null
   contextWindowTokens?: number
+  streamSpeed: StreamSpeed
   onContextChange: (context: ChatContext) => void
   onDraftChange: (value: string) => void
+  onStreamSpeedChange: (speed: StreamSpeed) => void
   onSend: () => void
   onCancel: () => void
   onRetry: () => void
 }
+
+const speedOptions: Array<{ value: StreamSpeed; label: string; icon: typeof Feather }> = [
+  { value: 'gentle', label: '优雅', icon: Feather },
+  { value: 'normal', label: '常规', icon: Gauge },
+  { value: 'fast', label: '性能', icon: Zap }
+]
 
 function Composer({
   draft,
@@ -505,8 +519,10 @@ function Composer({
   contextOptions,
   tokenUsage,
   contextWindowTokens,
+  streamSpeed,
   onContextChange,
   onDraftChange,
+  onStreamSpeedChange,
   onSend,
   onCancel,
   onRetry
@@ -525,37 +541,59 @@ function Composer({
 
   return (
     <div className="composer" aria-label="研究问答输入区">
-      <label className="composer-context">
-        <LibraryBig size={14} aria-hidden="true" />
-        <span>上下文</span>
-        <select
-          aria-label="问答上下文"
-          value={contextValue(selectedContext)}
-          onChange={(event) => {
-            onContextChange(options.find((option) => option.value === event.target.value)?.context ?? freeContext)
-          }}
-        >
-          <option value="free">不限定</option>
-          {contextOptions.folderOptions.length ? (
-            <optgroup label="论文库">
-              {contextOptions.folderOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </optgroup>
-          ) : null}
-          {contextOptions.paperOptions.length ? (
-            <optgroup label="论文">
-              {contextOptions.paperOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </optgroup>
-          ) : null}
-        </select>
-      </label>
+      <div className="composer-toolbar">
+        <label className="composer-context">
+          <LibraryBig size={14} aria-hidden="true" />
+          <span>上下文</span>
+          <select
+            aria-label="问答上下文"
+            value={contextValue(selectedContext)}
+            onChange={(event) => {
+              onContextChange(options.find((option) => option.value === event.target.value)?.context ?? freeContext)
+            }}
+          >
+            <option value="free">不限定</option>
+            {contextOptions.folderOptions.length ? (
+              <optgroup label="论文库">
+                {contextOptions.folderOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </optgroup>
+            ) : null}
+            {contextOptions.paperOptions.length ? (
+              <optgroup label="论文">
+                {contextOptions.paperOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </optgroup>
+            ) : null}
+          </select>
+        </label>
+
+        <div className="stream-speed" role="group" aria-label="输出速度">
+          {speedOptions.map((option) => {
+            const Icon = option.icon
+            const active = streamSpeed === option.value
+            return (
+              <button
+                key={option.value}
+                type="button"
+                className={active ? 'active' : ''}
+                aria-pressed={active}
+                title={option.value === 'gentle' ? '优雅：放慢节奏' : option.value === 'fast' ? '性能：即时直出' : '常规：默认节奏'}
+                onClick={() => onStreamSpeedChange(option.value)}
+              >
+                <Icon size={12} aria-hidden="true" />
+                {option.label}
+              </button>
+            )
+          })}
+        </div>
+      </div>
 
       <textarea
         ref={textareaRef}

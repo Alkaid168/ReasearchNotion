@@ -1534,16 +1534,76 @@ button {
   overflow: hidden;
 }
 
+/* 顶部工具行:上下文选择 + 输出速度三档,共用一条下边线。 */
+.composer-toolbar {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--rn-border);
+}
+
 .composer-context {
+  flex: 1 1 auto;
+  min-width: 0;
   min-height: 38px;
   display: flex;
   align-items: center;
   gap: 7px;
-  border-bottom: 1px solid var(--rn-border);
   background: transparent;
   color: var(--rn-muted-2);
   padding: 0 14px;
   font-size: 12.5px;
+}
+
+/* 输出速度三档:分段 pill,与模型选择器 chip 同视觉语言。 */
+.stream-speed {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-right: 12px;
+  padding: 2px;
+  border: 1px solid var(--rn-border);
+  border-radius: var(--rn-radius-sm);
+  background: #f7f7f7;
+}
+
+.stream-speed button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: calc(var(--rn-radius-sm) - 2px);
+  background: transparent;
+  color: var(--rn-muted);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background var(--rn-duration-fast, 120ms) var(--rn-ease-out, ease),
+    color var(--rn-duration-fast, 120ms) var(--rn-ease-out, ease);
+}
+
+.stream-speed button:hover {
+  background: var(--rn-hover);
+  color: var(--rn-text);
+}
+
+.stream-speed button:focus-visible {
+  outline: 2px solid var(--rn-text);
+  outline-offset: 1px;
+}
+
+/* 选中档:石墨底白字(与体系内 active chip 一致)。 */
+.stream-speed button.active,
+.stream-speed button.active:hover {
+  background: var(--rn-text);
+  color: #ffffff;
+}
+
+.stream-speed button:active {
+  transform: scale(0.97);
 }
 
 .composer-context span {

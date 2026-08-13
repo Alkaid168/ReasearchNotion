@@ -8,7 +8,7 @@ import { StreamingMarkdown } from './StreamingMarkdown'
 import { useStreamingOutput } from '../hooks/useStreamingOutput'
 import { userFacingSendError } from '../utils/userFacingError'
 import { formatTokenCount } from '../utils/formatToken'
-import type { Citation, Message, ModelProfile, Paper, TokenUsage } from '../../shared/types'
+import type { Citation, Message, ModelProfile, Paper, StreamSpeed, TokenUsage } from '../../shared/types'
 
 type AiDrawerProps = {
   open: boolean
@@ -79,11 +79,23 @@ export function AiDrawer({
   const [toolCalls, setToolCalls] = useState<Array<{ name: string; label: string; status: 'running' | 'done' }>>([])
   const [tokenUsage, setTokenUsage] = useState<TokenUsage | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const stream = useStreamingOutput()
+  const [streamSpeed, setStreamSpeed] = useState<StreamSpeed>('normal')
+  const stream = useStreamingOutput(streamSpeed)
   const finalAssistantRef = useRef<Message | null>(null)
   const [activeProgressRequestId, setActiveProgressRequestId] = useState<string | null>(null)
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null)
   const { conversationId, messages, draft } = session
+
+  // 抽屉无切换 UI,挂载时读全局速度档跟随(一次性 IPC,轻量)。
+  useEffect(() => {
+    let alive = true
+    void desktopApi.settings.get().then((loaded) => {
+      if (alive) setStreamSpeed(loaded.streamSpeed)
+    })
+    return () => {
+      alive = false
+    }
+  }, [])
 
   useEffect(() => {
     const lastAssistant = [...messages].reverse().find((message) => message.role === 'assistant' && message.tokenUsage)

@@ -11,7 +11,8 @@ const emptySettings: AppSettings = {
   difyKnowledgeApiKey: '',
   deepseekApiKey: '',
   defaultFolderId: null,
-  activeModelProfileId: null
+  activeModelProfileId: null,
+  streamSpeed: 'normal'
 }
 
 type SecretInputProps = {

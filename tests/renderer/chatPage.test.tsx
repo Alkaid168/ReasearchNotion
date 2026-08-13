@@ -11,7 +11,8 @@ const emptySettings: AppSettings = {
   difyKnowledgeApiKey: '',
     deepseekApiKey: '',
   defaultFolderId: null,
-  activeModelProfileId: null
+  activeModelProfileId: null,
+  streamSpeed: 'normal'
 }
 
 function createApiMock(): DesktopApi {
@@ -1491,5 +1492,46 @@ describe('App shell', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('大模型服务暂时不可用，已保留你的问题，请稍后重新发送。')
     expect(screen.getByRole('alert')).not.toHaveTextContent('deepseek_bridge_upstream_error')
+  })
+
+  it('shows the three stream speed options with normal selected by default', async () => {
+    const api = createApiMock()
+    window.researchNotion = api
+
+    render(<App />)
+
+    expect(await screen.findByRole('group', { name: '输出速度' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '优雅' })).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByRole('button', { name: '常规' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: '性能' })).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  it('switches the stream speed and persists it without dropping other settings', async () => {
+    const api = createApiMock()
+    window.researchNotion = api
+
+    render(<App />)
+    await screen.findByRole('group', { name: '输出速度' })
+
+    fireEvent.click(screen.getByRole('button', { name: '优雅' }))
+
+    expect(screen.getByRole('button', { name: '优雅' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: '常规' })).toHaveAttribute('aria-pressed', 'false')
+    await waitFor(() => {
+      // save 传全量合并对象:速度档写入,且其余字段不被覆盖丢失。
+      expect(api.settings.save).toHaveBeenCalledWith(
+        expect.objectContaining({ streamSpeed: 'gentle', difyBaseUrl: '', activeModelProfileId: null })
+      )
+    })
+  })
+
+  it('restores the saved stream speed from settings', async () => {
+    const api = createApiMock()
+    api.settings.get = vi.fn().mockResolvedValue({ ...emptySettings, streamSpeed: 'fast' })
+    window.researchNotion = api
+
+    render(<App />)
+
+    expect(await screen.findByRole('button', { name: '性能' })).toHaveAttribute('aria-pressed', 'true')
   })
 })

@@ -10,7 +10,8 @@ const emptySettings: AppSettings = {
   difyKnowledgeApiKey: '',
     deepseekApiKey: '',
   defaultFolderId: null,
-  activeModelProfileId: null
+  activeModelProfileId: null,
+  streamSpeed: 'normal'
 }
 
 const unconfiguredStatus: EnvironmentStatus = {
@@ -108,7 +109,8 @@ describe('SettingsPage', () => {
         difyKnowledgeApiKey: 'knowledge-key',
     deepseekApiKey: '',
         defaultFolderId: null,
-        activeModelProfileId: null
+        activeModelProfileId: null,
+        streamSpeed: 'normal'
       })
     })
   })
@@ -128,7 +130,8 @@ describe('SettingsPage', () => {
         difyKnowledgeApiKey: 'knowledge-key',
     deepseekApiKey: '',
         defaultFolderId: null,
-        activeModelProfileId: null
+        activeModelProfileId: null,
+        streamSpeed: 'normal'
       })
     })
   })

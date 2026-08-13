@@ -8,6 +8,7 @@ import {
   STREAM_TICK_MS,
   useStreamingOutput
 } from '../../src/renderer/hooks/useStreamingOutput'
+import type { StreamSpeed } from '../../src/shared/types'
 
 describe('useStreamingOutput', () => {
   beforeEach(() => {
@@ -133,5 +134,60 @@ describe('useStreamingOutput', () => {
       vi.advanceTimersByTime(STREAM_TICK_MS)
     })
     expect(result.current.content).toBe('ok')
+  })
+
+  it('gentle speed reveals at half the normal rate (2 chars per tick)', () => {
+    const { result } = renderHook(() => useStreamingOutput('gentle'))
+    act(() => {
+      result.current.push('Hello, world!')
+    })
+    expect(result.current.content).toBe('He')
+    act(() => {
+      vi.advanceTimersByTime(STREAM_TICK_MS)
+    })
+    expect(result.current.content).toBe('Hell')
+  })
+
+  it('fast speed flushes everything on push without buffering', () => {
+    const { result } = renderHook(() => useStreamingOutput('fast'))
+    act(() => {
+      result.current.push('Hello, world!')
+    })
+    expect(result.current.content).toBe('Hello, world!')
+    act(() => {
+      vi.advanceTimersByTime(STREAM_TICK_MS * 10)
+    })
+    expect(result.current.content).toBe('Hello, world!')
+  })
+
+  it('applies a new speed on the next tick when the prop changes', () => {
+    const { result, rerender } = renderHook(({ speed }: { speed: StreamSpeed }) => useStreamingOutput(speed), {
+      initialProps: { speed: 'normal' as StreamSpeed }
+    })
+    act(() => {
+      result.current.push('Hello, world!')
+    })
+    expect(result.current.content).toBe('Hell')
+    rerender({ speed: 'gentle' })
+    act(() => {
+      vi.advanceTimersByTime(STREAM_TICK_MS)
+    })
+    // 换档后下一 tick 按 gentle 的 2 字/tick:4 + 2 = 6;若仍按 normal 会到 8。
+    expect(result.current.content).toBe('Hello,')
+  })
+
+  it('flushes the remaining backlog on the next tick when switching to fast', () => {
+    const { result, rerender } = renderHook(({ speed }: { speed: StreamSpeed }) => useStreamingOutput(speed), {
+      initialProps: { speed: 'gentle' as StreamSpeed }
+    })
+    act(() => {
+      result.current.push('Hello, world!')
+    })
+    expect(result.current.content).toBe('He')
+    rerender({ speed: 'fast' })
+    act(() => {
+      vi.advanceTimersByTime(STREAM_TICK_MS)
+    })
+    expect(result.current.content).toBe('Hello, world!')
   })
 })

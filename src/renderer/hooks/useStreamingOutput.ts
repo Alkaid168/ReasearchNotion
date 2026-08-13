@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import type { StreamSpeed } from '../../shared/types'
 
 /** 打字机 tick 间隔(ms):光标在每个 tick 之间有稳定的闪烁窗口。 */
 export const STREAM_TICK_MS = 25
@@ -10,6 +11,16 @@ export const STREAM_ACCEL_BACKLOG = 80
 export const STREAM_ACCEL_RATE = 12
 /** 积压超过此值(字符数)直接全量吐出,防止"假优雅"欠账。 */
 export const STREAM_FLUSH_BACKLOG = 240
+
+/**
+ * 三档速度表:gentle 为 normal 的半速;fast 用 Infinity 走同一条路径——
+ * `Math.min(shown + Infinity, len) = len`,一次全吐、零特判,也不排程定时器。
+ */
+const SPEED_RATES: Record<StreamSpeed, { base: number; accel: number }> = {
+  gentle: { base: 2, accel: 6 },
+  normal: { base: STREAM_RATE, accel: STREAM_ACCEL_RATE },
+  fast: { base: Number.POSITIVE_INFINITY, accel: Number.POSITIVE_INFINITY }
+}
 
 export type StreamOutput = {
   /** 当前应显示在流式消息中的文本;未开始时为 null。 */
@@ -28,8 +39,11 @@ export type StreamOutput = {
  * 防积压:积压越多吐得越快,超过阈值直通。push 时同步吐出第一片(首字零延迟),
  * 之后由定时器按 tick 节奏继续;finish 表示流已结束、内容已全部到达,直接
  * 全量补全并置 drained,供调用方无缝落库切换(streaming 版变历史消息)。
+ *
+ * `speed` 三档(gentle 半速 / normal 常规 / fast 直通),由 `SPEED_RATES` 统一
+ * 表达;切换档位后下一 tick 即按新速率推进,fast 档在 push 内一次全吐。
  */
-export function useStreamingOutput(): StreamOutput {
+export function useStreamingOutput(speed: StreamSpeed = 'normal'): StreamOutput {
   const [content, setContent] = useState<string | null>(null)
   const [drained, setDrained] = useState(false)
   const fullTextRef = useRef('')
@@ -55,13 +69,14 @@ export function useStreamingOutput(): StreamOutput {
       }
       return false
     }
+    const rates = SPEED_RATES[speed]
     let rate: number
     if (backlog > STREAM_FLUSH_BACKLOG) {
       rate = backlog
     } else if (backlog > STREAM_ACCEL_BACKLOG) {
-      rate = STREAM_ACCEL_RATE
+      rate = rates.accel
     } else {
-      rate = STREAM_RATE
+      rate = rates.base
     }
     shownRef.current = Math.min(shownRef.current + rate, full.length)
     setContent(full.slice(0, shownRef.current))
@@ -70,15 +85,22 @@ export function useStreamingOutput(): StreamOutput {
       setDrained(true)
     }
     return true
-  }, [stopTimer])
+  }, [stopTimer, speed])
+
+  // interval 回调经 ref 取最新 tick:切换档位后,下一 tick 立即按新速率推进,
+  // 无需重建定时器(闭包直接捕获 tick 会锁死旧速率)。
+  const tickRef = useRef(tick)
+  useEffect(() => {
+    tickRef.current = tick
+  }, [tick])
 
   const ensureTimer = useCallback(() => {
     if (timerRef.current === null) {
       timerRef.current = setInterval(() => {
-        if (!tick()) stopTimer()
+        if (!tickRef.current()) stopTimer()
       }, STREAM_TICK_MS)
     }
-  }, [stopTimer, tick])
+  }, [stopTimer])
 
   const push = useCallback(
     (delta: string, opts?: { replace?: boolean }) => {
@@ -92,7 +114,8 @@ export function useStreamingOutput(): StreamOutput {
       }
       // 同步吐出第一片:首字零延迟,且不依赖定时器在测试/低优先级环境下被调度。
       tick()
-      ensureTimer()
+      // 仍有积压才排程定时器:fast 档同步全吐后无需空转一个 tick。
+      if (fullTextRef.current.length > shownRef.current) ensureTimer()
     },
     [ensureTimer, tick]
   )
