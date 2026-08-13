@@ -3965,10 +3965,12 @@ button {
   display: grid;
   gap: 12px;
   border: 1px solid var(--rn-border-strong);
-  border-radius: 8px;
+  border-radius: var(--rn-radius-md, 12px);
   background: var(--rn-surface);
+  box-shadow: var(--rn-shadow-float, 0 4px 20px rgba(0, 0, 0, 0.08));
   padding: 16px;
   margin-bottom: 4px;
+  animation: rn-rise-in var(--rn-duration-normal, 200ms) var(--rn-ease-out, ease);
 }
 
 .settings-memory-select {
@@ -4458,12 +4460,20 @@ button {
   justify-content: space-between;
   padding: 10px 12px;
   border: 1px solid var(--rn-border, rgba(0, 0, 0, 0.1));
-  border-radius: 8px;
+  border-radius: var(--rn-radius-md, 12px);
   background: var(--rn-surface, #ffffff);
+  transition: border-color var(--rn-duration-fast, 120ms) var(--rn-ease-out, ease), background var(--rn-duration-fast, 120ms) var(--rn-ease-out, ease);
+  animation: rn-rise-in var(--rn-duration-normal, 200ms) var(--rn-ease-out, ease);
+}
+
+.settings-model-card:hover {
+  border-color: var(--rn-border-strong, rgba(0, 0, 0, 0.15));
+  background: var(--rn-hover, rgba(0, 0, 0, 0.05));
 }
 
 .settings-model-card.active {
   border-color: var(--rn-text, #0d0d0d);
+  background: #fafafa;
 }
 
 .settings-model-info {
