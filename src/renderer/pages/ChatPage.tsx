@@ -634,7 +634,7 @@ export function ChatPage({
           {sending && liveThinking ? (
             <LiveThinkingDisclosure state={liveThinking} />
           ) : null}
-          {stream.content ? (
+          {sending && stream.content ? (
 
             <article className="message assistant streaming" aria-live="polite">
               <img className="message-avatar" src={researchNotionMark} alt="" aria-hidden="true" />
