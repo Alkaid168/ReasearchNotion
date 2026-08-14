@@ -52,7 +52,7 @@ describe('research process', () => {
       citations: []
     })
 
-    expect(process.thoughts).toHaveLength(6)
+    expect(process.thoughts).toHaveLength(4)
     expect(process.thoughts?.join('\n')).toContain('先区分检索阶段与生成阶段。')
     expect(process.thoughts?.join('\n')).not.toContain('模型主动给出的公开思考摘要是：RAG 通过检索外部知识来增强生成。')
   })
