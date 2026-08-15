@@ -54,11 +54,21 @@ ResearchNotion 是一个面向科研论文管理与问答的本地桌面软件�
 
 ### 前提
 
-- Windows 10/11
+- Windows 10/11（全部启动脚本为 `.ps1`/`.bat`，未支持 macOS / Linux）
 - [Node.js](https://nodejs.org) 22+ 与 [pnpm](https://pnpm.io) 10+
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/)（运行本地 Dify）
+- 一个 DeepSeek API Key
 
-### 运行
+### 从零到能用问答的完整路径
+
+```text
+1. 克隆 Dify 并首次启动（仅首次，见部署文档"前置"章节）
+2. 配置 DeepSeek 模型 Key（见部署文档"配置 DeepSeek 模型"章节）
+3. pnpm demo:prepare（一键：启动 Dify → 导入工具 → 创建 Agent → 写入配置 → 演示论文 → 自检）
+4. 双击 start-research-notion.bat，开始提问
+```
+
+### 运行（开发模式）
 
 ```bash
 pnpm install
@@ -67,7 +77,7 @@ pnpm dev
 
 或直接双击 `start-research-notion.bat`。
 
-首次运行后，在设置页填写 Dify 地址和 `ResearchNotion Tool Agent` 的 App API Key。完整的本地 Dify 部署与 Agent 配置见上表文档。
+首次运行后，在设置页填写 Dify 地址和 `ResearchNotion Tool Agent` 的 App API Key（若已执行 `demo:prepare`，此步已自动完成）。完整的本地 Dify 部署与 Agent 配置见上表文档。
 
 ### 一键演示准备
 
@@ -75,12 +85,25 @@ pnpm dev
 pnpm demo:prepare
 ```
 
-该命令会启动 Dify、启动本地工具服务、导入工具、创建或更新 Tool Agent、写入本地 Agent 配置、准备演示论文并运行检查。单独配置已有 Agent 时使用：
+该命令会启动 Dify、启动本地工具服务、导入工具、创建或更新 Tool Agent、写入本地 Agent 配置、准备演示论文并运行检查。可重复执行：各步骤幂等，中断后直接重跑即可。可选参数：
+
+- `pnpm demo:prepare -DryRun`：只打印将执行的步骤，不实际执行
+- `pnpm demo:prepare -SkipDifyStart`：跳过 Dify 启动（Dify 已在跑时）
+
+单独配置已有 Agent 时使用：
 
 ```powershell
 pnpm use:dify-agent
 pnpm check:dify
 ```
+
+### 构建 Windows 安装包
+
+```bash
+pnpm build:win
+```
+
+产出 Windows 安装包（NSIS）到 `release/`，普通用户安装后拥有独立用户数据目录，不包含开发者的论文、对话或 API Key。注意安装包仍需本机（或可达服务器）上运行着本地 Dify 才能使用 AI 功能。
 
 ## 验证命令
 
