@@ -1,3 +1,5 @@
+<!-- 已归档（2026-08-15）：PR#5 合并冲突处理过程稿，问题均已解决。本文仅作历史留档。 -->
+
 # ChatPage 双流式深度融合 Brief（integrate-pr5 分支）
 
 ## 任务
@@ -5,7 +7,7 @@
 - `src/renderer/pages/ChatPage.tsx`：18 个冲突 hunk
 - `tests/renderer/chatPage.test.tsx`：2 个冲突 hunk（与 ChatPage UI 强耦合）
 
-仓库根：`c:/Users/11428/Desktop/research_notion/ReasearchNotion`。其余 15 个冲突文件已全部解决，只剩这两个。**不要改这两个以外的文件。**
+仓库根：`<仓库根目录>`。其余 15 个冲突文件已全部解决，只剩这两个。**不要改这两个以外的文件。**
 
 ## 获取两边版本
 - ours（当前 main，含已验收的 GPT 细腻度）：`git show :2:src/renderer/pages/ChatPage.tsx`

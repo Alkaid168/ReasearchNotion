@@ -1,3 +1,5 @@
+<!-- 已归档（2026-08-15）：已完成的实施计划，两批次均已实施并通过验收（2026-08-13）。本文仅作历史留档，以 docs/ 根目录现行文档为准。 -->
+
 # GPT 风格细腻度升级 Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
@@ -14,7 +16,7 @@
 
 ## Global Constraints
 
-- 工作目录与 git 仓库:`c:/Users/11428/Desktop/research_notion/ReasearchNotion`(develop 分支;外壳 `research_notion` 不是仓库)
+- 工作目录与 git 仓库:`<仓库根目录>`(develop 分支;外壳 `research_notion` 不是仓库)
 - 测试命令:`./node_modules/.bin/vitest run [文件过滤]`;类型检查:`./node_modules/.bin/tsc -p tsconfig.json --noEmit`。**禁止 `pnpm test`/`pnpm lint:types`**(pnpm 非 TTY 假 exit 0,见项目记忆)
 - 根字号 15px 锁定(`tests/unit/desktopUxStyles.test.mjs` 断言),任何任务不得改动
 - 无彩色体系:不引入暖色/彩色;阴影仅用于浮层(下拉、toast、编辑器面板);错误红 `--rn-error-text` 与链接蓝 `--rn-link` 是仅有的语义色
