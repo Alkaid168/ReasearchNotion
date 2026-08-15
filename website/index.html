@@ -128,6 +128,10 @@
     .shot figcaption { padding: 16px 24px; font-size: 13px; color: var(--color-fog); border-top: 1px solid var(--color-bone); }
 
 
+    /* ---------- mascot ---------- */
+    .mascot { width: 0.62em; height: 0.62em; vertical-align: -0.02em; margin-left: 0.08em; }
+    .logo-img { width: 30px; height: 30px; border-radius: 8px; }
+
     /* ---------- lightbox ---------- */
     .lightbox {
       position: fixed; inset: 0; z-index: 100; display: flex;
@@ -212,11 +216,8 @@
 <div class="topbar">
   <div class="wrap navrow">
     <div class="logo">
-      <svg viewBox="0 0 32 32" fill="none" aria-hidden="true">
-        <rect x="3" y="3" width="26" height="26" rx="7" stroke="#3c315b" stroke-width="2.2"/>
-        <path d="M9 11h14M9 16h10M9 21h13" stroke="#ab9ff2" stroke-width="2.2" stroke-linecap="round"/>
-      </svg>
-      ResearchN<span style="letter-spacing:0">ot</span>ion
+      <img class="logo-img" src="images/mascot.png" alt="ResearchNotion logo" />
+      <span style="letter-spacing:0">ResearchNotion</span>
     </div>
     <nav class="pill-nav">
       <a href="#demo">演示</a>
@@ -232,7 +233,7 @@
 <header class="hero-light wrap" id="demo">
   <h1 class="display">
     会取证的<br />
-    论文研究助手<svg class="ghost ghost-float" viewBox="0 0 32 32" fill="none" aria-label="ResearchNotion logo" style="width:0.62em;height:0.62em;vertical-align:-0.02em;margin-left:0.08em;"><rect x="3" y="3" width="26" height="26" rx="7" stroke="#ab9ff2" stroke-width="2.2"/><path d="M9 11h14M9 16h10M9 21h13" stroke="#ab9ff2" stroke-width="2.2" stroke-linecap="round"/></svg>
+    论文研究助手<img class="mascot ghost-float" src="images/mascot.png" alt="ResearchNotion 吉祥物" />
   </h1>
   <p class="tagline">本地论文库 × PDF 阅读器 × 自主调用的 AI Agent —— 回答必有页码，结论可核验。</p>
   <div class="hero-ctas">
@@ -308,11 +309,11 @@
       </figure>
       <figure class="shot">
         <img src="images/gallery-card.png" alt="论文卡片" loading="lazy" />
-        <figcaption>论文卡片 · 研究问题/方法/贡献</figcaption>
+        <figcaption>论文卡片 · 结构化元信息与年份</figcaption>
       </figure>
       <figure class="shot">
         <img src="images/gallery-settings.png" alt="设置页模型档" loading="lazy" />
-        <figcaption>设置 · 多模型档与偏好记忆</figcaption>
+        <figcaption>设置 · 多模型档管理</figcaption>
       </figure>
       <figure class="shot">
         <img src="images/gallery-search.png" alt="跨库检索" loading="lazy" />
@@ -332,7 +333,7 @@
     <div class="card">
       <span class="pill-tag blue">论文管理</span>
       <h3>导入即卡片化</h3>
-      <p>PDF / Markdown 拖入自动生成结构化卡片：研究问题、方法、贡献、关键词。</p>
+      <p>PDF / Markdown 拖入自动生成结构化卡片：一句话摘要、作者、年份与关键词，可搜索。</p>
     </div>
     <div class="card">
       <span class="pill-tag">阅读器</span>
@@ -365,7 +366,7 @@
 <!-- ============ dark: closing CTA ============ -->
 <section class="dark">
   <div class="wrap dark-hero">
-    <h1 class="display">把文献综述<br />交<svg class="ghost ghost-float" viewBox="0 0 32 32" fill="none" aria-label="ResearchNotion logo" style="width:0.62em;height:0.62em;vertical-align:-0.02em;margin-left:0.08em;"><rect x="3" y="3" width="26" height="26" rx="7" stroke="#ab9ff2" stroke-width="2.2"/><path d="M9 11h14M9 16h10M9 21h13" stroke="#ab9ff2" stroke-width="2.2" stroke-linecap="round"/></svg>给证据。</h1>
+    <h1 class="display">把文献综述<br />交<img class="mascot ghost-float" src="images/mascot.png" alt="ResearchNotion 吉祥物" />给证据。</h1>
     <p class="sub">开源 · MIT 协议 · Windows 桌面端</p>
     <div class="hero-ctas">
       <a class="btn btn-on-dark" href="https://github.com/Alkaid168/ReasearchNotion">GitHub 主页 ↗</a>
