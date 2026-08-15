@@ -227,7 +227,9 @@
   <!-- 视频卡位 1：hero 主演示（放 videos/hero-demo.webm） -->
   <figure class="video-card">
     <div class="video-frame">
-      <img src="images/gallery-chat.png" alt="对话页：带引用的回答" /><!-- hero 视频待补：videos/hero-demo.mp4（放好后改回 video 标签） -->
+      <video autoplay loop muted playsinline poster="images/gallery-chat.png">
+        <source src="videos/hero-demo.mp4" type="video/mp4" />
+      </video>
     </div>
     <figcaption class="video-caption">向 Agent 提问 → 它自主读论文 → 带页码引用作答</figcaption>
   </figure>
