@@ -1021,7 +1021,7 @@ describe('KnowledgePage', () => {
       paper: pdfPaper,
       markdownText: null,
       plainText: 'Retrieval augmented generation connects retrieval with generation.',
-      previewUrl: 'file:///C:/Users/51044/AppData/Roaming/ResearchNotion/papers/paper-pdf-1.pdf'
+      previewUrl: 'file:///C:/Users/testuser/AppData/Roaming/ResearchNotion/papers/paper-pdf-1.pdf'
     })
     window.researchNotion = api
 

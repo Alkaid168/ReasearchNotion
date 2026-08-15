@@ -1,3 +1,5 @@
+> **版本快照**：本文档是 v0.1.0（2026-08-02）的全功能验收清单，其中 TEI 向量检索、知识库归档等属当时验证的历史路线，不代表当前默认链路。当前实现以 [README](../README.md) 与 [技术说明](research-notion-technical-guide.md) 为准。
+
 # ResearchNotion 全功能运行与验收清单
 
 > 日期：2026-08-02 | 版本：0.1.0 | 安装包：ResearchNotion Setup 0.1.0.exe (116MB)

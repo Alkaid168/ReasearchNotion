@@ -46,7 +46,7 @@ async function main(){
   OK("DeepSeek configured via use-deepseek-endpoint.mjs");
   if(PR){
     S(6,"TEI bge-m3");
-    console.log("  See docs/dify-local-deploy.md section 9.1 for TEI deployment");
+    console.log("  See docs/full-acceptance-checklist.md (vector search sections) for TEI deployment");
     SKIP("TEI requires manual steps (see deploy docs)")
   }
   console.log("\n=== Environment Ready ===");

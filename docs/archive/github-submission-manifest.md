@@ -1,6 +1,8 @@
+<!-- 已归档（2026-08-15）：首次提交 GitHub 的一次性盘点清单，任务已完成（2026-07-22）。本文仅作历史留档，以 docs/ 根目录现行文档为准。 -->
+
 # ResearchNotion GitHub 首次提交清单
 
-> 盘点范围：`F:\Alkaid\作业\创新应用综合实训` 及其 `.worktrees\mvp-implementation`，日期 2026-07-22。
+> 盘点范围：`<本地项目根目录>` 及其 `.worktrees\mvp-implementation`，日期 2026-07-22。
 >
 > 结论：**不要提交 `.worktrees` 目录本身。** 先在 `mvp-implementation` 分支提交，再合并到 `main`；合并后，下面“提交”栏中的文件应出现在仓库根目录。
 
