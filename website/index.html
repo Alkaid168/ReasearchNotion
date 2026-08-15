@@ -127,6 +127,28 @@
     .shot img { display: block; width: 100%; height: auto; aspect-ratio: 16 / 10; object-fit: cover; object-position: top; }
     .shot figcaption { padding: 16px 24px; font-size: 13px; color: var(--color-fog); border-top: 1px solid var(--color-bone); }
 
+
+    /* ---------- mascot ---------- */
+    .mascot { width: 0.62em; height: 0.62em; vertical-align: -0.02em; margin-left: 0.08em; }
+    .logo-img { width: 30px; height: 30px; border-radius: 8px; }
+
+    /* ---------- lightbox ---------- */
+    .lightbox {
+      position: fixed; inset: 0; z-index: 100; display: flex;
+      align-items: center; justify-content: center; padding: 48px;
+      background: rgba(28, 28, 28, 0.82); backdrop-filter: blur(6px);
+      cursor: zoom-out; animation: fadein 0.2s ease;
+    }
+    .lightbox img { max-width: 92vw; max-height: 88vh; border-radius: 16px; border: 1px solid rgba(253,252,254,0.2); }
+    .lightbox .lb-close {
+      position: absolute; top: 24px; right: 32px; width: 44px; height: 44px;
+      border-radius: 100px; border: 1px solid rgba(253,252,254,0.4);
+      background: transparent; color: #fdfcfe; font-size: 20px; line-height: 1;
+      cursor: pointer;
+    }
+    @keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
+    .shot img { cursor: zoom-in; }
+
     /* ---------- dark section ---------- */
     .dark { background: var(--color-aubergine); color: var(--color-paper-white); }
     .dark h1, .dark h2, .dark h3 { color: var(--color-paper-white); }
@@ -194,12 +216,8 @@
 <div class="topbar">
   <div class="wrap navrow">
     <div class="logo">
-      <svg viewBox="0 0 32 32" fill="none" aria-hidden="true">
-        <path d="M16 3C9.9 3 5 7.9 5 14v13.2c0 1.2 1.4 1.8 2.3 1l1.9-1.7c.5-.4 1.2-.4 1.7 0l1.9 1.7c.5.4 1.2.4 1.7 0l1.9-1.7c.5-.4 1.2-.4 1.7 0l1.9 1.7c.5.4 1.2.4 1.7 0l1.9-1.7c.5-.4 1.2-.4 1.7 0l1.9 1.7c.9.8 2.3.2 2.3-1V14C27 7.9 22.1 3 16 3z" fill="#ab9ff2"/>
-        <circle cx="12" cy="14" r="1.8" fill="#3c315b"/>
-        <circle cx="20" cy="14" r="1.8" fill="#3c315b"/>
-      </svg>
-      ResearchN<span style="letter-spacing:0">ot</span>ion
+      <img class="logo-img" src="images/mascot.png" alt="ResearchNotion logo" />
+      <span style="letter-spacing:0">ResearchNotion</span>
     </div>
     <nav class="pill-nav">
       <a href="#demo">演示</a>
@@ -215,7 +233,7 @@
 <header class="hero-light wrap" id="demo">
   <h1 class="display">
     会取证的<br />
-    论文研究助<span style="display:inline-block;width:0.72em;height:0.72em;vertical-align:-0.04em;"><svg class="ghost ghost-float" viewBox="0 0 32 32" fill="none" aria-label="ghost mascot"><path d="M16 3C9.9 3 5 7.9 5 14v13.2c0 1.2 1.4 1.8 2.3 1l1.9-1.7c.5-.4 1.2-.4 1.7 0l1.9 1.7c.5.4 1.2.4 1.7 0l1.9-1.7c.5-.4 1.2-.4 1.7 0l1.9 1.7c.5.4 1.2.4 1.7 0l1.9-1.7c.5-.4 1.2-.4 1.7 0l1.9 1.7c.9.8 2.3.2 2.3-1V14C27 7.9 22.1 3 16 3z" fill="#ab9ff2"/><circle cx="12" cy="14" r="1.8" fill="#3c315b"/><circle cx="20" cy="14" r="1.8" fill="#3c315b"/></svg></span>
+    论文研究助手<img class="mascot ghost-float" src="images/mascot.png" alt="ResearchNotion 吉祥物" />
   </h1>
   <p class="tagline">本地论文库 × PDF 阅读器 × 自主调用的 AI Agent —— 回答必有页码，结论可核验。</p>
   <div class="hero-ctas">
@@ -290,12 +308,12 @@
         <figcaption>知识库 · 文件夹树与论文卡片</figcaption>
       </figure>
       <figure class="shot">
-        <img src="images/gallery-card.png" alt="论文卡片" loading="lazy" />
-        <figcaption>论文卡片 · 研究问题/方法/贡献</figcaption>
+        <img src="images/gallery-memory.png" alt="研究偏好记忆列表" loading="lazy" />
+        <figcaption>研究记忆 · 身份/课题/偏好/纠正</figcaption>
       </figure>
       <figure class="shot">
         <img src="images/gallery-settings.png" alt="设置页模型档" loading="lazy" />
-        <figcaption>设置 · 多模型档与偏好记忆</figcaption>
+        <figcaption>设置 · 多模型档管理</figcaption>
       </figure>
       <figure class="shot">
         <img src="images/gallery-search.png" alt="跨库检索" loading="lazy" />
@@ -315,7 +333,7 @@
     <div class="card">
       <span class="pill-tag blue">论文管理</span>
       <h3>导入即卡片化</h3>
-      <p>PDF / Markdown 拖入自动生成结构化卡片：研究问题、方法、贡献、关键词。</p>
+      <p>PDF / Markdown 拖入自动生成结构化卡片：一句话摘要、作者、年份与关键词，可搜索。</p>
     </div>
     <div class="card">
       <span class="pill-tag">阅读器</span>
@@ -348,7 +366,7 @@
 <!-- ============ dark: closing CTA ============ -->
 <section class="dark">
   <div class="wrap dark-hero">
-    <h1 class="display">把文献综述<br />交<span style="display:inline-block;width:0.72em;height:0.72em;vertical-align:-0.04em;"><svg class="ghost ghost-float" viewBox="0 0 32 32" fill="none" aria-label="ghost mascot"><path d="M16 3C9.9 3 5 7.9 5 14v13.2c0 1.2 1.4 1.8 2.3 1l1.9-1.7c.5-.4 1.2-.4 1.7 0l1.9 1.7c.5.4 1.2.4 1.7 0l1.9-1.7c.5-.4 1.2-.4 1.7 0l1.9 1.7c.5.4 1.2.4 1.7 0l1.9-1.7c.5-.4 1.2-.4 1.7 0l1.9 1.7c.9.8 2.3.2 2.3-1V14C27 7.9 22.1 3 16 3z" fill="#ab9ff2"/><circle cx="12" cy="14" r="1.8" fill="#3c315b"/><circle cx="20" cy="14" r="1.8" fill="#3c315b"/></svg></span>给证据。</h1>
+    <h1 class="display">把文献综述<br />交<img class="mascot ghost-float" src="images/mascot.png" alt="ResearchNotion 吉祥物" />给证据。</h1>
     <p class="sub">开源 · MIT 协议 · Windows 桌面端</p>
     <div class="hero-ctas">
       <a class="btn btn-on-dark" href="https://github.com/Alkaid168/ReasearchNotion">GitHub 主页 ↗</a>
@@ -364,5 +382,23 @@
   </div>
 </footer>
 
+
+<script>
+(function () {
+  function openLightbox(src, alt) {
+    var lb = document.createElement('div');
+    lb.className = 'lightbox';
+    lb.innerHTML = '<button class="lb-close" aria-label="关闭">×</button><img src="' + src + '" alt="' + (alt || '') + '" />';
+    function close() { lb.remove(); document.removeEventListener('keydown', onKey); }
+    function onKey(e) { if (e.key === 'Escape') close(); }
+    lb.addEventListener('click', function (e) { if (e.target === lb || e.target.classList.contains('lb-close')) close(); });
+    document.addEventListener('keydown', onKey);
+    document.body.appendChild(lb);
+  }
+  document.querySelectorAll('.shot img').forEach(function (img) {
+    img.addEventListener('click', function () { openLightbox(img.src, img.alt); });
+  });
+})();
+</script>
 </body>
 </html>
