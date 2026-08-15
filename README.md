@@ -11,7 +11,7 @@ ResearchNotion 是一个面向科研论文管理与问答的本地桌面软件�
 
 当前桌面端只使用一条 AI 路线：`ResearchNotion Tool Agent`。Dify 知识库可以继续保存论文归档副本，但不参与桌面端的默认问答链路。
 
-![ResearchNotion 对话页](website/images/hero-chat.png)
+![ResearchNotion 对话页](website/images/gallery-chat.png)
 
 > Agent 自主调用本地工具取证（读取大纲 → 章节检索 → 全文检索），回答附页码引用，一键跳回原文。更多截图见 [官网](https://alkaid168.github.io/ReasearchNotion/)。
 
@@ -39,7 +39,7 @@ ResearchNotion 是一个面向科研论文管理与问答的本地桌面软件�
 - 设置页配置 Dify 地址、Tool Agent App API Key 与多模型档管理。
 - Dify Knowledge API Key 仅用于可选的论文归档同步。
 
-![PDF 阅读器](website/images/paper-reader.png)
+![PDF 阅读器](website/images/gallery-reader.png)
 
 ## 文档
 

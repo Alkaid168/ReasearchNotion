@@ -3,249 +3,364 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ResearchNotion — 本地科研论文知识库</title>
+  <title>ResearchNotion — 会取证的论文 AI</title>
   <meta name="description" content="面向科研论文管理与问答的本地桌面软件：本地论文库、PDF 阅读器与 Dify Tool Agent 组合为个人科研知识库。" />
   <link rel="icon" href="favicon.svg" type="image/svg+xml" />
   <style>
     :root {
-      --ink: #1f2328;
-      --ink-soft: #57606a;
-      --hairline: #d8dee4;
-      --paper: #ffffff;
-      --paper-dim: #f6f8fa;
-      --link: #0969da;
-      --radius: 14px;
-      --shadow: 0 8px 24px rgba(31, 35, 40, 0.08);
-      --ease: cubic-bezier(0.16, 1, 0.3, 1);
+      /* Phantom tokens */
+      --color-aubergine: #3c315b;
+      --color-ghost-lavender: #e2dffe;
+      --color-periwinkle: #ab9ff2;
+      --color-cornflower-pop: #4a87f2;
+      --color-buttercream: #ffffc4;
+      --color-blush-mist: #ffdadc;
+      --color-mint-signal: #2ec08b;
+      --color-paper-white: #fdfcfe;
+      --color-obsidian: #1c1c1c;
+      --color-fog: #86848d;
+      --color-ash: #e9e8ea;
+      --color-bone: #f4f2f4;
+
+      --font-phantom: 'Inter', ui-sans-serif, system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+
+      --shadow-sm: rgb(226, 223, 254) 0px 0px 4px 0px;
+      --radius-pill: 100px;
+      --radius-card: 24px;
     }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html { scroll-behavior: smooth; }
     body {
-      font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
-      background: var(--paper);
-      color: var(--ink);
-      line-height: 1.7;
+      font-family: var(--font-phantom);
+      font-weight: 350;
+      letter-spacing: -0.025em;
+      background: var(--color-paper-white);
+      color: var(--color-obsidian);
+      line-height: 1.4;
       -webkit-font-smoothing: antialiased;
     }
-    .wrap { max-width: 1040px; margin: 0 auto; padding: 0 24px; }
+    .wrap { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
+    section { padding: var(--gap, 96px) 0; }
 
-    /* ---------- header ---------- */
-    header {
-      position: sticky; top: 0; z-index: 10;
-      background: rgba(255, 255, 255, 0.85);
-      backdrop-filter: blur(12px);
-      border-bottom: 1px solid var(--hairline);
-    }
-    .nav { display: flex; align-items: center; justify-content: space-between; height: 60px; }
-    .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 17px; }
-    .brand svg { width: 26px; height: 26px; }
-    .nav-links { display: flex; gap: 26px; font-size: 14px; color: var(--ink-soft); }
-    .nav-links a { color: inherit; text-decoration: none; transition: color 0.2s var(--ease); }
-    .nav-links a:hover { color: var(--ink); }
-    .nav-cta {
-      font-size: 14px; font-weight: 600; text-decoration: none; color: var(--paper);
-      background: var(--ink); padding: 8px 18px; border-radius: 999px;
-      transition: transform 0.2s var(--ease), box-shadow 0.2s var(--ease);
-    }
-    .nav-cta:hover { transform: translateY(-1px); box-shadow: var(--shadow); }
+    h1, h2, h3 { color: var(--color-aubergine); font-weight: 350; }
+    .display { font-size: clamp(44px, 8vw, 88px); line-height: 1.05; letter-spacing: -0.025em; }
+    .heading-lg { font-size: clamp(30px, 5vw, 56px); line-height: 1.1; }
+    .heading { font-size: 30px; line-height: 1.21; }
 
-    /* ---------- hero ---------- */
-    .hero { padding: 88px 0 72px; text-align: center; }
-    .hero-badge {
-      display: inline-flex; align-items: center; gap: 8px;
-      font-size: 13px; color: var(--ink-soft);
-      border: 1px solid var(--hairline); border-radius: 999px;
-      padding: 5px 14px; margin-bottom: 22px;
+    /* ghost mascot —— 内联替换元音 */
+    .ghost {
+      display: inline-block; width: 0.78em; height: 0.78em; vertical-align: -0.06em;
+      margin: 0 0.04em;
     }
-    .hero-badge svg { width: 14px; height: 14px; }
-    h1 { font-size: clamp(34px, 6vw, 56px); font-weight: 800; letter-spacing: -0.02em; line-height: 1.15; }
-    .hero p.sub {
-      max-width: 640px; margin: 20px auto 0; font-size: 18px; color: var(--ink-soft);
+
+    /* ---------- pill nav ---------- */
+    .topbar { padding: 24px 0; position: sticky; top: 0; z-index: 50; background: var(--color-paper-white); }
+    .navrow { display: flex; align-items: center; gap: 24px; }
+    .logo { display: flex; align-items: center; gap: 10px; font-size: 17px; color: var(--color-aubergine); white-space: nowrap; }
+    .logo svg { width: 30px; height: 30px; }
+    .pill-nav {
+      flex: 1; display: flex; justify-content: center; gap: 8px;
+      background: var(--color-paper-white);
+      border: 1px solid var(--color-ash);
+      border-radius: var(--radius-pill);
+      padding: 10px 24px;
     }
-    .hero-actions { display: flex; gap: 14px; justify-content: center; margin-top: 34px; flex-wrap: wrap; }
+    .pill-nav a {
+      font-size: 15px; color: var(--color-aubergine); text-decoration: none;
+      padding: 4px 14px; border-radius: var(--radius-pill);
+      transition: background 0.2s;
+    }
+    .pill-nav a:hover { background: var(--color-ghost-lavender); }
     .btn {
       display: inline-flex; align-items: center; gap: 8px;
-      font-size: 15px; font-weight: 600; text-decoration: none;
-      padding: 12px 26px; border-radius: 999px;
-      transition: transform 0.2s var(--ease), box-shadow 0.2s var(--ease);
+      font-family: inherit; font-size: 15px; font-weight: 350; letter-spacing: -0.025em;
+      border: none; border-radius: var(--radius-pill);
+      padding: 12px 28px; cursor: pointer; text-decoration: none;
+      transition: box-shadow 0.2s;
     }
-    .btn:hover { transform: translateY(-2px); }
-    .btn-primary { background: var(--ink); color: var(--paper); box-shadow: var(--shadow); }
-    .btn-ghost { border: 1px solid var(--hairline); color: var(--ink); background: var(--paper); }
-    .btn svg { width: 16px; height: 16px; }
+    .btn-lavender { background: var(--color-ghost-lavender); color: var(--color-aubergine); box-shadow: var(--shadow-sm); }
+    .btn-lavender:hover { box-shadow: rgb(226, 223, 254) 0px 0px 12px 0px; }
+    .btn-dark { background: var(--color-aubergine); color: var(--color-paper-white); }
+    .btn-butter { background: var(--color-buttercream); color: var(--color-obsidian); }
+    .btn-blush { background: var(--color-blush-mist); color: var(--color-obsidian); }
+    .btn-blue { background: var(--color-cornflower-pop); color: var(--color-paper-white); }
+    .btn-ghosty { background: transparent; color: var(--color-aubergine); border: 1px solid var(--color-aubergine); }
+    .btn-on-dark { background: var(--color-ghost-lavender); color: var(--color-aubergine); box-shadow: var(--shadow-sm); }
 
-    .hero-shot {
-      margin-top: 56px; border: 1px solid var(--hairline); border-radius: var(--radius);
-      overflow: hidden; box-shadow: 0 20px 60px rgba(31, 35, 40, 0.12);
+    /* ---------- light hero ---------- */
+    .hero-light { padding: 96px 0 64px; text-align: center; }
+    .hero-light .tagline { font-size: 15px; color: var(--color-fog); margin-top: 24px; }
+    .hero-ctas { display: flex; justify-content: center; gap: 12px; margin-top: 40px; flex-wrap: wrap; }
+
+    /* ---------- video card 位 ---------- */
+    .video-card {
+      margin: 64px auto 0; max-width: 920px;
+      background: var(--color-paper-white);
+      border: 1px solid var(--color-ash);
+      border-radius: var(--radius-card);
+      padding: 16px;
     }
-    .grid figure { margin: 0; }
-    .grid .hero-shot { margin-top: 0; }
-    .hero-shot img { display: block; width: 100%; height: auto; }
-    .shot-caption { font-size: 13px; color: var(--ink-soft); margin-top: 12px; }
+    .video-frame {
+      position: relative; width: 100%; aspect-ratio: 16 / 10;
+      border-radius: 16px; overflow: hidden;
+      background: var(--color-bone);
+    }
+    .video-frame video, .video-frame img {
+      position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;
+    }
+    .video-frame .fallback {
+      position: absolute; inset: 0; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 16px;
+      color: var(--color-fog); font-size: 15px; text-align: center; padding: 24px;
+    }
+    .video-caption { text-align: center; font-size: 13px; color: var(--color-fog); margin-top: 12px; }
 
-    /* ---------- features ---------- */
-    section { padding: 72px 0; }
-    .sec-head { text-align: center; margin-bottom: 48px; }
-    .sec-head .kicker { font-size: 13px; font-weight: 700; letter-spacing: 0.12em; color: var(--ink-soft); text-transform: uppercase; }
-    .sec-head h2 { font-size: clamp(24px, 4vw, 34px); font-weight: 800; letter-spacing: -0.01em; margin-top: 8px; }
-    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
+    /* ---------- 截图画廊 ---------- */
+    .gallery { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 24px; margin-top: 64px; }
+    .shot {
+      border: 1px solid var(--color-ash);
+      border-radius: var(--radius-card);
+      overflow: hidden; background: var(--color-paper-white);
+      transition: transform 0.25s ease, border-color 0.25s ease;
+    }
+    .shot:hover { transform: translateY(-4px); border-color: var(--color-periwinkle); }
+    .shot img { display: block; width: 100%; height: auto; aspect-ratio: 16 / 10; object-fit: cover; object-position: top; }
+    .shot figcaption { padding: 16px 24px; font-size: 13px; color: var(--color-fog); border-top: 1px solid var(--color-bone); }
+
+    /* ---------- dark section ---------- */
+    .dark { background: var(--color-aubergine); color: var(--color-paper-white); }
+    .dark h1, .dark h2, .dark h3 { color: var(--color-paper-white); }
+    .dark .sub { color: rgba(253, 252, 254, 0.72); }
+
+    .dark-hero { padding: 128px 0; text-align: center; }
+    .dark-hero .display { max-width: 900px; margin: 0 auto; }
+    .dark-hero .sub { font-size: 17px; margin-top: 28px; max-width: 620px; margin-inline: auto; }
+
+    /* ---------- steps / feature cards ---------- */
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
     .card {
-      border: 1px solid var(--hairline); border-radius: var(--radius);
-      padding: 26px 24px; background: var(--paper);
-      transition: transform 0.25s var(--ease), box-shadow 0.25s var(--ease);
+      background: var(--color-paper-white);
+      border: 1px solid var(--color-ash);
+      border-radius: var(--radius-card);
+      padding: 48px 40px;
     }
-    .card:hover { transform: translateY(-4px); box-shadow: var(--shadow); }
-    .card h3 { font-size: 17px; margin-bottom: 8px; display: flex; align-items: center; gap: 10px; }
-    .card h3 svg { width: 20px; height: 20px; flex: none; }
-    .card p { font-size: 14.5px; color: var(--ink-soft); }
+    .dark .card { background: rgba(253, 252, 254, 0.04); border-color: rgba(253, 252, 254, 0.12); }
+    .card h3 { font-size: 20px; margin: 16px 0 8px; }
+    .card p { font-size: 15px; color: var(--color-fog); }
+    .dark .card p { color: rgba(253, 252, 254, 0.66); }
+    .card .pill-tag {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 13px; padding: 6px 14px; border-radius: var(--radius-pill);
+      background: var(--color-ghost-lavender); color: var(--color-aubergine);
+    }
+    .card .pill-tag.butter { background: var(--color-buttercream); }
+    .card .pill-tag.blush { background: var(--color-blush-mist); }
+    .card .pill-tag.mint { background: var(--color-mint-signal); color: var(--color-paper-white); }
+    .card .pill-tag.blue { background: var(--color-cornflower-pop); color: var(--color-paper-white); }
 
-    /* ---------- arch ---------- */
-    .arch {
-      background: var(--paper-dim); border-top: 1px solid var(--hairline); border-bottom: 1px solid var(--hairline);
+    .sec-head { text-align: center; margin-bottom: 64px; }
+    .sec-head .sub { color: var(--color-fog); font-size: 16px; margin-top: 16px; }
+
+    /* ---------- tool marquee ---------- */
+    .tools-row { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; margin-top: 48px; }
+    .tool-chip {
+      font-size: 13px; padding: 8px 18px; border-radius: var(--radius-pill);
+      border: 1px solid rgba(253, 252, 254, 0.25); color: rgba(253, 252, 254, 0.85);
     }
-    .arch-flow {
-      display: flex; align-items: stretch; justify-content: center; gap: 10px; flex-wrap: wrap;
-      margin-top: 8px;
-    }
-    .arch-node {
-      border: 1px solid var(--hairline); background: var(--paper); border-radius: 12px;
-      padding: 14px 18px; text-align: center; min-width: 150px;
-    }
-    .arch-node strong { display: block; font-size: 15px; }
-    .arch-node span { font-size: 12.5px; color: var(--ink-soft); }
-    .arch-arrow { align-self: center; color: var(--ink-soft); font-size: 20px; }
 
     /* ---------- footer ---------- */
-    footer { border-top: 1px solid var(--hairline); padding: 36px 0 48px; }
-    .foot { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px; font-size: 14px; color: var(--ink-soft); }
-    .foot a { color: var(--link); text-decoration: none; }
+    footer { padding: 48px 0 64px; }
+    .foot { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; font-size: 15px; color: var(--color-fog); }
+    .foot a { color: var(--color-aubergine); text-decoration: none; }
+    .foot a:hover { text-decoration: underline; }
 
-    @media (max-width: 640px) {
-      .nav-links { display: none; }
-      .hero { padding: 56px 0 48px; }
+    /* ---------- mascot ghost (SVG) ---------- */
+    .ghost-float { animation: bob 4s ease-in-out infinite; transform-origin: center; }
+    @keyframes bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+
+    @media (max-width: 760px) {
+      .pill-nav { display: none; }
+      .topbar { padding: 16px 0; }
+      .hero-ctas { flex-direction: column; align-items: center; }
     }
     @media (prefers-reduced-motion: reduce) {
-      * { transition: none !important; animation: none !important; }
+      * { animation: none !important; transition: none !important; }
     }
   </style>
 </head>
 <body>
 
-<header>
-  <div class="wrap nav">
-    <div class="brand">
+<!-- ============ top pill nav ============ -->
+<div class="topbar">
+  <div class="wrap navrow">
+    <div class="logo">
       <svg viewBox="0 0 32 32" fill="none" aria-hidden="true">
-        <rect x="3" y="3" width="26" height="26" rx="7" stroke="#1f2328" stroke-width="2.2"/>
-        <path d="M9 11h14M9 16h10M9 21h13" stroke="#1f2328" stroke-width="2.2" stroke-linecap="round"/>
+        <path d="M16 3C9.9 3 5 7.9 5 14v13.2c0 1.2 1.4 1.8 2.3 1l1.9-1.7c.5-.4 1.2-.4 1.7 0l1.9 1.7c.5.4 1.2.4 1.7 0l1.9-1.7c.5-.4 1.2-.4 1.7 0l1.9 1.7c.5.4 1.2.4 1.7 0l1.9-1.7c.5-.4 1.2-.4 1.7 0l1.9 1.7c.9.8 2.3.2 2.3-1V14C27 7.9 22.1 3 16 3z" fill="#ab9ff2"/>
+        <circle cx="12" cy="14" r="1.8" fill="#3c315b"/>
+        <circle cx="20" cy="14" r="1.8" fill="#3c315b"/>
       </svg>
-      ResearchNotion
+      ResearchN<span style="letter-spacing:0">ot</span>ion
     </div>
-    <nav class="nav-links">
+    <nav class="pill-nav">
+      <a href="#demo">演示</a>
       <a href="#features">功能</a>
-      <a href="#architecture">架构</a>
+      <a href="#workflow">工作流</a>
       <a href="https://github.com/Alkaid168/ReasearchNotion/blob/main/docs/research-notion-technical-guide.md">文档</a>
     </nav>
-    <a class="nav-cta" href="https://github.com/Alkaid168/ReasearchNotion">GitHub</a>
-  </div>
-</header>
-
-<div class="hero wrap">
-  <div class="hero-badge">
-    <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0a8 8 0 1 0 0 16A8 8 0 0 0 8 0zm0 1.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zM7 4v1.5h2V4H7zm0 3v5h2V7H7z"/></svg>
-    本地优先 · 数据不出本机
-  </div>
-  <h1>你的个人科研<br />论文知识库</h1>
-  <p class="sub">借鉴 Notion AI 的对话入口与 Codex 式工作台体验，把本地论文库、PDF 阅读器和自主调证的 AI Agent 组合为桌面端科研助手。</p>
-  <div class="hero-actions">
-    <a class="btn btn-primary" href="https://github.com/Alkaid168/ReasearchNotion">
-      <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.42 7.42 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
-      GitHub 仓库
-    </a>
-    <a class="btn btn-ghost" href="https://github.com/Alkaid168/ReasearchNotion/blob/main/README.md#快速开始">
-      快速开始 →
-    </a>
-  </div>
-  <div class="hero-shot">
-    <img src="images/hero-chat.png" alt="ResearchNotion 对话页：Agent 回答带工具进度与证据引用" />
-  </div>
-  <p class="shot-caption">论文 AI 对话：Agent 自主读取论文取证，回答附页码引用，一键跳回原文</p>
-  <div class="grid" style="margin-top:36px;text-align:left">
-    <figure>
-      <div class="hero-shot" style="margin-top:0">
-        <img src="images/paper-reader.png" alt="PDF 阅读器：适宽/翻页/缩放与 Ctrl+I 呼出论文 AI" />
-      </div>
-      <figcaption class="shot-caption">PDF 阅读器 · Ctrl+I 呼出论文 AI</figcaption>
-    </figure>
-    <figure>
-      <div class="hero-shot" style="margin-top:0">
-        <img src="images/knowledge-library.png" alt="知识库：文件夹树与论文列表" />
-      </div>
-      <figcaption class="shot-caption">知识库 · 文件夹树与论文卡片</figcaption>
-    </figure>
+    <a class="btn btn-lavender" href="https://github.com/Alkaid168/ReasearchNotion">GitHub ↗</a>
   </div>
 </div>
 
-<section id="features" class="wrap">
-  <div class="sec-head">
-    <div class="kicker">Features</div>
-    <h2>为核心科研流程设计</h2>
+<!-- ============ light hero ============ -->
+<header class="hero-light wrap" id="demo">
+  <h1 class="display">
+    会取证的<br />
+    论文研究助<span style="display:inline-block;width:0.72em;height:0.72em;vertical-align:-0.04em;"><svg class="ghost ghost-float" viewBox="0 0 32 32" fill="none" aria-label="ghost mascot"><path d="M16 3C9.9 3 5 7.9 5 14v13.2c0 1.2 1.4 1.8 2.3 1l1.9-1.7c.5-.4 1.2-.4 1.7 0l1.9 1.7c.5.4 1.2.4 1.7 0l1.9-1.7c.5-.4 1.2-.4 1.7 0l1.9 1.7c.5.4 1.2.4 1.7 0l1.9-1.7c.5-.4 1.2-.4 1.7 0l1.9 1.7c.9.8 2.3.2 2.3-1V14C27 7.9 22.1 3 16 3z" fill="#ab9ff2"/><circle cx="12" cy="14" r="1.8" fill="#3c315b"/><circle cx="20" cy="14" r="1.8" fill="#3c315b"/></svg></span>
+  </h1>
+  <p class="tagline">本地论文库 × PDF 阅读器 × 自主调用的 AI Agent —— 回答必有页码，结论可核验。</p>
+  <div class="hero-ctas">
+    <a class="btn btn-lavender" href="https://github.com/Alkaid168/ReasearchNotion">下载体验 ↗</a>
+    <a class="btn btn-butter" href="#workflow">看工作流</a>
+    <a class="btn btn-blush" href="#features">功能一览</a>
   </div>
-  <div class="grid">
-    <div class="card">
-      <h3><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="10" cy="10" r="7"/><path d="M10 6v4l3 2" stroke-linecap="round"/></svg>自主取证 Agent</h3>
-      <p>Dify Tool Agent 自主调用 16 个本地工具：按问题读取当前页、章节、大纲、全文检索或跨库证据，多轮工具调用后作答，不编造。</p>
+
+  <!-- 视频卡位 1：hero 主演示（放 videos/hero-demo.webm） -->
+  <figure class="video-card">
+    <div class="video-frame">
+      <video autoplay loop muted playsinline poster="images/gallery-chat.png">
+        <source src="videos/hero-demo.mp4" type="video/mp4" />
+      </video>
     </div>
-    <div class="card">
-      <h3><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M6 3h8a1 1 0 0 1 1 1v12l-5-2.5L5 16V4a1 1 0 0 1 1-1z"/></svg>证据引用跳转</h3>
-      <p>回答中的引用标注原文页码与片段，点击即可跳回 PDF 对应位置，结论可核验。</p>
+    <figcaption class="video-caption">向 Agent 提问 → 它自主读论文 → 带页码引用作答</figcaption>
+  </figure>
+</header>
+
+<!-- ============ dark: agent workflow ============ -->
+<section class="dark" id="workflow">
+  <div class="wrap">
+    <div class="sec-head">
+      <h2 class="heading-lg">它不猜。<br />它去读。</h2>
+      <p class="sub">Agent 自主决定要什么证据，多轮工具调用后作答 —— 每一步都看得见。</p>
     </div>
-    <div class="card">
-      <h3><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="4" width="14" height="13" rx="2"/><path d="M7 8h6M7 12h4" stroke-linecap="round"/></svg>论文管理与卡片</h3>
-      <p>导入 PDF / Markdown 自动生成结构化论文卡片：研究问题、方法、贡献与关键词，文件夹树拖拽整理。</p>
+
+    <!-- 视频卡位 2：工具调用过程（放 videos/tool-chain.webm） -->
+    <figure class="video-card" style="margin-top:0">
+      <div class="video-frame">
+        <video autoplay loop muted playsinline poster="images/gallery-reader.png">
+          <source src="videos/tool-chain.mp4" type="video/mp4" />
+        </video>
+      </div>
+      <figcaption class="video-caption">思维链与工具进度实时呈现：读大纲 → 章节检索 → 全文检索 → 引用</figcaption>
+    </figure>
+
+    <div class="cards" style="margin-top:64px">
+      <div class="card">
+        <span class="pill-tag">Step 1 · 提问</span>
+        <h3>用中文问英文论文</h3>
+        <p>"这篇论文的创新点是什么？引用页码。" 自然语言提问，无需学检索语法。</p>
+      </div>
+      <div class="card">
+        <span class="pill-tag butter">Step 2 · 取证</span>
+        <h3>Agent 自主选工具</h3>
+        <p>16 个本地工具按需调用：读当前页、章节、大纲，或跨论文库检索。</p>
+      </div>
+      <div class="card">
+        <span class="pill-tag mint">Step 3 · 作答</span>
+        <h3>结论附页码引用</h3>
+        <p>回答中的引用点击即跳回 PDF 原文位置；证据不足时明说边界，不编造。</p>
+      </div>
     </div>
-    <div class="card">
-      <h3><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="10" cy="10" r="7"/><path d="M2.5 10h15M10 3c2.5 2.5 2.5 11.5 0 14M10 3c-2.5 2.5-2.5 11.5 0 14"/></svg>外网学术检索</h3>
-      <p>问题需要时，Agent 自动检索 arXiv 与 Semantic Scholar，把最新相关工作与本地论文对照回答。</p>
+
+    <div class="tools-row">
+      <span class="tool-chip">读当前页</span><span class="tool-chip">论文大纲</span><span class="tool-chip">章节提取</span><span class="tool-chip">全文检索</span><span class="tool-chip">跨库调查</span><span class="tool-chip">arXiv 检索</span><span class="tool-chip">Semantic Scholar</span><span class="tool-chip">+ 9 more…</span>
     </div>
-    <div class="card">
-      <h3><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 6l4-3 4 3 4-3v11l-4 3-4-3-4 3V6z" stroke-linejoin="round"/></svg>本地优先隐私</h3>
-      <p>论文原件、对话、设置全部保存在本机 SQLite 与本地目录；API Key 用系统安全存储加密，不上传。</p>
-    </div>
-    <div class="card">
-      <h3><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 15V7M8 15V4M13 15v-6M18 15V9" stroke-linecap="round"/></svg>研究偏好记忆</h3>
-      <p>身份、课题与偏好长期记忆按需注入对话；三档输出速度实时切换，流式呈现思考与工具进度。</p>
+
+    <!-- 截图画廊：放 images/gallery-*.png（你截的新图） -->
+    <div class="gallery">
+      <figure class="shot">
+        <img src="images/gallery-chat.png" alt="对话页：带引用的回答" loading="lazy" />
+        <figcaption>对话 · 页码引用一键跳回原文</figcaption>
+      </figure>
+      <figure class="shot">
+        <img src="images/gallery-reader.png" alt="PDF 阅读器与论文 AI" loading="lazy" />
+        <figcaption>阅读器 · Ctrl+I 呼出论文 AI</figcaption>
+      </figure>
+      <figure class="shot">
+        <img src="images/gallery-library.png" alt="知识库文件夹树" loading="lazy" />
+        <figcaption>知识库 · 文件夹树与论文卡片</figcaption>
+      </figure>
+      <figure class="shot">
+        <img src="images/gallery-card.png" alt="论文卡片" loading="lazy" />
+        <figcaption>论文卡片 · 研究问题/方法/贡献</figcaption>
+      </figure>
+      <figure class="shot">
+        <img src="images/gallery-settings.png" alt="设置页模型档" loading="lazy" />
+        <figcaption>设置 · 多模型档与偏好记忆</figcaption>
+      </figure>
+      <figure class="shot">
+        <img src="images/gallery-search.png" alt="跨库检索" loading="lazy" />
+        <figcaption>跨库检索 · 联动 arXiv / Semantic Scholar</figcaption>
+      </figure>
     </div>
   </div>
 </section>
 
-<section id="architecture" class="arch">
-  <div class="wrap">
-    <div class="sec-head">
-      <div class="kicker">Architecture</div>
-      <h2>一条清晰的链路</h2>
+<!-- ============ light: features ============ -->
+<section class="wrap" id="features">
+  <div class="sec-head">
+    <h2 class="heading-lg">不止问答。</h2>
+    <p class="sub">从导入到取证到外网检索，一个桌面端覆盖整个文献工作流。</p>
+  </div>
+  <div class="cards">
+    <div class="card">
+      <span class="pill-tag blue">论文管理</span>
+      <h3>导入即卡片化</h3>
+      <p>PDF / Markdown 拖入自动生成结构化卡片：研究问题、方法、贡献、关键词。</p>
     </div>
-    <div class="arch-flow">
-      <div class="arch-node"><strong>Electron 桌面端</strong><span>React UI · SQLite</span></div>
-      <div class="arch-arrow">→</div>
-      <div class="arch-node"><strong>本地工具服务</strong><span>OpenAPI :17777</span></div>
-      <div class="arch-arrow">→</div>
-      <div class="arch-node"><strong>Dify Tool Agent</strong><span>agent-chat · Docker</span></div>
-      <div class="arch-arrow">→</div>
-      <div class="arch-node"><strong>DeepSeek 模型</strong><span>官方 API / 本地桥接</span></div>
+    <div class="card">
+      <span class="pill-tag">阅读器</span>
+      <h3>为论文而生的 PDF</h3>
+      <p>适宽、翻页、双栏自动顺序阅读，Ctrl+I 随时呼出论文 AI。</p>
     </div>
-    <p style="text-align:center;margin-top:26px;font-size:14.5px;color:var(--ink-soft)">
-      Agent 决策发生在 Dify，证据取证发生在本机——论文正文永远不需要离开你的电脑。
-    </p>
+    <div class="card">
+      <span class="pill-tag blush">外网检索</span>
+      <h3>连接学术世界</h3>
+      <p>问题需要时自动检索 arXiv 与 Semantic Scholar，把最新工作与本地论文对照。</p>
+    </div>
+    <div class="card">
+      <span class="pill-tag butter">本地优先</span>
+      <h3>数据不出本机</h3>
+      <p>论文、对话、设置全存本机 SQLite；API Key 系统级加密存储。</p>
+    </div>
+    <div class="card">
+      <span class="pill-tag mint">记忆</span>
+      <h3>懂你的研究偏好</h3>
+      <p>身份、课题、偏好长期记忆，按需注入对话，越用越顺手。</p>
+    </div>
+    <div class="card">
+      <span class="pill-tag blue">多模型</span>
+      <h3>模型档管理</h3>
+      <p>DeepSeek 多档位配置，输出速度三档切换：优雅打字机 / 常规 / 性能直通。</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ dark: closing CTA ============ -->
+<section class="dark">
+  <div class="wrap dark-hero">
+    <h1 class="display">把文献综述<br />交<span style="display:inline-block;width:0.72em;height:0.72em;vertical-align:-0.04em;"><svg class="ghost ghost-float" viewBox="0 0 32 32" fill="none" aria-label="ghost mascot"><path d="M16 3C9.9 3 5 7.9 5 14v13.2c0 1.2 1.4 1.8 2.3 1l1.9-1.7c.5-.4 1.2-.4 1.7 0l1.9 1.7c.5.4 1.2.4 1.7 0l1.9-1.7c.5-.4 1.2-.4 1.7 0l1.9 1.7c.5.4 1.2.4 1.7 0l1.9-1.7c.5-.4 1.2-.4 1.7 0l1.9 1.7c.9.8 2.3.2 2.3-1V14C27 7.9 22.1 3 16 3z" fill="#ab9ff2"/><circle cx="12" cy="14" r="1.8" fill="#3c315b"/><circle cx="20" cy="14" r="1.8" fill="#3c315b"/></svg></span>给证据。</h1>
+    <p class="sub">开源 · MIT 协议 · Windows 桌面端</p>
+    <div class="hero-ctas">
+      <a class="btn btn-on-dark" href="https://github.com/Alkaid168/ReasearchNotion">GitHub 主页 ↗</a>
+      <a class="btn btn-ghosty" style="color:var(--color-paper-white);border-color:rgba(253,252,254,0.4)" href="https://github.com/Alkaid168/ReasearchNotion/blob/main/docs/research-notion-technical-guide.md">读技术手册</a>
+    </div>
   </div>
 </section>
 
 <footer>
   <div class="wrap foot">
     <span>ResearchNotion · 本地科研论文知识库</span>
-    <span>
-      <a href="https://github.com/Alkaid168/ReasearchNotion">GitHub</a> ·
-      MIT License
-    </span>
+    <span><a href="https://github.com/Alkaid168/ReasearchNotion">GitHub</a> · MIT License</span>
   </div>
 </footer>
 
