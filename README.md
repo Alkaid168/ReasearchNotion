@@ -1,8 +1,19 @@
 # ResearchNotion
 
+[![Website](https://img.shields.io/badge/website-alkaid168.github.io-1f2328?style=flat-square)](https://alkaid168.github.io/ReasearchNotion/)
+[![CI](https://img.shields.io/github/actions/workflow/status/Alkaid168/ReasearchNotion/ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/Alkaid168/ReasearchNotion/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-1f2328?style=flat-square)](LICENSE)
+[![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-1f2328?style=flat-square)](#快速开始)
+[![Electron](https://img.shields.io/badge/Electron-33-1f2328?style=flat-square)](https://www.electronjs.org/)
+[![React](https://img.shields.io/badge/React-19-1f2328?style=flat-square)](https://react.dev/)
+
 ResearchNotion 是一个面向科研论文管理与问答的本地桌面软件。它借鉴 Notion AI 的对话入口和 Codex 式工作台体验，将本地论文库、PDF 阅读器和 Dify Tool Agent 组合为个人科研知识库。
 
 当前桌面端只使用一条 AI 路线：`ResearchNotion Tool Agent`。Dify 知识库可以继续保存论文归档副本，但不参与桌面端的默认问答链路。
+
+![ResearchNotion 对话页](website/images/hero-chat.png)
+
+> Agent 自主调用本地工具取证（读取大纲 → 章节检索 → 全文检索），回答附页码引用，一键跳回原文。更多截图见 [官网](https://alkaid168.github.io/ReasearchNotion/)。
 
 ## 核心功能
 
@@ -27,6 +38,8 @@ ResearchNotion 是一个面向科研论文管理与问答的本地桌面软件�
 - 自动检测并顺序阅读常见双栏 PDF。
 - 设置页配置 Dify 地址、Tool Agent App API Key 与多模型档管理。
 - Dify Knowledge API Key 仅用于可选的论文归档同步。
+
+![PDF 阅读器](website/images/paper-reader.png)
 
 ## 文档
 
