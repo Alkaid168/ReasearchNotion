@@ -74,6 +74,7 @@ export function KnowledgePage({ requestedPaperId, requestedFolderId, requestedPa
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [emphasisContext, setEmphasisContext] = useState<string | null>(null)
   const [drawerSessions, setDrawerSessions] = useState<Record<string, AiDrawerSession>>({})
+  const [selectionToolbar, setSelectionToolbar] = useState<{ text: string; top: number; left: number } | null>(null)
   const [drawerWidth, setDrawerWidth] = useState(380)
   const [knowledgeSidebarWidth, setKnowledgeSidebarWidth] = useState(initialPreferences.knowledge.sidebarWidth)
   const [knowledgeSidebarCollapsed, setKnowledgeSidebarCollapsed] = useState(initialPreferences.knowledge.sidebarCollapsed)
@@ -210,6 +211,41 @@ export function KnowledgePage({ requestedPaperId, requestedFolderId, requestedPa
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [])
 
+  useEffect(() => {
+    if (!activePaper) return
+    let raf = 0
+    function update(): void {
+      raf = 0
+      const selection = window.getSelection()
+      const text = selection?.toString().trim() ?? ''
+      if (!text || !selection || selection.rangeCount === 0) {
+        setSelectionToolbar(null)
+        return
+      }
+      const rect = selection.getRangeAt(0).getBoundingClientRect()
+      if (rect.width === 0 && rect.height === 0) {
+        setSelectionToolbar(null)
+        return
+      }
+      setSelectionToolbar({ text, top: rect.top, left: rect.left + rect.width / 2 })
+    }
+    function onMouseUp(): void {
+      if (raf) cancelAnimationFrame(raf)
+      raf = window.setTimeout(update, 10) as unknown as number
+    }
+    function onSelectionChange(): void {
+      const selection = window.getSelection()
+      if (!selection?.toString().trim()) setSelectionToolbar(null)
+    }
+    document.addEventListener('mouseup', onMouseUp)
+    document.addEventListener('selectionchange', onSelectionChange)
+    return () => {
+      document.removeEventListener('mouseup', onMouseUp)
+      document.removeEventListener('selectionchange', onSelectionChange)
+      if (raf) cancelAnimationFrame(raf)
+    }
+  }, [activePaper])
+
   useEffect(() => () => knowledgeResizeCleanupRef.current?.(), [])
 
   useEffect(() => {
@@ -248,6 +284,41 @@ export function KnowledgePage({ requestedPaperId, requestedFolderId, requestedPa
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [])
+
+  useEffect(() => {
+    if (!activePaper) return
+    let raf = 0
+    function update(): void {
+      raf = 0
+      const selection = window.getSelection()
+      const text = selection?.toString().trim() ?? ''
+      if (!text || !selection || selection.rangeCount === 0) {
+        setSelectionToolbar(null)
+        return
+      }
+      const rect = selection.getRangeAt(0).getBoundingClientRect()
+      if (rect.width === 0 && rect.height === 0) {
+        setSelectionToolbar(null)
+        return
+      }
+      setSelectionToolbar({ text, top: rect.top, left: rect.left + rect.width / 2 })
+    }
+    function onMouseUp(): void {
+      if (raf) cancelAnimationFrame(raf)
+      raf = window.setTimeout(update, 10) as unknown as number
+    }
+    function onSelectionChange(): void {
+      const selection = window.getSelection()
+      if (!selection?.toString().trim()) setSelectionToolbar(null)
+    }
+    document.addEventListener('mouseup', onMouseUp)
+    document.addEventListener('selectionchange', onSelectionChange)
+    return () => {
+      document.removeEventListener('mouseup', onMouseUp)
+      document.removeEventListener('selectionchange', onSelectionChange)
+      if (raf) cancelAnimationFrame(raf)
+    }
+  }, [activePaper])
 
   useEffect(() => {
     const paperId = activePaper?.id
@@ -1023,7 +1094,72 @@ export function KnowledgePage({ requestedPaperId, requestedFolderId, requestedPa
             void openPaper(citation.paperId, citation.pageNumber ?? undefined)
           }}
         />
+        {selectionToolbar ? (
+          <SelectionToolbar
+            text={selectionToolbar.text}
+            top={selectionToolbar.top}
+            left={selectionToolbar.left}
+            onAction={(prompt) => {
+              setEmphasisContext(selectionToolbar.text)
+              void desktopApi.reading.updateState({
+                activeFolderId: activePaper?.folderId ?? null,
+                activePaperId: activePaper?.id ?? null,
+                currentPage: currentPage ?? null,
+                selectedText: selectionToolbar.text
+              })
+              if (activePaper) {
+                setDrawerSessions((current) => {
+                  const previous = current[activePaper.id] ?? createEmptyAiDrawerSession()
+                  return { ...current, [activePaper.id]: { ...previous, draft: prompt } }
+                })
+              }
+              drawerOpenRef.current = true
+              setDrawerOpen(true)
+              setSelectionToolbar(null)
+              window.getSelection()?.removeAllRanges()
+            }}
+          />
+        ) : null}
       </main>
+    </div>
+  )
+}
+
+
+type SelectionToolbarProps = {
+  text: string
+  top: number
+  left: number
+  onAction: (prompt: string) => void
+}
+
+const selectionActions = [
+  { label: '解释', prompt: '请解释下面这段内容的含义、背景和关键概念：' },
+  { label: '翻译', prompt: '请把下面这段内容翻译成通顺的中文：' },
+  { label: '总结', prompt: '请用 3-5 个要点总结下面这段内容：' }
+]
+
+function SelectionToolbar({ text: _text, top, left, onAction }: SelectionToolbarProps): JSX.Element {
+  return (
+    <div
+      className="selection-toolbar"
+      style={{ top: `${top}px`, left: `${left}px` }}
+      role="toolbar"
+      aria-label="选中文字操作"
+    >
+      {selectionActions.map((action) => (
+        <button
+          key={action.label}
+          type="button"
+          className="selection-toolbar-action"
+          onMouseDown={(event) => {
+            event.preventDefault()
+            onAction(action.prompt)
+          }}
+        >
+          {action.label}
+        </button>
+      ))}
     </div>
   )
 }
